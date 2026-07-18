@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var isNavigating = false
     @State private var showLocationDeniedAlert = false
     @State private var isResolvingCurrentLocationForStart = false
+    @State private var hasCenteredOnInitialLocation = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -65,9 +66,8 @@ struct ContentView: View {
             }
 
             Map(position: $cameraPosition) {
-                if isNavigating {
-                    UserAnnotation()
-                } else {
+                UserAnnotation()
+                if !isNavigating {
                     if let startPlace {
                         Marker(startPlace.title, systemImage: "flag.circle.fill", coordinate: startPlace.coordinate)
                             .tint(.green)
@@ -103,6 +103,14 @@ struct ContentView: View {
         .background(Color(.systemGroupedBackground))
         .onTapGesture {
             hideKeyboard()
+        }
+        .onAppear {
+            switch locationManager.authorizationStatus {
+            case .authorizedWhenInUse, .authorizedAlways:
+                locationManager.startUpdating()
+            default:
+                break
+            }
         }
         .onChange(of: startPlace) { runMatching(); updateCamera() }
         .onChange(of: zielPlace) { runMatching(); updateCamera() }
@@ -173,6 +181,15 @@ struct ContentView: View {
             updateNavigationCamera()
         } else if isResolvingCurrentLocationForStart, let location = locationManager.currentLocation {
             resolveCurrentLocationAsStart(location)
+        } else if !hasCenteredOnInitialLocation, startPlace == nil, zielPlace == nil,
+                  let location = locationManager.currentLocation {
+            hasCenteredOnInitialLocation = true
+            withAnimation {
+                cameraPosition = .region(MKCoordinateRegion(
+                    center: location.coordinate,
+                    span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+                ))
+            }
         }
     }
 

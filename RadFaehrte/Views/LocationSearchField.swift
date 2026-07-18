@@ -23,18 +23,6 @@ struct LocationSearchField: View {
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
 
-                if let onUseCurrentLocation, selectedPlace == nil {
-                    Button(action: onUseCurrentLocation) {
-                        if isResolvingCurrentLocation {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "location.fill")
-                        }
-                    }
-                    .disabled(isResolvingCurrentLocation)
-                    .accessibilityIdentifier("useCurrentLocation-\(label)")
-                }
-
                 if selectedPlace != nil {
                     Button {
                         clearSelection()
@@ -46,9 +34,34 @@ struct LocationSearchField: View {
                 }
             }
 
-            if isFocused && !viewModel.results.isEmpty {
+            if isFocused && (onUseCurrentLocation != nil || !viewModel.results.isEmpty) {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
+                        if let onUseCurrentLocation {
+                            Button {
+                                onUseCurrentLocation()
+                                isFocused = false
+                            } label: {
+                                HStack {
+                                    if isResolvingCurrentLocation {
+                                        ProgressView()
+                                            .frame(width: 20)
+                                    } else {
+                                        Image(systemName: "location.fill")
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 20)
+                                    }
+                                    Text("Aktuelle Position")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                }
+                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .disabled(isResolvingCurrentLocation)
+                            .accessibilityIdentifier("useCurrentLocation-\(label)")
+                            Divider()
+                        }
                         ForEach(viewModel.results, id: \.self) { completion in
                             Button {
                                 select(completion)

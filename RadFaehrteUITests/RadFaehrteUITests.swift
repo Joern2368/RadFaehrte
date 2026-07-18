@@ -166,9 +166,10 @@ final class RadFaehrteUITests: XCTestCase {
 
         let startField = app.textFields["Start"]
         XCTAssertTrue(startField.waitForExistence(timeout: 5))
+        startField.tap()
 
         let useLocationButton = app.buttons["useCurrentLocation-Start"]
-        XCTAssertTrue(useLocationButton.waitForExistence(timeout: 5), "Standort-Button im Start-Feld fehlt")
+        XCTAssertTrue(useLocationButton.waitForExistence(timeout: 5), "\"Aktuelle Position\"-Eintrag im Start-Dropdown fehlt")
         useLocationButton.tap()
         app.tap()
 
