@@ -79,7 +79,7 @@ struct ContentView: View {
                 }
                 if let selectedMatch {
                     ForEach(Array(selectedMatch.route.lines.enumerated()), id: \.offset) { _, line in
-                        MapPolyline(coordinates: line)
+                        MapPolyline(coordinates: Self.decimated(line))
                             .stroke(.blue, lineWidth: 4)
                     }
                 }
@@ -287,6 +287,20 @@ struct ContentView: View {
         withAnimation {
             cameraPosition = .region(Self.regionToFit(coordinates))
         }
+    }
+
+    /// Manche Routen (v.a. regionale Netz-Relationen wie "Radverkehrsnetz Bayern") haben
+    /// zehntausende Geometriepunkte; MapKit braucht dafür beim Anzeigen spürbar lange
+    /// (>1s), da das Rendern synchron beim View-Update passiert. Für die Darstellung reicht
+    /// eine grobe Ausdünnung, die Matching-Logik nutzt weiterhin die volle Auflösung.
+    private static func decimated(_ line: [CLLocationCoordinate2D], maxPoints: Int = 500) -> [CLLocationCoordinate2D] {
+        guard line.count > maxPoints else { return line }
+        let step = max(1, line.count / maxPoints)
+        var indices = Swift.stride(from: 0, to: line.count, by: step).map { $0 }
+        if indices.last != line.count - 1 {
+            indices.append(line.count - 1)
+        }
+        return indices.map { line[$0] }
     }
 
     private static let germanyRegion = MKCoordinateRegion(
