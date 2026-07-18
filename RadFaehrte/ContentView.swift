@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var showLocationDeniedAlert = false
     @State private var isResolvingCurrentLocationForStart = false
     @State private var hasCenteredOnInitialLocation = false
+    @State private var selectedRouteLines: [[CLLocationCoordinate2D]] = []
 
     var body: some View {
         VStack(spacing: 12) {
@@ -77,12 +78,7 @@ struct ContentView: View {
                             .tint(.red)
                     }
                 }
-                if let selectedMatch {
-                    ForEach(Array(selectedMatch.route.lines.enumerated()), id: \.offset) { _, line in
-                        MapPolyline(coordinates: Self.decimated(line))
-                            .stroke(.blue, lineWidth: 4)
-                    }
-                }
+                routeOverlayContent
             }
             .overlay(alignment: .top) {
                 if isNavigating {
@@ -114,6 +110,9 @@ struct ContentView: View {
         }
         .onChange(of: startPlace) { runMatching(); updateCamera() }
         .onChange(of: zielPlace) { runMatching(); updateCamera() }
+        .onChange(of: selectedMatch) { _, newValue in
+            selectedRouteLines = newValue.map { Self.mergedLines($0.route.lines) } ?? []
+        }
         .onChange(of: locationManager.locationUpdateCount) { handleLocationUpdate() }
         .onChange(of: locationManager.headingUpdateCount) { updateNavigationCamera() }
         .alert("Standortzugriff benötigt", isPresented: $showLocationDeniedAlert) {
@@ -184,6 +183,7 @@ struct ContentView: View {
         } else if !hasCenteredOnInitialLocation, startPlace == nil, zielPlace == nil,
                   let location = locationManager.currentLocation {
             hasCenteredOnInitialLocation = true
+            locationManager.stopUpdating()
             withAnimation {
                 cameraPosition = .region(MKCoordinateRegion(
                     center: location.coordinate,
@@ -208,6 +208,14 @@ struct ContentView: View {
                 heading: locationManager.currentHeading ?? 0,
                 pitch: 60
             ))
+        }
+    }
+
+    @MapContentBuilder
+    private var routeOverlayContent: some MapContent {
+        ForEach(Array(selectedRouteLines.enumerated()), id: \.offset) { _, line in
+            MapPolyline(coordinates: line)
+                .stroke(.blue, lineWidth: 4)
         }
     }
 
@@ -301,6 +309,55 @@ struct ContentView: View {
             indices.append(line.count - 1)
         }
         return indices.map { line[$0] }
+    }
+
+    /// Manche Routen bestehen aus tausenden einzelnen, meist sehr kurzen Liniensegmenten
+    /// (z. B. "Weser - Romantische Straße": 5256 Segmente, obwohl geometrisch lückenlos
+    /// aneinander anschließend). Ein separates `MapPolyline` pro Segment lässt MapKit beim
+    /// Hinzufügen der Overlays spürbar hängen (mehrere Sekunden). Hier werden Segmente, die
+    /// einen gemeinsamen Endpunkt haben, zu durchgehenden Linien verkettet, um die Anzahl
+    /// der Overlays drastisch zu reduzieren. Die Matching-Logik bleibt davon unberührt.
+    private static func mergedLines(
+        _ lines: [[CLLocationCoordinate2D]], epsilon: Double = 1e-5
+    ) -> [[CLLocationCoordinate2D]] {
+        func key(_ c: CLLocationCoordinate2D) -> String {
+            "\(Int((c.latitude / epsilon).rounded())):\(Int((c.longitude / epsilon).rounded()))"
+        }
+
+        var endpointIndex: [String: [(line: Int, atStart: Bool)]] = [:]
+        for (i, line) in lines.enumerated() where line.count >= 2 {
+            endpointIndex[key(line.first!), default: []].append((i, true))
+            endpointIndex[key(line.last!), default: []].append((i, false))
+        }
+
+        var used = Array(repeating: false, count: lines.count)
+
+        func unusedNeighbor(at point: CLLocationCoordinate2D) -> (line: Int, atStart: Bool)? {
+            endpointIndex[key(point)]?.first { !used[$0.line] }
+        }
+
+        var merged: [[CLLocationCoordinate2D]] = []
+        for start in 0..<lines.count {
+            guard !used[start], lines[start].count >= 2 else { continue }
+            used[start] = true
+            var chain = lines[start]
+
+            while let next = unusedNeighbor(at: chain.last!) {
+                used[next.line] = true
+                var nextLine = lines[next.line]
+                if !next.atStart { nextLine.reverse() }
+                chain.append(contentsOf: nextLine.dropFirst())
+            }
+            while let prev = unusedNeighbor(at: chain.first!) {
+                used[prev.line] = true
+                var prevLine = lines[prev.line]
+                if prev.atStart { prevLine.reverse() }
+                chain.insert(contentsOf: prevLine.dropLast(), at: 0)
+            }
+
+            merged.append(decimated(chain))
+        }
+        return merged
     }
 
     private static let germanyRegion = MKCoordinateRegion(
