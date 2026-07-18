@@ -11,6 +11,7 @@ struct LocationSearchField: View {
     @Binding var selectedPlace: SelectedPlace?
     var isResolvingCurrentLocation: Bool = false
     var onUseCurrentLocation: (() -> Void)? = nil
+    var biasCoordinate: CLLocationCoordinate2D? = nil
 
     @State private var viewModel = LocationSearchViewModel()
     @FocusState private var isFocused: Bool
@@ -93,6 +94,15 @@ struct LocationSearchField: View {
             if let newValue, newValue.title != viewModel.queryFragment {
                 viewModel.queryFragment = newValue.title
             }
+        }
+        .onChange(of: biasCoordinate?.latitude) { _, _ in
+            viewModel.updateRegion(around: biasCoordinate)
+        }
+        .onChange(of: biasCoordinate?.longitude) { _, _ in
+            viewModel.updateRegion(around: biasCoordinate)
+        }
+        .onAppear {
+            viewModel.updateRegion(around: biasCoordinate)
         }
     }
 

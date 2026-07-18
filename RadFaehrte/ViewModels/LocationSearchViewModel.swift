@@ -35,6 +35,16 @@ final class LocationSearchViewModel: NSObject, MKLocalSearchCompleterDelegate {
         results = completer.results
     }
 
+    /// Engt die Suche auf eine Region um `coordinate` ein, damit z. B. "Nienburger Straße"
+    /// bevorzugt in der Nähe des Nutzers statt irgendwo in Deutschland gefunden wird.
+    func updateRegion(around coordinate: CLLocationCoordinate2D?, spanDegrees: Double = 1.0) {
+        guard let coordinate else { return }
+        completer.region = MKCoordinateRegion(
+            center: coordinate,
+            span: MKCoordinateSpan(latitudeDelta: spanDegrees, longitudeDelta: spanDegrees)
+        )
+    }
+
     func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
         results = []
     }

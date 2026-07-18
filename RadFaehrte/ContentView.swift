@@ -33,9 +33,14 @@ struct ContentView: View {
                             label: "Start",
                             selectedPlace: $startPlace,
                             isResolvingCurrentLocation: isResolvingCurrentLocationForStart,
-                            onUseCurrentLocation: useCurrentLocationAsStart
+                            onUseCurrentLocation: useCurrentLocationAsStart,
+                            biasCoordinate: locationManager.currentLocation?.coordinate
                         )
-                        LocationSearchField(label: "Ziel", selectedPlace: $zielPlace)
+                        LocationSearchField(
+                            label: "Ziel",
+                            selectedPlace: $zielPlace,
+                            biasCoordinate: startPlace?.coordinate ?? locationManager.currentLocation?.coordinate
+                        )
                     }
 
                     Button {
