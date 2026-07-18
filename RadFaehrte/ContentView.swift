@@ -24,6 +24,9 @@ struct ContentView: View {
     @State private var is3DEnabled = false
     @State private var connectorRouteToStart: MKRoute?
     @State private var connectorRouteToEnd: MKRoute?
+    @State private var isDirectRouteSelected = false
+    @State private var isLoadingDirectRoute = false
+    @State private var directRoute: MKRoute?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -62,7 +65,7 @@ struct ContentView: View {
                         .padding(.horizontal)
                 }
 
-                if selectedMatch != nil {
+                if selectedMatch != nil || isDirectRouteSelected {
                     Button {
                         startNavigating()
                     } label: {
@@ -131,6 +134,10 @@ struct ContentView: View {
         .onChange(of: startPlace) { runMatching(); updateCamera() }
         .onChange(of: zielPlace) { runMatching(); updateCamera() }
         .onChange(of: selectedMatch) { _, newValue in
+            if newValue != nil {
+                isDirectRouteSelected = false
+                directRoute = nil
+            }
             selectedRouteLines = newValue.map { Self.mergedLines($0.route.lines) } ?? []
             loadConnectorRoute(to: newValue)
         }
@@ -234,17 +241,44 @@ struct ContentView: View {
 
     @MapContentBuilder
     private var routeOverlayContent: some MapContent {
-        ForEach(Array(selectedRouteLines.enumerated()), id: \.offset) { _, line in
-            MapPolyline(coordinates: line)
-                .stroke(.blue, lineWidth: 4)
+        if isDirectRouteSelected {
+            if let directRoute {
+                MapPolyline(directRoute.polyline)
+                    .stroke(.blue, lineWidth: 4)
+            }
+        } else {
+            ForEach(Array(selectedRouteLines.enumerated()), id: \.offset) { _, line in
+                MapPolyline(coordinates: line)
+                    .stroke(.blue, lineWidth: 4)
+            }
+            if let connectorRouteToStart {
+                MapPolyline(connectorRouteToStart.polyline)
+                    .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
+            }
+            if let connectorRouteToEnd {
+                MapPolyline(connectorRouteToEnd.polyline)
+                    .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
+            }
         }
-        if let connectorRouteToStart {
-            MapPolyline(connectorRouteToStart.polyline)
-                .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
-        }
-        if let connectorRouteToEnd {
-            MapPolyline(connectorRouteToEnd.polyline)
-                .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
+    }
+
+    /// Berechnet eine direkte Fahrrad-Wegbeschreibung von Start zu Ziel, unabhängig vom
+    /// importierten Radroutennetz. Für Ziele außerhalb der Reichweite bestehender
+    /// Radfernwege/-netze (oder wenn schlicht keine gefunden wurden).
+    private func selectDirectRoute() {
+        selectedMatch = nil
+        isDirectRouteSelected = true
+        loadDirectRoute()
+    }
+
+    private func loadDirectRoute() {
+        directRoute = nil
+        guard let start = startPlace?.coordinate, let ziel = zielPlace?.coordinate else { return }
+        isLoadingDirectRoute = true
+        Task {
+            let route = await Self.directions(from: start, to: ziel)
+            isLoadingDirectRoute = false
+            if isDirectRouteSelected { directRoute = route }
         }
     }
 
@@ -298,31 +332,67 @@ struct ContentView: View {
 
     @ViewBuilder
     private var resultsSection: some View {
-        if matches.isEmpty {
-            Text("Keine passende Radroute in der Nähe gefunden")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(matches) { match in
-                        Button {
-                            selectedMatch = match
-                        } label: {
-                            matchRow(match)
-                        }
-                        .buttonStyle(.plain)
-                        if match.id != matches.last?.id {
-                            Divider()
+        VStack(spacing: 0) {
+            Button {
+                selectDirectRoute()
+            } label: {
+                directRouteRow
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("selectDirectRoute")
+
+            if matches.isEmpty {
+                Divider()
+                Text("Keine passende Radroute in der Nähe gefunden")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 4)
+            } else {
+                Divider()
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(matches) { match in
+                            Button {
+                                selectedMatch = match
+                            } label: {
+                                matchRow(match)
+                            }
+                            .buttonStyle(.plain)
+                            if match.id != matches.last?.id {
+                                Divider()
+                            }
                         }
                     }
                 }
+                .frame(maxHeight: 160)
             }
-            .frame(maxHeight: 160)
-            .background(.background)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var directRouteRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Direkte Fahrrad-Route")
+                    .font(.subheadline.weight(.medium))
+                Text("Berechnete Route außerhalb des Radroutennetzes")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if isLoadingDirectRoute {
+                ProgressView()
+            } else if isDirectRouteSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.blue)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
     }
 
     private func matchRow(_ match: RouteMatch) -> some View {
@@ -358,6 +428,8 @@ struct ContentView: View {
     }
 
     private func runMatching() {
+        isDirectRouteSelected = false
+        directRoute = nil
         guard let start = startPlace?.coordinate, let end = zielPlace?.coordinate else {
             matches = []
             selectedMatch = nil
