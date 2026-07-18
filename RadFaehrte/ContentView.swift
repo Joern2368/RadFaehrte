@@ -22,7 +22,8 @@ struct ContentView: View {
     @State private var hasCenteredOnInitialLocation = false
     @State private var selectedRouteLines: [[CLLocationCoordinate2D]] = []
     @State private var is3DEnabled = false
-    @State private var connectorRoute: MKRoute?
+    @State private var connectorRouteToStart: MKRoute?
+    @State private var connectorRouteToEnd: MKRoute?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -237,43 +238,62 @@ struct ContentView: View {
             MapPolyline(coordinates: line)
                 .stroke(.blue, lineWidth: 4)
         }
-        if let connectorRoute {
-            MapPolyline(connectorRoute.polyline)
+        if let connectorRouteToStart {
+            MapPolyline(connectorRouteToStart.polyline)
+                .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
+        }
+        if let connectorRouteToEnd {
+            MapPolyline(connectorRouteToEnd.polyline)
                 .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
         }
     }
 
-    /// Zeigt eine Wegbeschreibung vom Start zum nächstgelegenen Punkt der ausgewählten Route,
-    /// falls dieser spürbar entfernt liegt (z. B. wenn der Radweg nicht direkt am Startpunkt
-    /// beginnt). Nutzt Fahrrad-Wegbeschreibung mit Fallback auf Fußweg, falls Radrouting für
-    /// die Region nicht verfügbar ist.
+    /// Zeigt Wegbeschreibungen zwischen Start/Ziel und dem jeweils nächstgelegenen Punkt der
+    /// ausgewählten Route, falls dieser spürbar entfernt liegt (z. B. wenn der Radweg nicht
+    /// direkt am Start- oder Zielpunkt beginnt/endet). Nutzt Fahrrad-Wegbeschreibung mit
+    /// Fallback auf Fußweg, falls Radrouting für die Region nicht verfügbar ist.
     private func loadConnectorRoute(to match: RouteMatch?) {
-        connectorRoute = nil
-        guard let match, let start = startPlace?.coordinate, match.distanceToStartKm > 0.05 else { return }
+        connectorRouteToStart = nil
+        connectorRouteToEnd = nil
+        guard let match else { return }
 
-        Task {
-            let source = MKMapItem(placemark: MKPlacemark(coordinate: start))
-            let destination = MKMapItem(placemark: MKPlacemark(coordinate: match.nearestPointToStart))
-
-            let cyclingRequest = MKDirections.Request()
-            cyclingRequest.source = source
-            cyclingRequest.destination = destination
-            cyclingRequest.transportType = .cycling
-
-            if let route = try? await MKDirections(request: cyclingRequest).calculate().routes.first {
-                if match.id == selectedMatch?.id { connectorRoute = route }
-                return
-            }
-
-            let walkingRequest = MKDirections.Request()
-            walkingRequest.source = source
-            walkingRequest.destination = destination
-            walkingRequest.transportType = .walking
-
-            if let route = try? await MKDirections(request: walkingRequest).calculate().routes.first {
-                if match.id == selectedMatch?.id { connectorRoute = route }
+        if let start = startPlace?.coordinate, match.distanceToStartKm > 0.05 {
+            Task {
+                if let route = await Self.directions(from: start, to: match.nearestPointToStart) {
+                    if match.id == selectedMatch?.id { connectorRouteToStart = route }
+                }
             }
         }
+        if let ziel = zielPlace?.coordinate, match.distanceToEndKm > 0.05 {
+            Task {
+                if let route = await Self.directions(from: match.nearestPointToEnd, to: ziel) {
+                    if match.id == selectedMatch?.id { connectorRouteToEnd = route }
+                }
+            }
+        }
+    }
+
+    private static func directions(
+        from source: CLLocationCoordinate2D, to destination: CLLocationCoordinate2D
+    ) async -> MKRoute? {
+        let sourceItem = MKMapItem(placemark: MKPlacemark(coordinate: source))
+        let destinationItem = MKMapItem(placemark: MKPlacemark(coordinate: destination))
+
+        let cyclingRequest = MKDirections.Request()
+        cyclingRequest.source = sourceItem
+        cyclingRequest.destination = destinationItem
+        cyclingRequest.transportType = .cycling
+
+        if let route = try? await MKDirections(request: cyclingRequest).calculate().routes.first {
+            return route
+        }
+
+        let walkingRequest = MKDirections.Request()
+        walkingRequest.source = sourceItem
+        walkingRequest.destination = destinationItem
+        walkingRequest.transportType = .walking
+
+        return try? await MKDirections(request: walkingRequest).calculate().routes.first
     }
 
     @ViewBuilder
