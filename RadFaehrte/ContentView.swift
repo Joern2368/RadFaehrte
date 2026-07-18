@@ -21,6 +21,8 @@ struct ContentView: View {
     @State private var isResolvingCurrentLocationForStart = false
     @State private var hasCenteredOnInitialLocation = false
     @State private var selectedRouteLines: [[CLLocationCoordinate2D]] = []
+    @State private var is3DEnabled = false
+    @State private var connectorRoute: MKRoute?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -82,12 +84,24 @@ struct ContentView: View {
             }
             .overlay(alignment: .top) {
                 if isNavigating {
-                    Button {
-                        stopNavigating()
-                    } label: {
-                        Label("Beenden", systemImage: "xmark.circle.fill")
-                            .padding(8)
-                            .background(.thinMaterial, in: Capsule())
+                    HStack(spacing: 8) {
+                        Button {
+                            stopNavigating()
+                        } label: {
+                            Label("Beenden", systemImage: "xmark.circle.fill")
+                                .padding(8)
+                                .background(.thinMaterial, in: Capsule())
+                        }
+
+                        Button {
+                            is3DEnabled.toggle()
+                            updateNavigationCamera()
+                        } label: {
+                            Label(is3DEnabled ? "3D" : "2D", systemImage: "view.3d")
+                                .padding(8)
+                                .background(.thinMaterial, in: Capsule())
+                        }
+                        .accessibilityIdentifier("toggle2D3D")
                     }
                     .padding(.top, 8)
                 }
@@ -112,6 +126,7 @@ struct ContentView: View {
         .onChange(of: zielPlace) { runMatching(); updateCamera() }
         .onChange(of: selectedMatch) { _, newValue in
             selectedRouteLines = newValue.map { Self.mergedLines($0.route.lines) } ?? []
+            loadConnectorRoute(to: newValue)
         }
         .onChange(of: locationManager.locationUpdateCount) { handleLocationUpdate() }
         .onChange(of: locationManager.headingUpdateCount) { updateNavigationCamera() }
@@ -206,7 +221,7 @@ struct ContentView: View {
                 centerCoordinate: location.coordinate,
                 distance: 300,
                 heading: locationManager.currentHeading ?? 0,
-                pitch: 60
+                pitch: is3DEnabled ? 60 : 0
             ))
         }
     }
@@ -216,6 +231,43 @@ struct ContentView: View {
         ForEach(Array(selectedRouteLines.enumerated()), id: \.offset) { _, line in
             MapPolyline(coordinates: line)
                 .stroke(.blue, lineWidth: 4)
+        }
+        if let connectorRoute {
+            MapPolyline(connectorRoute.polyline)
+                .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
+        }
+    }
+
+    /// Zeigt eine Wegbeschreibung vom Start zum nächstgelegenen Punkt der ausgewählten Route,
+    /// falls dieser spürbar entfernt liegt (z. B. wenn der Radweg nicht direkt am Startpunkt
+    /// beginnt). Nutzt Fahrrad-Wegbeschreibung mit Fallback auf Fußweg, falls Radrouting für
+    /// die Region nicht verfügbar ist.
+    private func loadConnectorRoute(to match: RouteMatch?) {
+        connectorRoute = nil
+        guard let match, let start = startPlace?.coordinate, match.distanceToStartKm > 0.05 else { return }
+
+        Task {
+            let source = MKMapItem(placemark: MKPlacemark(coordinate: start))
+            let destination = MKMapItem(placemark: MKPlacemark(coordinate: match.nearestPointToStart))
+
+            let cyclingRequest = MKDirections.Request()
+            cyclingRequest.source = source
+            cyclingRequest.destination = destination
+            cyclingRequest.transportType = .cycling
+
+            if let route = try? await MKDirections(request: cyclingRequest).calculate().routes.first {
+                if match.id == selectedMatch?.id { connectorRoute = route }
+                return
+            }
+
+            let walkingRequest = MKDirections.Request()
+            walkingRequest.source = source
+            walkingRequest.destination = destination
+            walkingRequest.transportType = .walking
+
+            if let route = try? await MKDirections(request: walkingRequest).calculate().routes.first {
+                if match.id == selectedMatch?.id { connectorRoute = route }
+            }
         }
     }
 

@@ -9,6 +9,10 @@ struct RouteMatch: Identifiable {
     let route: BikeRoute
     let distanceToStartKm: Double
     let distanceToEndKm: Double
+    /// Der Punkt auf der Routen-Geometrie, der dem Start am nächsten liegt.
+    let nearestPointToStart: CLLocationCoordinate2D
+    /// Der Punkt auf der Routen-Geometrie, der dem Ziel am nächsten liegt.
+    let nearestPointToEnd: CLLocationCoordinate2D
 
     var id: Int64 { route.id }
     var combinedDistanceKm: Double { distanceToStartKm + distanceToEndKm }
@@ -41,25 +45,27 @@ final class RouteMatcher {
 
         var matches: [RouteMatch] = []
         for route in candidates {
-            guard let distanceToStart = Self.minDistanceKm(from: start, toLines: route.lines),
-                  let distanceToEnd = Self.minDistanceKm(from: end, toLines: route.lines) else { continue }
-            if distanceToStart <= thresholdKm && distanceToEnd <= thresholdKm {
+            guard let toStart = Self.nearestPoint(from: start, toLines: route.lines),
+                  let toEnd = Self.nearestPoint(from: end, toLines: route.lines) else { continue }
+            if toStart.distanceKm <= thresholdKm && toEnd.distanceKm <= thresholdKm {
                 matches.append(RouteMatch(
                     route: route,
-                    distanceToStartKm: distanceToStart,
-                    distanceToEndKm: distanceToEnd
+                    distanceToStartKm: toStart.distanceKm,
+                    distanceToEndKm: toEnd.distanceKm,
+                    nearestPointToStart: toStart.coordinate,
+                    nearestPointToEnd: toEnd.coordinate
                 ))
             }
         }
         return matches.sorted { $0.combinedDistanceKm < $1.combinedDistanceKm }
     }
 
-    /// Kürzeste Distanz von einem Punkt zu einer Liniengeometrie, in km.
+    /// Nächstgelegener Punkt auf einer Liniengeometrie zu einem Punkt, mit Distanz in km.
     /// Rechnet lokal in einer ebenen Näherung um den Punkt (ausreichend genau
     /// auf der hier relevanten Skala von wenigen Kilometern).
-    private static func minDistanceKm(
+    private static func nearestPoint(
         from point: CLLocationCoordinate2D, toLines lines: [[CLLocationCoordinate2D]]
-    ) -> Double? {
+    ) -> (coordinate: CLLocationCoordinate2D, distanceKm: Double)? {
         let metersPerDegreeLat = 111_320.0
         let metersPerDegreeLon = 111_320.0 * max(cos(point.latitude * .pi / 180), 0.1)
 
@@ -69,34 +75,44 @@ final class RouteMatcher {
                 (c.latitude - point.latitude) * metersPerDegreeLat
             )
         }
+        func toCoordinate(_ p: (x: Double, y: Double)) -> CLLocationCoordinate2D {
+            CLLocationCoordinate2D(
+                latitude: point.latitude + p.y / metersPerDegreeLat,
+                longitude: point.longitude + p.x / metersPerDegreeLon
+            )
+        }
 
         let origin = (x: 0.0, y: 0.0)
-        var best = Double.greatestFiniteMagnitude
+        var bestDistance = Double.greatestFiniteMagnitude
+        var bestPoint: (x: Double, y: Double)?
 
         for line in lines {
             guard line.count >= 2 else { continue }
             var prev = toLocal(line[0])
             for i in 1..<line.count {
                 let curr = toLocal(line[i])
-                let d = distanceToSegmentMeters(point: origin, a: prev, b: curr)
-                if d < best { best = d }
+                let (distance, projected) = closestPointOnSegmentMeters(point: origin, a: prev, b: curr)
+                if distance < bestDistance {
+                    bestDistance = distance
+                    bestPoint = projected
+                }
                 prev = curr
             }
         }
-        guard best.isFinite else { return nil }
-        return best / 1000
+        guard let bestPoint, bestDistance.isFinite else { return nil }
+        return (toCoordinate(bestPoint), bestDistance / 1000)
     }
 
-    private static func distanceToSegmentMeters(
+    private static func closestPointOnSegmentMeters(
         point p: (x: Double, y: Double), a: (x: Double, y: Double), b: (x: Double, y: Double)
-    ) -> Double {
+    ) -> (distance: Double, point: (x: Double, y: Double)) {
         let dx = b.x - a.x
         let dy = b.y - a.y
         let lengthSquared = dx * dx + dy * dy
 
         if lengthSquared == 0 {
             let ex = p.x - a.x, ey = p.y - a.y
-            return (ex * ex + ey * ey).squareRoot()
+            return ((ex * ex + ey * ey).squareRoot(), a)
         }
 
         var t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared
@@ -104,6 +120,6 @@ final class RouteMatcher {
         let projX = a.x + t * dx
         let projY = a.y + t * dy
         let ex = p.x - projX, ey = p.y - projY
-        return (ex * ex + ey * ey).squareRoot()
+        return ((ex * ex + ey * ey).squareRoot(), (projX, projY))
     }
 }
