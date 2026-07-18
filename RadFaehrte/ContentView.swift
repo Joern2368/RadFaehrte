@@ -101,9 +101,9 @@ struct ContentView: View {
             .padding(.bottom)
         }
         .background(Color(.systemGroupedBackground))
-        .onTapGesture {
+        .simultaneousGesture(TapGesture().onEnded {
             hideKeyboard()
-        }
+        })
         .onAppear {
             switch locationManager.authorizationStatus {
             case .authorizedWhenInUse, .authorizedAlways:
