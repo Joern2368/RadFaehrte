@@ -27,6 +27,8 @@ struct ContentView: View {
     @State private var isDirectRouteSelected = false
     @State private var isLoadingDirectRoute = false
     @State private var directRoute: MKRoute?
+    @State private var isFollowingUser = true
+    @State private var isProgrammaticCameraUpdate = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -91,29 +93,9 @@ struct ContentView: View {
                 }
                 routeOverlayContent
             }
+            .onMapCameraChange(frequency: .onEnd, handleMapCameraChange)
             .overlay(alignment: .top) {
-                if isNavigating {
-                    HStack(spacing: 8) {
-                        Button {
-                            stopNavigating()
-                        } label: {
-                            Label("Beenden", systemImage: "xmark.circle.fill")
-                                .padding(8)
-                                .background(.thinMaterial, in: Capsule())
-                        }
-
-                        Button {
-                            is3DEnabled.toggle()
-                            updateNavigationCamera()
-                        } label: {
-                            Label(is3DEnabled ? "3D" : "2D", systemImage: "view.3d")
-                                .padding(8)
-                                .background(.thinMaterial, in: Capsule())
-                        }
-                        .accessibilityIdentifier("toggle2D3D")
-                    }
-                    .padding(.top, 8)
-                }
+                navigationControlsOverlay
             }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal)
@@ -166,6 +148,7 @@ struct ContentView: View {
         locationManager.requestAuthorization()
         locationManager.startUpdating()
         isNavigating = true
+        isFollowingUser = true
         if let location = locationManager.currentLocation {
             updateNavigationCamera(location: location)
         } else {
@@ -228,7 +211,8 @@ struct ContentView: View {
     }
 
     private func updateNavigationCamera(location: CLLocation? = nil) {
-        guard isNavigating, let location = location ?? locationManager.currentLocation else { return }
+        guard isNavigating, isFollowingUser, let location = location ?? locationManager.currentLocation else { return }
+        isProgrammaticCameraUpdate = true
         withAnimation {
             cameraPosition = .camera(MapCamera(
                 centerCoordinate: location.coordinate,
@@ -236,6 +220,57 @@ struct ContentView: View {
                 heading: locationManager.currentHeading ?? 0,
                 pitch: is3DEnabled ? 60 : 0
             ))
+        }
+    }
+
+    /// `MapCameraUpdateContext` hat in diesem SDK kein Feld, das eigene (programmatische)
+    /// Kamera-Updates von Nutzer-Gesten unterscheidet. Stattdessen wird vor jedem eigenen
+    /// Kamera-Update ein Flag gesetzt, das hier konsumiert wird - bleibt es unbeachtet
+    /// (Flag war nicht gesetzt), kam die Änderung von einer Nutzer-Geste (Pan/Zoom).
+    private func handleMapCameraChange(_ context: MapCameraUpdateContext) {
+        if isProgrammaticCameraUpdate {
+            isProgrammaticCameraUpdate = false
+        } else if isNavigating {
+            isFollowingUser = false
+        }
+    }
+
+    @ViewBuilder
+    private var navigationControlsOverlay: some View {
+        if isNavigating {
+            HStack(spacing: 8) {
+                Button {
+                    stopNavigating()
+                } label: {
+                    Label("Beenden", systemImage: "xmark.circle.fill")
+                        .padding(8)
+                        .background(.thinMaterial, in: Capsule())
+                }
+
+                Button {
+                    is3DEnabled.toggle()
+                    isFollowingUser = true
+                    updateNavigationCamera()
+                } label: {
+                    Label(is3DEnabled ? "3D" : "2D", systemImage: "view.3d")
+                        .padding(8)
+                        .background(.thinMaterial, in: Capsule())
+                }
+                .accessibilityIdentifier("toggle2D3D")
+
+                if !isFollowingUser {
+                    Button {
+                        isFollowingUser = true
+                        updateNavigationCamera()
+                    } label: {
+                        Label("Standort", systemImage: "location.fill")
+                            .padding(8)
+                            .background(.thinMaterial, in: Capsule())
+                    }
+                    .accessibilityIdentifier("recenterOnUser")
+                }
+            }
+            .padding(.top, 8)
         }
     }
 
