@@ -1,6 +1,6 @@
 //
 //  LocationManager.swift
-//  FahrradApp
+//  RadFaehrte
 //
 
 import CoreLocation

@@ -1,6 +1,6 @@
 //
 //  LocationSearchField.swift
-//  FahrradApp
+//  RadFaehrte
 //
 
 import SwiftUI

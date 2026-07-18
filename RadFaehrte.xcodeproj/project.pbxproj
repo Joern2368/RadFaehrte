@@ -12,37 +12,37 @@
 			containerPortal = 80314EA4300A52A100FF6910 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 80314EAB300A52A100FF6910;
-			remoteInfo = FahrradApp;
+			remoteInfo = RadFaehrte;
 		};
 		80314EC4300A52A300FF6910 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 80314EA4300A52A100FF6910 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 80314EAB300A52A100FF6910;
-			remoteInfo = FahrradApp;
+			remoteInfo = RadFaehrte;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		80314EAC300A52A100FF6910 /* FahrradApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FahrradApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		80314EB9300A52A300FF6910 /* FahrradAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FahrradAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		80314EC3300A52A300FF6910 /* FahrradAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FahrradAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		80314EAC300A52A100FF6910 /* RadFaehrte.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RadFaehrte.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		80314EB9300A52A300FF6910 /* RadFaehrteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RadFaehrteTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		80314EC3300A52A300FF6910 /* RadFaehrteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RadFaehrteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		80314EAE300A52A100FF6910 /* FahrradApp */ = {
+		80314EAE300A52A100FF6910 /* RadFaehrte */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = FahrradApp;
+			path = RadFaehrte;
 			sourceTree = "<group>";
 		};
-		80314EBC300A52A300FF6910 /* FahrradAppTests */ = {
+		80314EBC300A52A300FF6910 /* RadFaehrteTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = FahrradAppTests;
+			path = RadFaehrteTests;
 			sourceTree = "<group>";
 		};
-		80314EC6300A52A300FF6910 /* FahrradAppUITests */ = {
+		80314EC6300A52A300FF6910 /* RadFaehrteUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = FahrradAppUITests;
+			path = RadFaehrteUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -75,9 +75,9 @@
 		80314EA3300A52A100FF6910 = {
 			isa = PBXGroup;
 			children = (
-				80314EAE300A52A100FF6910 /* FahrradApp */,
-				80314EBC300A52A300FF6910 /* FahrradAppTests */,
-				80314EC6300A52A300FF6910 /* FahrradAppUITests */,
+				80314EAE300A52A100FF6910 /* RadFaehrte */,
+				80314EBC300A52A300FF6910 /* RadFaehrteTests */,
+				80314EC6300A52A300FF6910 /* RadFaehrteUITests */,
 				80314EAD300A52A100FF6910 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -85,9 +85,9 @@
 		80314EAD300A52A100FF6910 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				80314EAC300A52A100FF6910 /* FahrradApp.app */,
-				80314EB9300A52A300FF6910 /* FahrradAppTests.xctest */,
-				80314EC3300A52A300FF6910 /* FahrradAppUITests.xctest */,
+				80314EAC300A52A100FF6910 /* RadFaehrte.app */,
+				80314EB9300A52A300FF6910 /* RadFaehrteTests.xctest */,
+				80314EC3300A52A300FF6910 /* RadFaehrteUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,9 +95,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		80314EAB300A52A100FF6910 /* FahrradApp */ = {
+		80314EAB300A52A100FF6910 /* RadFaehrte */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 80314ECD300A52A300FF6910 /* Build configuration list for PBXNativeTarget "FahrradApp" */;
+			buildConfigurationList = 80314ECD300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrte" */;
 			buildPhases = (
 				80314EA8300A52A100FF6910 /* Sources */,
 				80314EA9300A52A100FF6910 /* Frameworks */,
@@ -108,18 +108,18 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				80314EAE300A52A100FF6910 /* FahrradApp */,
+				80314EAE300A52A100FF6910 /* RadFaehrte */,
 			);
-			name = FahrradApp;
+			name = RadFaehrte;
 			packageProductDependencies = (
 			);
-			productName = FahrradApp;
-			productReference = 80314EAC300A52A100FF6910 /* FahrradApp.app */;
+			productName = RadFaehrte;
+			productReference = 80314EAC300A52A100FF6910 /* RadFaehrte.app */;
 			productType = "com.apple.product-type.application";
 		};
-		80314EB8300A52A300FF6910 /* FahrradAppTests */ = {
+		80314EB8300A52A300FF6910 /* RadFaehrteTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 80314ED0300A52A300FF6910 /* Build configuration list for PBXNativeTarget "FahrradAppTests" */;
+			buildConfigurationList = 80314ED0300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrteTests" */;
 			buildPhases = (
 				80314EB5300A52A300FF6910 /* Sources */,
 				80314EB6300A52A300FF6910 /* Frameworks */,
@@ -131,18 +131,18 @@
 				80314EBB300A52A300FF6910 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				80314EBC300A52A300FF6910 /* FahrradAppTests */,
+				80314EBC300A52A300FF6910 /* RadFaehrteTests */,
 			);
-			name = FahrradAppTests;
+			name = RadFaehrteTests;
 			packageProductDependencies = (
 			);
-			productName = FahrradAppTests;
-			productReference = 80314EB9300A52A300FF6910 /* FahrradAppTests.xctest */;
+			productName = RadFaehrteTests;
+			productReference = 80314EB9300A52A300FF6910 /* RadFaehrteTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		80314EC2300A52A300FF6910 /* FahrradAppUITests */ = {
+		80314EC2300A52A300FF6910 /* RadFaehrteUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 80314ED3300A52A300FF6910 /* Build configuration list for PBXNativeTarget "FahrradAppUITests" */;
+			buildConfigurationList = 80314ED3300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrteUITests" */;
 			buildPhases = (
 				80314EBF300A52A300FF6910 /* Sources */,
 				80314EC0300A52A300FF6910 /* Frameworks */,
@@ -154,13 +154,13 @@
 				80314EC5300A52A300FF6910 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				80314EC6300A52A300FF6910 /* FahrradAppUITests */,
+				80314EC6300A52A300FF6910 /* RadFaehrteUITests */,
 			);
-			name = FahrradAppUITests;
+			name = RadFaehrteUITests;
 			packageProductDependencies = (
 			);
-			productName = FahrradAppUITests;
-			productReference = 80314EC3300A52A300FF6910 /* FahrradAppUITests.xctest */;
+			productName = RadFaehrteUITests;
+			productReference = 80314EC3300A52A300FF6910 /* RadFaehrteUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -186,7 +186,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 80314EA7300A52A100FF6910 /* Build configuration list for PBXProject "FahrradApp" */;
+			buildConfigurationList = 80314EA7300A52A100FF6910 /* Build configuration list for PBXProject "RadFaehrte" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -200,9 +200,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				80314EAB300A52A100FF6910 /* FahrradApp */,
-				80314EB8300A52A300FF6910 /* FahrradAppTests */,
-				80314EC2300A52A300FF6910 /* FahrradAppUITests */,
+				80314EAB300A52A100FF6910 /* RadFaehrte */,
+				80314EB8300A52A300FF6910 /* RadFaehrteTests */,
+				80314EC2300A52A300FF6910 /* RadFaehrteUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -258,12 +258,12 @@
 /* Begin PBXTargetDependency section */
 		80314EBB300A52A300FF6910 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 80314EAB300A52A100FF6910 /* FahrradApp */;
+			target = 80314EAB300A52A100FF6910 /* RadFaehrte */;
 			targetProxy = 80314EBA300A52A300FF6910 /* PBXContainerItemProxy */;
 		};
 		80314EC5300A52A300FF6910 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 80314EAB300A52A100FF6910 /* FahrradApp */;
+			target = 80314EAB300A52A100FF6910 /* RadFaehrte */;
 			targetProxy = 80314EC4300A52A300FF6910 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -400,6 +400,7 @@
 				DEVELOPMENT_TEAM = 8WNRX5RP7M;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Der Standort wird verwendet, um deine Position während der Fahrt auf der Karte anzuzeigen.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -411,7 +412,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.FahrradApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrte;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -433,6 +434,7 @@
 				DEVELOPMENT_TEAM = 8WNRX5RP7M;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Der Standort wird verwendet, um deine Position während der Fahrt auf der Karte anzuzeigen.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -444,7 +446,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.FahrradApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrte;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -466,7 +468,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.FahrradAppTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrteTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -474,7 +476,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FahrradApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FahrradApp";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RadFaehrte.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/RadFaehrte";
 			};
 			name = Debug;
 		};
@@ -488,7 +490,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.FahrradAppTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrteTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -496,7 +498,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FahrradApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/FahrradApp";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RadFaehrte.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/RadFaehrte";
 			};
 			name = Release;
 		};
@@ -508,7 +510,7 @@
 				DEVELOPMENT_TEAM = 8WNRX5RP7M;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.FahrradAppUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrteUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -516,7 +518,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = FahrradApp;
+				TEST_TARGET_NAME = RadFaehrte;
 			};
 			name = Debug;
 		};
@@ -528,7 +530,7 @@
 				DEVELOPMENT_TEAM = 8WNRX5RP7M;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.FahrradAppUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrteUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -536,14 +538,14 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = FahrradApp;
+				TEST_TARGET_NAME = RadFaehrte;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		80314EA7300A52A100FF6910 /* Build configuration list for PBXProject "FahrradApp" */ = {
+		80314EA7300A52A100FF6910 /* Build configuration list for PBXProject "RadFaehrte" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				80314ECB300A52A300FF6910 /* Debug */,
@@ -552,7 +554,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		80314ECD300A52A300FF6910 /* Build configuration list for PBXNativeTarget "FahrradApp" */ = {
+		80314ECD300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrte" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				80314ECE300A52A300FF6910 /* Debug */,
@@ -561,7 +563,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		80314ED0300A52A300FF6910 /* Build configuration list for PBXNativeTarget "FahrradAppTests" */ = {
+		80314ED0300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrteTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				80314ED1300A52A300FF6910 /* Debug */,
@@ -570,7 +572,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		80314ED3300A52A300FF6910 /* Build configuration list for PBXNativeTarget "FahrradAppUITests" */ = {
+		80314ED3300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrteUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				80314ED4300A52A300FF6910 /* Debug */,

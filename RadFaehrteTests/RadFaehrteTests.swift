@@ -1,15 +1,15 @@
 //
-//  FahrradAppTests.swift
-//  FahrradAppTests
+//  RadFaehrteTests.swift
+//  RadFaehrteTests
 //
 //  Created by Jörn Frankenfeld on 17.07.26.
 //
 
 import Testing
 import CoreLocation
-@testable import FahrradApp
+@testable import RadFaehrte
 
-struct FahrradAppTests {
+struct RadFaehrteTests {
 
     @Test func routeRepositoryFindsWeserRadwegNearBremen() async throws {
         let repository = RouteRepository()

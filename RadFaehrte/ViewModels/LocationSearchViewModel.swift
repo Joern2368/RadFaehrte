@@ -1,6 +1,6 @@
 //
 //  LocationSearchViewModel.swift
-//  FahrradApp
+//  RadFaehrte
 //
 
 import Foundation

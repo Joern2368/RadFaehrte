@@ -1,6 +1,6 @@
 //
 //  SelectedPlace.swift
-//  FahrradApp
+//  RadFaehrte
 //
 
 import CoreLocation

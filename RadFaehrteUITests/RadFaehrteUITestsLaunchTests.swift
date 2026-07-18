@@ -1,13 +1,13 @@
 //
-//  FahrradAppUITestsLaunchTests.swift
-//  FahrradAppUITests
+//  RadFaehrteUITestsLaunchTests.swift
+//  RadFaehrteUITests
 //
 //  Created by Jörn Frankenfeld on 17.07.26.
 //
 
 import XCTest
 
-final class FahrradAppUITestsLaunchTests: XCTestCase {
+final class RadFaehrteUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true
