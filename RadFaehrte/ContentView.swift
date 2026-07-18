@@ -30,6 +30,7 @@ struct ContentView: View {
     @State private var selectedDirectRouteIndex = 0
     @State private var isFollowingUser = true
     @State private var isProgrammaticCameraUpdate = false
+    @State private var directRouteMapSelection: Int?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -80,7 +81,7 @@ struct ContentView: View {
                 }
             }
 
-            Map(position: $cameraPosition) {
+            Map(position: $cameraPosition, selection: $directRouteMapSelection) {
                 UserAnnotation()
                 if !isNavigating {
                     if let startPlace {
@@ -126,6 +127,12 @@ struct ContentView: View {
         }
         .onChange(of: locationManager.locationUpdateCount) { handleLocationUpdate() }
         .onChange(of: locationManager.headingUpdateCount) { updateNavigationCamera() }
+        .onChange(of: directRouteMapSelection) { _, newValue in
+            if let newValue, directRoutes.indices.contains(newValue) {
+                selectedDirectRouteIndex = newValue
+            }
+            directRouteMapSelection = nil
+        }
         .alert("Standortzugriff benötigt", isPresented: $showLocationDeniedAlert) {
             Button("Einstellungen öffnen") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -278,9 +285,17 @@ struct ContentView: View {
     @MapContentBuilder
     private var routeOverlayContent: some MapContent {
         if isDirectRouteMode {
+            ForEach(Array(directRoutes.enumerated()), id: \.offset) { index, route in
+                if index != selectedDirectRouteIndex {
+                    MapPolyline(route.polyline)
+                        .stroke(Color.gray.opacity(0.7), lineWidth: 4)
+                        .tag(index)
+                }
+            }
             if directRoutes.indices.contains(selectedDirectRouteIndex) {
                 MapPolyline(directRoutes[selectedDirectRouteIndex].polyline)
-                    .stroke(.blue, lineWidth: 4)
+                    .stroke(.blue, lineWidth: 5)
+                    .tag(selectedDirectRouteIndex)
             }
         } else {
             ForEach(Array(selectedRouteLines.enumerated()), id: \.offset) { _, line in
