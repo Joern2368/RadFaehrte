@@ -24,9 +24,10 @@ struct ContentView: View {
     @State private var is3DEnabled = false
     @State private var connectorRouteToStart: MKRoute?
     @State private var connectorRouteToEnd: MKRoute?
-    @State private var isDirectRouteSelected = false
+    @State private var isDirectRouteMode = false
     @State private var isLoadingDirectRoute = false
-    @State private var directRoute: MKRoute?
+    @State private var directRoutes: [MKRoute] = []
+    @State private var selectedDirectRouteIndex = 0
     @State private var isFollowingUser = true
     @State private var isProgrammaticCameraUpdate = false
 
@@ -67,7 +68,7 @@ struct ContentView: View {
                         .padding(.horizontal)
                 }
 
-                if selectedMatch != nil || isDirectRouteSelected {
+                if selectedMatch != nil || isDirectRouteMode {
                     Button {
                         startNavigating()
                     } label: {
@@ -117,8 +118,8 @@ struct ContentView: View {
         .onChange(of: zielPlace) { runMatching(); updateCamera() }
         .onChange(of: selectedMatch) { _, newValue in
             if newValue != nil {
-                isDirectRouteSelected = false
-                directRoute = nil
+                isDirectRouteMode = false
+                directRoutes = []
             }
             selectedRouteLines = newValue.map { Self.mergedLines($0.route.lines) } ?? []
             loadConnectorRoute(to: newValue)
@@ -276,9 +277,9 @@ struct ContentView: View {
 
     @MapContentBuilder
     private var routeOverlayContent: some MapContent {
-        if isDirectRouteSelected {
-            if let directRoute {
-                MapPolyline(directRoute.polyline)
+        if isDirectRouteMode {
+            if directRoutes.indices.contains(selectedDirectRouteIndex) {
+                MapPolyline(directRoutes[selectedDirectRouteIndex].polyline)
                     .stroke(.blue, lineWidth: 4)
             }
         } else {
@@ -299,21 +300,23 @@ struct ContentView: View {
 
     /// Berechnet eine direkte Fahrrad-Wegbeschreibung von Start zu Ziel, unabhängig vom
     /// importierten Radroutennetz. Für Ziele außerhalb der Reichweite bestehender
-    /// Radfernwege/-netze (oder wenn schlicht keine gefunden wurden).
+    /// Radfernwege/-netze (oder wenn schlicht keine gefunden wurden). Zeigt, falls von
+    /// Apple verfügbar, mehrere Routenalternativen zur Auswahl (wie in Karten-Apps üblich).
     private func selectDirectRoute() {
         selectedMatch = nil
-        isDirectRouteSelected = true
+        isDirectRouteMode = true
         loadDirectRoute()
     }
 
     private func loadDirectRoute() {
-        directRoute = nil
+        directRoutes = []
+        selectedDirectRouteIndex = 0
         guard let start = startPlace?.coordinate, let ziel = zielPlace?.coordinate else { return }
         isLoadingDirectRoute = true
         Task {
-            let route = await Self.directions(from: start, to: ziel)
+            let routes = await Self.directions(from: start, to: ziel, alternates: true)
             isLoadingDirectRoute = false
-            if isDirectRouteSelected { directRoute = route }
+            if isDirectRouteMode { directRoutes = routes }
         }
     }
 
@@ -328,14 +331,14 @@ struct ContentView: View {
 
         if let start = startPlace?.coordinate, match.distanceToStartKm > 0.05 {
             Task {
-                if let route = await Self.directions(from: start, to: match.nearestPointToStart) {
+                if let route = await Self.directions(from: start, to: match.nearestPointToStart).first {
                     if match.id == selectedMatch?.id { connectorRouteToStart = route }
                 }
             }
         }
         if let ziel = zielPlace?.coordinate, match.distanceToEndKm > 0.05 {
             Task {
-                if let route = await Self.directions(from: match.nearestPointToEnd, to: ziel) {
+                if let route = await Self.directions(from: match.nearestPointToEnd, to: ziel).first {
                     if match.id == selectedMatch?.id { connectorRouteToEnd = route }
                 }
             }
@@ -343,8 +346,8 @@ struct ContentView: View {
     }
 
     private static func directions(
-        from source: CLLocationCoordinate2D, to destination: CLLocationCoordinate2D
-    ) async -> MKRoute? {
+        from source: CLLocationCoordinate2D, to destination: CLLocationCoordinate2D, alternates: Bool = false
+    ) async -> [MKRoute] {
         let sourceItem = MKMapItem(placemark: MKPlacemark(coordinate: source))
         let destinationItem = MKMapItem(placemark: MKPlacemark(coordinate: destination))
 
@@ -352,29 +355,25 @@ struct ContentView: View {
         cyclingRequest.source = sourceItem
         cyclingRequest.destination = destinationItem
         cyclingRequest.transportType = .cycling
+        cyclingRequest.requestsAlternateRoutes = alternates
 
-        if let route = try? await MKDirections(request: cyclingRequest).calculate().routes.first {
-            return route
+        if let routes = try? await MKDirections(request: cyclingRequest).calculate().routes, !routes.isEmpty {
+            return routes
         }
 
         let walkingRequest = MKDirections.Request()
         walkingRequest.source = sourceItem
         walkingRequest.destination = destinationItem
         walkingRequest.transportType = .walking
+        walkingRequest.requestsAlternateRoutes = alternates
 
-        return try? await MKDirections(request: walkingRequest).calculate().routes.first
+        return (try? await MKDirections(request: walkingRequest).calculate().routes) ?? []
     }
 
     @ViewBuilder
     private var resultsSection: some View {
         VStack(spacing: 0) {
-            Button {
-                selectDirectRoute()
-            } label: {
-                directRouteRow
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("selectDirectRoute")
+            directRouteSection
 
             if matches.isEmpty {
                 Divider()
@@ -408,7 +407,58 @@ struct ContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private var directRouteRow: some View {
+    /// Zeigt, sobald Apple mehr als eine Routenalternative für die direkte Fahrrad-Route
+    /// liefert, jede Alternative als eigene wählbare Zeile (analog zu Apple/Google Maps).
+    @ViewBuilder
+    private var directRouteSection: some View {
+        if isDirectRouteMode && directRoutes.count > 1 {
+            ForEach(Array(directRoutes.enumerated()), id: \.offset) { index, route in
+                Button {
+                    selectedDirectRouteIndex = index
+                } label: {
+                    directRouteRow(route, index: index)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("selectDirectRoute-\(index)")
+                Divider()
+            }
+        } else {
+            Button {
+                selectDirectRoute()
+            } label: {
+                if isDirectRouteMode, let route = directRoutes.first {
+                    directRouteRow(route, index: 0)
+                } else {
+                    directRoutePlaceholderRow
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("selectDirectRoute")
+            Divider()
+        }
+    }
+
+    private func directRouteRow(_ route: MKRoute, index: Int) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(directRoutes.count > 1 ? "Route \(index + 1)" : "Direkte Fahrrad-Route")
+                    .font(.subheadline.weight(.medium))
+                Text("\(String(format: "%.1f", route.distance / 1000)) km · ca. \(Int(route.expectedTravelTime / 60)) Min. · außerhalb des Radroutennetzes")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if isDirectRouteMode && selectedDirectRouteIndex == index {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.blue)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+    }
+
+    private var directRoutePlaceholderRow: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Direkte Fahrrad-Route")
@@ -420,9 +470,6 @@ struct ContentView: View {
             Spacer()
             if isLoadingDirectRoute {
                 ProgressView()
-            } else if isDirectRouteSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.blue)
             }
         }
         .padding(.vertical, 8)
@@ -463,8 +510,8 @@ struct ContentView: View {
     }
 
     private func runMatching() {
-        isDirectRouteSelected = false
-        directRoute = nil
+        isDirectRouteMode = false
+        directRoutes = []
         guard let start = startPlace?.coordinate, let end = zielPlace?.coordinate else {
             matches = []
             selectedMatch = nil
