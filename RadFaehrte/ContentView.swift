@@ -31,6 +31,10 @@ struct ContentView: View {
     @State private var isFollowingUser = true
     @State private var isProgrammaticCameraUpdate = false
     @State private var directRouteMapSelection: Int?
+    @State private var tourStartTime: Date?
+    @State private var tourDistanceMeters: Double = 0
+    @State private var lastTourLocation: CLLocation?
+    @State private var tourSummary: TourSummary?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -143,6 +147,9 @@ struct ContentView: View {
         } message: {
             Text("Für den Navigationsmodus wird der Standortzugriff benötigt. Bitte in den Einstellungen erlauben.")
         }
+        .sheet(item: $tourSummary) { summary in
+            tourSummarySheet(summary)
+        }
     }
 
     private func startNavigating() {
@@ -157,6 +164,9 @@ struct ContentView: View {
         locationManager.startUpdating()
         isNavigating = true
         isFollowingUser = true
+        tourStartTime = Date()
+        tourDistanceMeters = 0
+        lastTourLocation = locationManager.currentLocation
         if let location = locationManager.currentLocation {
             updateNavigationCamera(location: location)
         } else {
@@ -171,6 +181,17 @@ struct ContentView: View {
     private func stopNavigating() {
         locationManager.stopUpdating()
         isNavigating = false
+        if let tourStartTime {
+            let duration = Date().timeIntervalSince(tourStartTime)
+            let distanceKm = tourDistanceMeters / 1000
+            tourSummary = TourSummary(
+                distanceKm: distanceKm,
+                duration: duration,
+                averageSpeedKmh: duration > 0 ? distanceKm / (duration / 3600) : 0
+            )
+        }
+        self.tourStartTime = nil
+        lastTourLocation = nil
         updateCamera()
     }
 
@@ -196,6 +217,9 @@ struct ContentView: View {
 
     private func handleLocationUpdate() {
         if isNavigating {
+            if let location = locationManager.currentLocation {
+                accumulateTourDistance(location)
+            }
             updateNavigationCamera()
         } else if isResolvingCurrentLocationForStart, let location = locationManager.currentLocation {
             resolveCurrentLocationAsStart(location)
@@ -210,6 +234,13 @@ struct ContentView: View {
                 ))
             }
         }
+    }
+
+    private func accumulateTourDistance(_ location: CLLocation) {
+        if let lastTourLocation {
+            tourDistanceMeters += location.distance(from: lastTourLocation)
+        }
+        lastTourLocation = location
     }
 
     private func resolveCurrentLocationAsStart(_ location: CLLocation) {
@@ -383,6 +414,46 @@ struct ContentView: View {
         walkingRequest.requestsAlternateRoutes = alternates
 
         return (try? await MKDirections(request: walkingRequest).calculate().routes) ?? []
+    }
+
+    private func tourSummarySheet(_ summary: TourSummary) -> some View {
+        VStack(spacing: 24) {
+            Text("Tour beendet")
+                .font(.title2.bold())
+                .padding(.top, 24)
+
+            HStack(spacing: 32) {
+                VStack(spacing: 4) {
+                    Text(String(format: "%.1f km", summary.distanceKm))
+                        .font(.title3.bold())
+                    Text("Strecke")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(spacing: 4) {
+                    Text(formattedTourDuration(summary.duration))
+                        .font(.title3.bold())
+                    Text("Dauer")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(spacing: 4) {
+                    Text(String(format: "%.1f km/h", summary.averageSpeedKmh))
+                        .font(.title3.bold())
+                    Text("⌀ Tempo")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Button("Fertig") {
+                tourSummary = nil
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.bottom, 24)
+        }
+        .padding(.horizontal)
+        .presentationDetents([.height(220)])
     }
 
     @ViewBuilder
@@ -637,6 +708,20 @@ extension RouteMatch: Equatable {
     static func == (lhs: RouteMatch, rhs: RouteMatch) -> Bool {
         lhs.id == rhs.id
     }
+}
+
+struct TourSummary: Identifiable {
+    let id = UUID()
+    let distanceKm: Double
+    let duration: TimeInterval
+    let averageSpeedKmh: Double
+}
+
+private func formattedTourDuration(_ interval: TimeInterval) -> String {
+    let totalMinutes = Int(interval / 60)
+    let hours = totalMinutes / 60
+    let minutes = totalMinutes % 60
+    return hours > 0 ? "\(hours) Std. \(minutes) Min." : "\(minutes) Min."
 }
 
 private func hideKeyboard() {
