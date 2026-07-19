@@ -104,13 +104,13 @@ struct ContentView: View {
                 routeOverlayContent
             }
             .onMapCameraChange(frequency: .onEnd, handleMapCameraChange)
-            .overlay(alignment: .top) {
-                navigationControlsOverlay
-            }
             .overlay(alignment: .topTrailing) {
                 if isNavigating {
-                    compassBadge
-                        .padding()
+                    VStack(spacing: 10) {
+                        compassBadge
+                        navigationControlsOverlay
+                    }
+                    .padding()
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -397,40 +397,44 @@ struct ContentView: View {
     @ViewBuilder
     private var navigationControlsOverlay: some View {
         if isNavigating {
-            HStack(spacing: 8) {
+            VStack(spacing: 10) {
                 Button {
                     stopNavigating()
                 } label: {
-                    Label("Beenden", systemImage: "xmark.circle.fill")
-                        .padding(8)
-                        .background(.thinMaterial, in: Capsule())
+                    navigationIconButtonLabel("xmark")
                 }
+                .accessibilityLabel("Beenden")
 
                 Button {
                     is3DEnabled.toggle()
                     isFollowingUser = true
                     updateNavigationCamera()
                 } label: {
-                    Label(is3DEnabled ? "3D" : "2D", systemImage: "view.3d")
-                        .padding(8)
-                        .background(.thinMaterial, in: Capsule())
+                    navigationIconButtonLabel("view.3d")
                 }
                 .accessibilityIdentifier("toggle2D3D")
+                .accessibilityLabel(is3DEnabled ? "3D" : "2D")
 
                 if !isFollowingUser {
                     Button {
                         isFollowingUser = true
                         updateNavigationCamera()
                     } label: {
-                        Label("Standort", systemImage: "location.fill")
-                            .padding(8)
-                            .background(.thinMaterial, in: Capsule())
+                        navigationIconButtonLabel("location.fill")
                     }
                     .accessibilityIdentifier("recenterOnUser")
+                    .accessibilityLabel("Standort")
                 }
             }
-            .padding(.top, 8)
         }
+    }
+
+    private func navigationIconButtonLabel(_ systemImage: String) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(.primary)
+            .frame(width: 40, height: 40)
+            .background(.thinMaterial, in: Circle())
     }
 
     @MapContentBuilder
