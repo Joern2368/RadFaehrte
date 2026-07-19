@@ -617,24 +617,67 @@ struct ContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    /// Einzelne Zeile für die direkte Fahrrad-Route. Bei mehreren Alternativen werden diese
-    /// nicht als eigene Listenzeilen aufgeführt, sondern direkt auf der Karte gezeigt und durch
-    /// Antippen der jeweiligen Linie gewählt (siehe `routeOverlayContent`/`directRouteMapSelection`).
-    /// Diese Zeile spiegelt nur die aktuell gewählte Alternative wider.
+    /// Einzelne Zeile für die direkte Fahrrad-Route. Bei mehreren Alternativen können diese
+    /// direkt auf der Karte per Antippen gewählt werden (siehe `routeOverlayContent`/
+    /// `directRouteMapSelection`) - das funktioniert aber nur zuverlässig dort, wo sich die
+    /// Routen sichtbar unterscheiden; überlappen sie sich (häufig bei ähnlichen Alternativen),
+    /// liegt die hervorgehobene Route optisch/beim Antippen über den anderen. Der Stepper
+    /// daneben bietet deshalb einen immer funktionierenden zweiten Weg zum Durchschalten.
     @ViewBuilder
     private var directRouteSection: some View {
-        Button {
-            selectDirectRoute()
-        } label: {
-            if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
-                directRouteRow(directRoutes[selectedDirectRouteIndex])
-            } else {
-                directRoutePlaceholderRow
+        HStack(spacing: 4) {
+            Button {
+                selectDirectRoute()
+            } label: {
+                if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
+                    directRouteRow(directRoutes[selectedDirectRouteIndex])
+                } else {
+                    directRoutePlaceholderRow
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("selectDirectRoute")
+
+            if isDirectRouteMode && directRoutes.count > 1 {
+                directRouteAlternatesStepper
             }
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("selectDirectRoute")
         Divider()
+    }
+
+    private var directRouteAlternatesStepper: some View {
+        HStack(spacing: 2) {
+            Button {
+                cycleDirectRoute(by: -1)
+            } label: {
+                Image(systemName: "chevron.left.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.blue)
+            }
+            .accessibilityIdentifier("previousDirectRoute")
+
+            Text("\(selectedDirectRouteIndex + 1)/\(directRoutes.count)")
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+
+            Button {
+                cycleDirectRoute(by: 1)
+            } label: {
+                Image(systemName: "chevron.right.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.blue)
+            }
+            .accessibilityIdentifier("nextDirectRoute")
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 8)
+    }
+
+    private func cycleDirectRoute(by delta: Int) {
+        guard directRoutes.count > 1 else { return }
+        let count = directRoutes.count
+        selectedDirectRouteIndex = ((selectedDirectRouteIndex + delta) % count + count) % count
     }
 
     private func directRouteRow(_ route: MKRoute) -> some View {
