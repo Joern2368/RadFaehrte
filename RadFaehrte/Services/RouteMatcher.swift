@@ -45,6 +45,10 @@ final class RouteMatcher {
 
         var matches: [RouteMatch] = []
         for route in candidates {
+            // Unbenannte Routen sind meist Fragmente lokaler Knotenpunkt-Netze (network=lcn),
+            // die in OSM oft als viele einzelne, kurze Wegabschnitte statt als eine
+            // durchgehende Route kartiert sind - für den Nutzer keine sinnvoll folgbare Route.
+            guard let name = route.name, !name.isEmpty else { continue }
             guard let toStart = Self.nearestPoint(from: start, toLines: route.lines),
                   let toEnd = Self.nearestPoint(from: end, toLines: route.lines) else { continue }
             if toStart.distanceKm <= thresholdKm && toEnd.distanceKm <= thresholdKm {
