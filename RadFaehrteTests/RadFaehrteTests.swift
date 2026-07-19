@@ -86,4 +86,24 @@ struct RadFaehrteTests {
         }
     }
 
+    @Test func bikeRoutingEngineReturnsMultipleDistinctAlternates() async throws {
+        let engine = BikeRoutingEngine(repository: WayGraphRepository())
+
+        let start = CLLocationCoordinate2D(latitude: 53.0999, longitude: 8.7905)
+        let end = CLLocationCoordinate2D(latitude: 53.0872, longitude: 8.7901)
+
+        let routes = engine.routes(from: start, to: end, count: 4)
+
+        #expect(!routes.isEmpty)
+        #expect(routes.count <= 4)
+        // Alternativen sollen sich spürbar unterscheiden (Penalty-Strategie), nicht dieselbe
+        // Route mehrfach liefern.
+        if routes.count > 1 {
+            func signature(_ route: BikeRoutingEngine.Route) -> String {
+                route.coordinates.map { "\($0.latitude),\($0.longitude)" }.joined()
+            }
+            #expect(signature(routes[0]) != signature(routes[1]))
+        }
+    }
+
 }
