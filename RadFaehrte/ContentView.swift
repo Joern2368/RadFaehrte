@@ -24,10 +24,9 @@ struct ContentView: View {
     @State private var is3DEnabled = false
     @State private var connectorRouteToStart: MKRoute?
     @State private var connectorRouteToEnd: MKRoute?
-    @State private var routingEngine = BikeRoutingEngine(repository: WayGraphRepository())
     @State private var isDirectRouteMode = false
     @State private var isLoadingDirectRoute = false
-    @State private var directRoutes: [BikeRoutingEngine.Route] = []
+    @State private var directRoutes: [MKRoute] = []
     @State private var selectedDirectRouteIndex = 0
     @State private var isFollowingUser = true
     @State private var isProgrammaticCameraUpdate = false
@@ -36,6 +35,7 @@ struct ContentView: View {
     @State private var tourDistanceMeters: Double = 0
     @State private var lastTourLocation: CLLocation?
     @State private var tourSummary: TourSummary?
+    @State private var currentDirectRouteStepIndex = 0
 
     var body: some View {
         VStack(spacing: 12) {
@@ -177,6 +177,7 @@ struct ContentView: View {
         tourStartTime = Date()
         tourDistanceMeters = 0
         lastTourLocation = locationManager.currentLocation
+        currentDirectRouteStepIndex = 0
         if let location = locationManager.currentLocation {
             updateNavigationCamera(location: location)
         } else {
@@ -229,6 +230,7 @@ struct ContentView: View {
         if isNavigating {
             if let location = locationManager.currentLocation {
                 accumulateTourDistance(location)
+                advanceDirectRouteStepIfNeeded(location)
             }
             updateNavigationCamera()
         } else if isResolvingCurrentLocationForStart, let location = locationManager.currentLocation {
@@ -251,6 +253,20 @@ struct ContentView: View {
             tourDistanceMeters += location.distance(from: lastTourLocation)
         }
         lastTourLocation = location
+    }
+
+    /// Rückt bei der direkten Fahrrad-Route (MKDirections) zum nächsten Navigationsschritt vor,
+    /// sobald der Nutzer nah genug (< 30 m) am Ende des aktuellen Schritts ist. Offizielle
+    /// Radrouten haben keine Schritt-Daten und werden hier nicht behandelt.
+    private func advanceDirectRouteStepIfNeeded(_ location: CLLocation) {
+        guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) else { return }
+        let steps = directRoutes[selectedDirectRouteIndex].steps
+        guard currentDirectRouteStepIndex < steps.count - 1,
+              let stepEnd = steps[currentDirectRouteStepIndex].polyline.coordinates.last else { return }
+        let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
+        if location.distance(from: stepEndLocation) < 30 {
+            currentDirectRouteStepIndex += 1
+        }
     }
 
     private func resolveCurrentLocationAsStart(_ location: CLLocation) {
@@ -286,8 +302,9 @@ struct ContentView: View {
 
     /// Kopfzeile im Navigationsmodus mit Richtungspfeil, aktueller Anweisung und Statistik-
     /// Leiste (Tempo/Strecke/Zielentfernung), angelehnt an gängige Rad-Navigations-Apps.
-    /// Weder offizielle Radrouten noch die eigene Routing-Engine liefern Straßennamen pro
-    /// Wegabschnitt, daher hier nur eine generische "Route folgen"-Anzeige mit Routennamen.
+    /// Bei der direkten Fahrrad-Route (MKDirections) werden echte Turn-by-Turn-Anweisungen mit
+    /// Straßennamen gezeigt; offizielle Radrouten haben keine Straßennamen pro Wegabschnitt in
+    /// der Datenbank, daher hier nur eine generische "Route folgen"-Anzeige mit Routennamen.
     private var navigationHeaderSection: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 16) {
@@ -338,12 +355,19 @@ struct ContentView: View {
     }
 
     private var navigationInstructionTitle: String {
-        "Route folgen"
+        if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
+            let steps = directRoutes[selectedDirectRouteIndex].steps
+            if steps.indices.contains(currentDirectRouteStepIndex) {
+                let instruction = steps[currentDirectRouteStepIndex].instructions
+                return instruction.isEmpty ? "Los geht's" : instruction
+            }
+        }
+        return "Route folgen"
     }
 
     private var navigationInstructionSubtitle: String {
         if isDirectRouteMode {
-            return "Direkte Route (ruhige Wege)"
+            return "Direkte Fahrrad-Route"
         }
         return selectedMatch?.route.name ?? "Radroute"
     }
@@ -418,14 +442,14 @@ struct ContentView: View {
         if isDirectRouteMode {
             ForEach(Array(directRoutes.enumerated()), id: \.offset) { index, route in
                 if index != selectedDirectRouteIndex {
-                    MapPolyline(coordinates: route.coordinates)
+                    MapPolyline(route.polyline)
                         .stroke(Color.gray.opacity(0.7), lineWidth: 4)
                         .tag(index)
                 }
             }
             if directRoutes.indices.contains(selectedDirectRouteIndex) {
-                MapPolyline(coordinates: directRoutes[selectedDirectRouteIndex].coordinates)
-                    .stroke(.purple, lineWidth: 5)
+                MapPolyline(directRoutes[selectedDirectRouteIndex].polyline)
+                    .stroke(.blue, lineWidth: 5)
                     .tag(selectedDirectRouteIndex)
             }
         } else {
@@ -444,11 +468,10 @@ struct ContentView: View {
         }
     }
 
-    /// Berechnet eine direkte Fahrrad-Route von Start zu Ziel über die eigene, offline
-    /// arbeitende Routing-Engine (siehe `BikeRoutingEngine`), die gezielt Radwege bevorzugt
-    /// und Hauptstraßen meidet - unabhängig vom importierten Radroutennetz. Deckt ganz
-    /// Deutschland ab (siehe `WayGraphRepository`). Liefert bis zu 4 Routenalternativen
-    /// zur Auswahl (wie in Karten-Apps üblich).
+    /// Berechnet eine direkte Fahrrad-Wegbeschreibung von Start zu Ziel, unabhängig vom
+    /// importierten Radroutennetz. Für Ziele außerhalb der Reichweite bestehender
+    /// Radfernwege/-netze (oder wenn schlicht keine gefunden wurden). Zeigt, falls von
+    /// Apple verfügbar, mehrere Routenalternativen zur Auswahl (wie in Karten-Apps üblich).
     private func selectDirectRoute() {
         selectedMatch = nil
         isDirectRouteMode = true
@@ -461,7 +484,7 @@ struct ContentView: View {
         guard let start = startPlace?.coordinate, let ziel = zielPlace?.coordinate else { return }
         isLoadingDirectRoute = true
         Task {
-            let routes = routingEngine.routes(from: start, to: ziel)
+            let routes = await Self.directions(from: start, to: ziel, alternates: true)
             isLoadingDirectRoute = false
             if isDirectRouteMode { directRoutes = routes }
         }
@@ -493,7 +516,7 @@ struct ContentView: View {
     }
 
     private static func directions(
-        from source: CLLocationCoordinate2D, to destination: CLLocationCoordinate2D
+        from source: CLLocationCoordinate2D, to destination: CLLocationCoordinate2D, alternates: Bool = false
     ) async -> [MKRoute] {
         let sourceItem = MKMapItem(placemark: MKPlacemark(coordinate: source))
         let destinationItem = MKMapItem(placemark: MKPlacemark(coordinate: destination))
@@ -502,6 +525,7 @@ struct ContentView: View {
         cyclingRequest.source = sourceItem
         cyclingRequest.destination = destinationItem
         cyclingRequest.transportType = .cycling
+        cyclingRequest.requestsAlternateRoutes = alternates
 
         if let routes = try? await MKDirections(request: cyclingRequest).calculate().routes, !routes.isEmpty {
             return routes
@@ -511,6 +535,7 @@ struct ContentView: View {
         walkingRequest.source = sourceItem
         walkingRequest.destination = destinationItem
         walkingRequest.transportType = .walking
+        walkingRequest.requestsAlternateRoutes = alternates
 
         return (try? await MKDirections(request: walkingRequest).calculate().routes) ?? []
     }
@@ -606,8 +631,6 @@ struct ContentView: View {
             } label: {
                 if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
                     directRouteRow(directRoutes[selectedDirectRouteIndex])
-                } else if isDirectRouteMode, !isLoadingDirectRoute {
-                    directRouteUnavailableRow
                 } else {
                     directRoutePlaceholderRow
                 }
@@ -657,10 +680,10 @@ struct ContentView: View {
         selectedDirectRouteIndex = ((selectedDirectRouteIndex + delta) % count + count) % count
     }
 
-    private func directRouteRow(_ route: BikeRoutingEngine.Route) -> some View {
+    private func directRouteRow(_ route: MKRoute) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Direkte Route (ruhige Wege)")
+                Text("Direkte Fahrrad-Route")
                     .font(.subheadline.weight(.medium))
                 Text(directRouteSubtitle(for: route))
                     .font(.caption)
@@ -668,21 +691,18 @@ struct ContentView: View {
             }
             Spacer()
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.purple)
+                .foregroundStyle(.blue)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
         .contentShape(Rectangle())
     }
 
-    /// Die Engine liefert keine Fahrzeit; grob geschätzt über eine mittlere Reisegeschwindigkeit
-    /// von 15 km/h (typisches Alltagsrad-Tempo), analog zur bisherigen Apple-Anzeige.
-    private func directRouteSubtitle(for route: BikeRoutingEngine.Route) -> String {
-        let distanceKm = route.distanceMeters / 1000
+    private func directRouteSubtitle(for route: MKRoute) -> String {
         var parts = [
-            "\(String(format: "%.1f", distanceKm)) km",
-            "ca. \(Int(distanceKm / 15 * 60)) Min.",
-            "bevorzugt Radwege, meidet Hauptstraßen"
+            "\(String(format: "%.1f", route.distance / 1000)) km",
+            "ca. \(Int(route.expectedTravelTime / 60)) Min.",
+            "außerhalb des Radroutennetzes"
         ]
         if directRoutes.count > 1 {
             parts.append("\(directRoutes.count) Routen – auf Karte wählbar")
@@ -693,9 +713,9 @@ struct ContentView: View {
     private var directRoutePlaceholderRow: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Direkte Route (ruhige Wege)")
+                Text("Direkte Fahrrad-Route")
                     .font(.subheadline.weight(.medium))
-                Text("Bevorzugt Radwege, meidet Hauptstraßen")
+                Text("Berechnete Route außerhalb des Radroutennetzes")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -703,22 +723,6 @@ struct ContentView: View {
             if isLoadingDirectRoute {
                 ProgressView()
             }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 4)
-        .contentShape(Rectangle())
-    }
-
-    private var directRouteUnavailableRow: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Direkte Route (ruhige Wege)")
-                    .font(.subheadline.weight(.medium))
-                Text("Keine Route gefunden")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
