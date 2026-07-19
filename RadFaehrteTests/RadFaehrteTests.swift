@@ -45,4 +45,45 @@ struct RadFaehrteTests {
         }
     }
 
+    @Test func waySegmentCostFactorPrefersCyclewayOverPrimaryRoad() async throws {
+        let cycleway = WaySegment(
+            id: 1, fromNode: 1, toNode: 2, highway: "cycleway", cycleway: nil, surface: nil,
+            oneway: 0, name: nil,
+            coordinates: [CLLocationCoordinate2D(latitude: 53.08, longitude: 8.80)]
+        )
+        let residential = WaySegment(
+            id: 2, fromNode: 1, toNode: 2, highway: "residential", cycleway: nil, surface: nil,
+            oneway: 0, name: nil,
+            coordinates: [CLLocationCoordinate2D(latitude: 53.08, longitude: 8.80)]
+        )
+        let primary = WaySegment(
+            id: 3, fromNode: 1, toNode: 2, highway: "primary", cycleway: nil, surface: nil,
+            oneway: 0, name: nil,
+            coordinates: [CLLocationCoordinate2D(latitude: 53.08, longitude: 8.80)]
+        )
+
+        #expect(cycleway.costFactor < residential.costFactor)
+        #expect(residential.costFactor < primary.costFactor)
+    }
+
+    @Test func bikeRoutingEngineFindsRouteBetweenTwoBremenPoints() async throws {
+        let engine = BikeRoutingEngine(repository: WayGraphRepository())
+
+        // Zwei reale Punkte im Bremer Wohngebiet, ca. 1.4 km auseinander (Testregion-Extrakt)
+        let start = CLLocationCoordinate2D(latitude: 53.0999, longitude: 8.7905)
+        let end = CLLocationCoordinate2D(latitude: 53.0872, longitude: 8.7901)
+
+        let route = engine.route(from: start, to: end)
+
+        #expect(route != nil)
+        if let route {
+            #expect(route.coordinates.count > 1)
+            // Direkte Distanz liegt bei ~1.4 km; die Route entlang des Wegenetzes darf
+            // etwas länger sein, aber nicht unrealistisch (z. B. nicht > 5x Luftlinie).
+            let straightLineKm = CLLocation(latitude: start.latitude, longitude: start.longitude)
+                .distance(from: CLLocation(latitude: end.latitude, longitude: end.longitude)) / 1000
+            #expect(route.distanceMeters / 1000 < straightLineKm * 5)
+        }
+    }
+
 }

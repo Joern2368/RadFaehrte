@@ -28,6 +28,10 @@ struct ContentView: View {
     @State private var isLoadingDirectRoute = false
     @State private var directRoutes: [MKRoute] = []
     @State private var selectedDirectRouteIndex = 0
+    @State private var routingEngine = BikeRoutingEngine(repository: WayGraphRepository())
+    @State private var isQuietRouteMode = false
+    @State private var isLoadingQuietRoute = false
+    @State private var quietRoute: BikeRoutingEngine.Route?
     @State private var isFollowingUser = true
     @State private var isProgrammaticCameraUpdate = false
     @State private var directRouteMapSelection: Int?
@@ -77,7 +81,7 @@ struct ContentView: View {
                         .padding(.horizontal)
                 }
 
-                if selectedMatch != nil || isDirectRouteMode {
+                if selectedMatch != nil || isDirectRouteMode || isQuietRouteMode {
                     Button {
                         startNavigating()
                     } label: {
@@ -135,6 +139,8 @@ struct ContentView: View {
             if newValue != nil {
                 isDirectRouteMode = false
                 directRoutes = []
+                isQuietRouteMode = false
+                quietRoute = nil
             }
             selectedRouteLines = newValue.map { Self.mergedLines($0.route.lines) } ?? []
             loadConnectorRoute(to: newValue)
@@ -367,7 +373,10 @@ struct ContentView: View {
 
     private var navigationInstructionSubtitle: String {
         if isDirectRouteMode {
-            return "Direkte Fahrrad-Route"
+            return "Direkte Route (Apple)"
+        }
+        if isQuietRouteMode {
+            return "Direkte Route (ruhige Wege)"
         }
         return selectedMatch?.route.name ?? "Radroute"
     }
@@ -452,6 +461,11 @@ struct ContentView: View {
                     .stroke(.blue, lineWidth: 5)
                     .tag(selectedDirectRouteIndex)
             }
+        } else if isQuietRouteMode {
+            if let quietRoute {
+                MapPolyline(coordinates: quietRoute.coordinates)
+                    .stroke(.purple, lineWidth: 5)
+            }
         } else {
             ForEach(Array(selectedRouteLines.enumerated()), id: \.offset) { _, line in
                 MapPolyline(coordinates: line)
@@ -475,6 +489,8 @@ struct ContentView: View {
     private func selectDirectRoute() {
         selectedMatch = nil
         isDirectRouteMode = true
+        isQuietRouteMode = false
+        quietRoute = nil
         loadDirectRoute()
     }
 
@@ -487,6 +503,29 @@ struct ContentView: View {
             let routes = await Self.directions(from: start, to: ziel, alternates: true)
             isLoadingDirectRoute = false
             if isDirectRouteMode { directRoutes = routes }
+        }
+    }
+
+    /// Berechnet eine direkte Fahrrad-Route über die eigene, offline arbeitende
+    /// Routing-Engine (siehe `BikeRoutingEngine`), die gezielt Radwege bevorzugt und
+    /// Hauptstraßen meidet - im Gegensatz zur Apple-Direktroute oben. Deckt aktuell nur
+    /// die Testregion Bremen ab (siehe `WayGraphRepository`).
+    private func selectQuietRoute() {
+        selectedMatch = nil
+        isDirectRouteMode = false
+        directRoutes = []
+        isQuietRouteMode = true
+        loadQuietRoute()
+    }
+
+    private func loadQuietRoute() {
+        quietRoute = nil
+        guard let start = startPlace?.coordinate, let ziel = zielPlace?.coordinate else { return }
+        isLoadingQuietRoute = true
+        Task {
+            let route = routingEngine.route(from: start, to: ziel)
+            isLoadingQuietRoute = false
+            if isQuietRouteMode { quietRoute = route }
         }
     }
 
@@ -584,6 +623,7 @@ struct ContentView: View {
     private var resultsSection: some View {
         VStack(spacing: 0) {
             directRouteSection
+            quietRouteSection
 
             if matches.isEmpty {
                 Divider()
@@ -683,7 +723,7 @@ struct ContentView: View {
     private func directRouteRow(_ route: MKRoute) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Direkte Fahrrad-Route")
+                Text("Direkte Route (Apple)")
                     .font(.subheadline.weight(.medium))
                 Text(directRouteSubtitle(for: route))
                     .font(.caption)
@@ -713,7 +753,7 @@ struct ContentView: View {
     private var directRoutePlaceholderRow: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Direkte Fahrrad-Route")
+                Text("Direkte Route (Apple)")
                     .font(.subheadline.weight(.medium))
                 Text("Berechnete Route außerhalb des Radroutennetzes")
                     .font(.caption)
@@ -723,6 +763,81 @@ struct ContentView: View {
             if isLoadingDirectRoute {
                 ProgressView()
             }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+    }
+
+    /// Zeile für die eigene, offline arbeitende Routing-Engine (siehe
+    /// `BikeRoutingEngine`), die im Gegensatz zur Apple-Route gezielt Radwege bevorzugt.
+    /// Aktuell nur für die Testregion Bremen verfügbar; außerhalb davon liefert die Engine
+    /// keine Route (leerer Graph), was hier als eigener Hinweistext angezeigt wird.
+    @ViewBuilder
+    private var quietRouteSection: some View {
+        Button {
+            selectQuietRoute()
+        } label: {
+            if isQuietRouteMode, let quietRoute {
+                quietRouteRow(quietRoute)
+            } else if isQuietRouteMode, !isLoadingQuietRoute {
+                quietRouteUnavailableRow
+            } else {
+                quietRoutePlaceholderRow
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("selectQuietRoute")
+        Divider()
+    }
+
+    private func quietRouteRow(_ route: BikeRoutingEngine.Route) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Direkte Route (ruhige Wege)")
+                    .font(.subheadline.weight(.medium))
+                Text("\(String(format: "%.1f", route.distanceMeters / 1000)) km · bevorzugt Radwege, meidet Hauptstraßen")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.purple)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+    }
+
+    private var quietRoutePlaceholderRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Direkte Route (ruhige Wege)")
+                    .font(.subheadline.weight(.medium))
+                Text("Bevorzugt Radwege, meidet Hauptstraßen (nur Testregion Bremen)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if isLoadingQuietRoute {
+                ProgressView()
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+    }
+
+    private var quietRouteUnavailableRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Direkte Route (ruhige Wege)")
+                    .font(.subheadline.weight(.medium))
+                Text("Keine Route gefunden (außerhalb der Testregion Bremen)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
@@ -764,6 +879,8 @@ struct ContentView: View {
     private func runMatching() {
         isDirectRouteMode = false
         directRoutes = []
+        isQuietRouteMode = false
+        quietRoute = nil
         guard let start = startPlace?.coordinate, let end = zielPlace?.coordinate else {
             matches = []
             selectedMatch = nil
