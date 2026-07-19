@@ -617,55 +617,54 @@ struct ContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    /// Zeigt, sobald Apple mehr als eine Routenalternative für die direkte Fahrrad-Route
-    /// liefert, jede Alternative als eigene wählbare Zeile (analog zu Apple/Google Maps).
+    /// Einzelne Zeile für die direkte Fahrrad-Route. Bei mehreren Alternativen werden diese
+    /// nicht als eigene Listenzeilen aufgeführt, sondern direkt auf der Karte gezeigt und durch
+    /// Antippen der jeweiligen Linie gewählt (siehe `routeOverlayContent`/`directRouteMapSelection`).
+    /// Diese Zeile spiegelt nur die aktuell gewählte Alternative wider.
     @ViewBuilder
     private var directRouteSection: some View {
-        if isDirectRouteMode && directRoutes.count > 1 {
-            ForEach(Array(directRoutes.enumerated()), id: \.offset) { index, route in
-                Button {
-                    selectedDirectRouteIndex = index
-                } label: {
-                    directRouteRow(route, index: index)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("selectDirectRoute-\(index)")
-                Divider()
+        Button {
+            selectDirectRoute()
+        } label: {
+            if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
+                directRouteRow(directRoutes[selectedDirectRouteIndex])
+            } else {
+                directRoutePlaceholderRow
             }
-        } else {
-            Button {
-                selectDirectRoute()
-            } label: {
-                if isDirectRouteMode, let route = directRoutes.first {
-                    directRouteRow(route, index: 0)
-                } else {
-                    directRoutePlaceholderRow
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("selectDirectRoute")
-            Divider()
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("selectDirectRoute")
+        Divider()
     }
 
-    private func directRouteRow(_ route: MKRoute, index: Int) -> some View {
+    private func directRouteRow(_ route: MKRoute) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(directRoutes.count > 1 ? "Route \(index + 1)" : "Direkte Fahrrad-Route")
+                Text("Direkte Fahrrad-Route")
                     .font(.subheadline.weight(.medium))
-                Text("\(String(format: "%.1f", route.distance / 1000)) km · ca. \(Int(route.expectedTravelTime / 60)) Min. · außerhalb des Radroutennetzes")
+                Text(directRouteSubtitle(for: route))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            if isDirectRouteMode && selectedDirectRouteIndex == index {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.blue)
-            }
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.blue)
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
         .contentShape(Rectangle())
+    }
+
+    private func directRouteSubtitle(for route: MKRoute) -> String {
+        var parts = [
+            "\(String(format: "%.1f", route.distance / 1000)) km",
+            "ca. \(Int(route.expectedTravelTime / 60)) Min.",
+            "außerhalb des Radroutennetzes"
+        ]
+        if directRoutes.count > 1 {
+            parts.append("\(directRoutes.count) Routen – auf Karte wählbar")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var directRoutePlaceholderRow: some View {
