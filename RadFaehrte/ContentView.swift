@@ -446,9 +446,9 @@ struct ContentView: View {
 
     /// Berechnet eine direkte Fahrrad-Route von Start zu Ziel über die eigene, offline
     /// arbeitende Routing-Engine (siehe `BikeRoutingEngine`), die gezielt Radwege bevorzugt
-    /// und Hauptstraßen meidet - unabhängig vom importierten Radroutennetz. Deckt aktuell
-    /// nur die Testregion Bremen ab (siehe `WayGraphRepository`). Liefert bis zu 4
-    /// Routenalternativen zur Auswahl (wie in Karten-Apps üblich).
+    /// und Hauptstraßen meidet - unabhängig vom importierten Radroutennetz. Deckt ganz
+    /// Deutschland ab (siehe `WayGraphRepository`). Liefert bis zu 4 Routenalternativen
+    /// zur Auswahl (wie in Karten-Apps üblich).
     private func selectDirectRoute() {
         selectedMatch = nil
         isDirectRouteMode = true
@@ -695,7 +695,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Direkte Route (ruhige Wege)")
                     .font(.subheadline.weight(.medium))
-                Text("Bevorzugt Radwege, meidet Hauptstraßen (nur Testregion Bremen)")
+                Text("Bevorzugt Radwege, meidet Hauptstraßen")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -714,7 +714,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Direkte Route (ruhige Wege)")
                     .font(.subheadline.weight(.medium))
-                Text("Keine Route gefunden (außerhalb der Testregion Bremen)")
+                Text("Keine Route gefunden")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

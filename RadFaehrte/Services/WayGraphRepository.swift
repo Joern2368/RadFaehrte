@@ -7,12 +7,12 @@ import CoreLocation
 import SQLite3
 
 /// Liest die im App-Bundle mitgelieferte Straßen-/Wegegraph-Datenbank (read-only).
-/// Erste Version deckt nur die Testregion Bremen ab (`ways_bremen.sqlite`).
+/// Deckt ganz Deutschland ab (`ways_germany.sqlite`, siehe `Scripts/build_way_graph.py`).
 final class WayGraphRepository {
 
     private var db: OpaquePointer?
 
-    init(resourceName: String = "ways_bremen") {
+    init(resourceName: String = "ways_germany") {
         guard let url = Bundle.main.url(forResource: resourceName, withExtension: "sqlite") else {
             assertionFailure("\(resourceName).sqlite fehlt im App-Bundle")
             return

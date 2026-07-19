@@ -5,15 +5,15 @@
 
 import CoreLocation
 
-/// Eigene, offline arbeitende Fahrrad-Routing-Engine über das lokale OSM-Wegenetz
-/// (Testregion, siehe `WayGraphRepository`). Bevorzugt Radwege/ruhige Straßen und
+/// Eigene, offline arbeitende Fahrrad-Routing-Engine über das deutschlandweite
+/// OSM-Wegenetz (siehe `WayGraphRepository`). Bevorzugt Radwege/ruhige Straßen und
 /// meidet Hauptstraßen (siehe `WaySegment.costFactor`), anders als Apples
 /// MKDirections, das dafür keine öffentliche Stellschraube bietet.
 ///
 /// Lädt nur einen Teilgraphen in einer gepufferten Bounding Box um Start+Ziel
 /// (analog zu `RouteMatcher.findMatches`), nicht das gesamte Wegenetz - dadurch
 /// reicht ein einfacher A*-Algorithmus ohne Contraction Hierarchies für
-/// regionale/städtische Strecken aus.
+/// regionale/städtische Strecken aus, unabhängig von der Größe der Gesamt-DB.
 final class BikeRoutingEngine {
     private let repository: WayGraphRepository
 

@@ -69,7 +69,7 @@ struct RadFaehrteTests {
     @Test func bikeRoutingEngineFindsRouteBetweenTwoBremenPoints() async throws {
         let engine = BikeRoutingEngine(repository: WayGraphRepository())
 
-        // Zwei reale Punkte im Bremer Wohngebiet, ca. 1.4 km auseinander (Testregion-Extrakt)
+        // Zwei reale Punkte im Bremer Wohngebiet, ca. 1.4 km auseinander
         let start = CLLocationCoordinate2D(latitude: 53.0999, longitude: 8.7905)
         let end = CLLocationCoordinate2D(latitude: 53.0872, longitude: 8.7901)
 

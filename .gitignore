@@ -3,6 +3,10 @@
 Scripts/venv/
 Scripts/data/
 
+# ways_germany.sqlite ist mit ~3,7 GB zu groß fürs Repo - regenerierbar über
+# Scripts/build_way_graph.py (siehe ROADMAP.md)
+RadFaehrte/Resources/ways_germany.sqlite
+
 # Xcode
 xcuserdata/
 DerivedData/
