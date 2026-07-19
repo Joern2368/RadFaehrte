@@ -30,7 +30,7 @@ struct ContentView: View {
     @State private var selectedDirectRouteIndex = 0
     @State private var isFollowingUser = true
     @State private var isProgrammaticCameraUpdate = false
-    @State private var directRouteMapSelection: Int?
+    @State private var currentRegionSpan: MKCoordinateSpan?
     @State private var tourStartTime: Date?
     @State private var tourDistanceMeters: Double = 0
     @State private var lastTourLocation: CLLocation?
@@ -89,31 +89,36 @@ struct ContentView: View {
                 }
             }
 
-            Map(position: $cameraPosition, selection: $directRouteMapSelection) {
-                UserAnnotation()
-                if !isNavigating {
-                    if let startPlace {
-                        Marker(startPlace.title, systemImage: "flag.circle.fill", coordinate: startPlace.coordinate)
-                            .tint(.green)
+            MapReader { proxy in
+                Map(position: $cameraPosition) {
+                    UserAnnotation()
+                    if !isNavigating {
+                        if let startPlace {
+                            Marker(startPlace.title, systemImage: "flag.circle.fill", coordinate: startPlace.coordinate)
+                                .tint(.green)
+                        }
+                        if let zielPlace {
+                            Marker(zielPlace.title, systemImage: "flag.checkered.circle.fill", coordinate: zielPlace.coordinate)
+                                .tint(.red)
+                        }
                     }
-                    if let zielPlace {
-                        Marker(zielPlace.title, systemImage: "flag.checkered.circle.fill", coordinate: zielPlace.coordinate)
-                            .tint(.red)
+                    routeOverlayContent
+                }
+                .onMapCameraChange(frequency: .onEnd, handleMapCameraChange)
+                .simultaneousGesture(SpatialTapGesture().onEnded { value in
+                    handleMapTap(at: value.location, proxy: proxy)
+                })
+                .overlay(alignment: .topTrailing) {
+                    if isNavigating {
+                        VStack(spacing: 10) {
+                            compassBadge
+                            navigationControlsOverlay
+                        }
+                        .padding()
                     }
                 }
-                routeOverlayContent
+                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
-            .onMapCameraChange(frequency: .onEnd, handleMapCameraChange)
-            .overlay(alignment: .topTrailing) {
-                if isNavigating {
-                    VStack(spacing: 10) {
-                        compassBadge
-                        navigationControlsOverlay
-                    }
-                    .padding()
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal)
             .padding(.bottom)
         }
@@ -141,12 +146,6 @@ struct ContentView: View {
         }
         .onChange(of: locationManager.locationUpdateCount) { handleLocationUpdate() }
         .onChange(of: locationManager.headingUpdateCount) { updateNavigationCamera() }
-        .onChange(of: directRouteMapSelection) { _, newValue in
-            if let newValue, directRoutes.indices.contains(newValue) {
-                selectedDirectRouteIndex = newValue
-            }
-            directRouteMapSelection = nil
-        }
         .alert("Standortzugriff benötigt", isPresented: $showLocationDeniedAlert) {
             Button("Einstellungen öffnen") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -293,11 +292,84 @@ struct ContentView: View {
     /// Kamera-Update ein Flag gesetzt, das hier konsumiert wird - bleibt es unbeachtet
     /// (Flag war nicht gesetzt), kam die Änderung von einer Nutzer-Geste (Pan/Zoom).
     private func handleMapCameraChange(_ context: MapCameraUpdateContext) {
+        currentRegionSpan = context.region.span
         if isProgrammaticCameraUpdate {
             isProgrammaticCameraUpdate = false
         } else if isNavigating {
             isFollowingUser = false
         }
+    }
+
+    /// Wählt beim Antippen der Karte die geometrisch nächstgelegene Route aus den
+    /// Alternativen der direkten Fahrrad-Route aus. MapKits eingebautes `Map(selection:)` +
+    /// `.tag()` auf `MapPolyline` erkennt Taps auf dünnen/überlappenden Linien nur sehr
+    /// unzuverlässig - dieselbe Punkt-zu-Segment-Projektion wie in
+    /// `RouteMatcher.nearestPoint(from:toLines:)`, hier direkt auf `MKRoute.polyline`
+    /// angewendet, ist deutlich robuster. Die Toleranz skaliert mit dem sichtbaren
+    /// Kartenausschnitt, damit sie sowohl beim Heranzoomen als auch beim Übersichtsblick
+    /// sinnvoll bleibt.
+    private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
+        guard isDirectRouteMode, directRoutes.count > 1,
+              let tapCoordinate = proxy.convert(point, from: .local) else { return }
+
+        var bestIndex: Int?
+        var bestDistance = Double.greatestFiniteMagnitude
+        for (index, route) in directRoutes.enumerated() {
+            let distance = Self.distanceMeters(from: tapCoordinate, toPolyline: route.polyline)
+            if distance < bestDistance {
+                bestDistance = distance
+                bestIndex = index
+            }
+        }
+
+        let latitudeDeltaMeters = (currentRegionSpan?.latitudeDelta ?? 0.02) * 111_320
+        let tolerance = max(30, latitudeDeltaMeters * 0.05)
+        if let bestIndex, bestDistance < tolerance {
+            selectedDirectRouteIndex = bestIndex
+        }
+    }
+
+    /// Kürzeste Distanz (in Metern) von `point` zur Liniengeometrie einer `MKPolyline`,
+    /// über dieselbe ebene Punkt-zu-Segment-Projektion wie
+    /// `RouteMatcher.closestPointOnSegmentMeters`.
+    private static func distanceMeters(from point: CLLocationCoordinate2D, toPolyline polyline: MKPolyline) -> Double {
+        let coordinates = polyline.coordinates
+        guard coordinates.count >= 2 else { return .greatestFiniteMagnitude }
+
+        let metersPerDegreeLat = 111_320.0
+        let metersPerDegreeLon = 111_320.0 * max(cos(point.latitude * .pi / 180), 0.1)
+
+        func toLocal(_ c: CLLocationCoordinate2D) -> (x: Double, y: Double) {
+            (
+                (c.longitude - point.longitude) * metersPerDegreeLon,
+                (c.latitude - point.latitude) * metersPerDegreeLat
+            )
+        }
+
+        var best = Double.greatestFiniteMagnitude
+        var prev = toLocal(coordinates[0])
+        for i in 1..<coordinates.count {
+            let curr = toLocal(coordinates[i])
+            best = min(best, distanceFromOriginToSegmentMeters(a: prev, b: curr))
+            prev = curr
+        }
+        return best
+    }
+
+    private static func distanceFromOriginToSegmentMeters(
+        a: (x: Double, y: Double), b: (x: Double, y: Double)
+    ) -> Double {
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let lengthSquared = dx * dx + dy * dy
+        if lengthSquared == 0 {
+            return (a.x * a.x + a.y * a.y).squareRoot()
+        }
+        var t = (-a.x * dx - a.y * dy) / lengthSquared
+        t = max(0, min(1, t))
+        let projX = a.x + t * dx
+        let projY = a.y + t * dy
+        return (projX * projX + projY * projY).squareRoot()
     }
 
     /// Kopfzeile im Navigationsmodus mit Richtungspfeil, aktueller Anweisung und Statistik-
@@ -444,13 +516,11 @@ struct ContentView: View {
                 if index != selectedDirectRouteIndex {
                     MapPolyline(route.polyline)
                         .stroke(Color.gray.opacity(0.7), lineWidth: 4)
-                        .tag(index)
                 }
             }
             if directRoutes.indices.contains(selectedDirectRouteIndex) {
                 MapPolyline(directRoutes[selectedDirectRouteIndex].polyline)
                     .stroke(.blue, lineWidth: 5)
-                    .tag(selectedDirectRouteIndex)
             }
         } else {
             ForEach(Array(selectedRouteLines.enumerated()), id: \.offset) { _, line in
@@ -618,66 +688,22 @@ struct ContentView: View {
     }
 
     /// Einzelne Zeile für die direkte Fahrrad-Route. Bei mehreren Alternativen können diese
-    /// direkt auf der Karte per Antippen gewählt werden (siehe `routeOverlayContent`/
-    /// `directRouteMapSelection`) - das funktioniert aber nur zuverlässig dort, wo sich die
-    /// Routen sichtbar unterscheiden; überlappen sie sich (häufig bei ähnlichen Alternativen),
-    /// liegt die hervorgehobene Route optisch/beim Antippen über den anderen. Der Stepper
-    /// daneben bietet deshalb einen immer funktionierenden zweiten Weg zum Durchschalten.
+    /// direkt auf der Karte per Antippen gewählt werden (siehe `handleMapTap`, per eigenem
+    /// Punkt-zu-Linie-Hit-Testing statt MapKits unzuverlässigem `Map(selection:)`).
     @ViewBuilder
     private var directRouteSection: some View {
-        HStack(spacing: 4) {
-            Button {
-                selectDirectRoute()
-            } label: {
-                if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
-                    directRouteRow(directRoutes[selectedDirectRouteIndex])
-                } else {
-                    directRoutePlaceholderRow
-                }
+        Button {
+            selectDirectRoute()
+        } label: {
+            if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
+                directRouteRow(directRoutes[selectedDirectRouteIndex])
+            } else {
+                directRoutePlaceholderRow
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("selectDirectRoute")
-
-            if isDirectRouteMode && directRoutes.count > 1 {
-                directRouteAlternatesStepper
-            }
-        }
-        Divider()
-    }
-
-    private var directRouteAlternatesStepper: some View {
-        HStack(spacing: 2) {
-            Button {
-                cycleDirectRoute(by: -1)
-            } label: {
-                Image(systemName: "chevron.left.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.blue)
-            }
-            .accessibilityIdentifier("previousDirectRoute")
-
-            Text("\(selectedDirectRouteIndex + 1)/\(directRoutes.count)")
-                .font(.caption)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-
-            Button {
-                cycleDirectRoute(by: 1)
-            } label: {
-                Image(systemName: "chevron.right.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(.blue)
-            }
-            .accessibilityIdentifier("nextDirectRoute")
         }
         .buttonStyle(.plain)
-        .padding(.trailing, 8)
-    }
-
-    private func cycleDirectRoute(by delta: Int) {
-        guard directRoutes.count > 1 else { return }
-        let count = directRoutes.count
-        selectedDirectRouteIndex = ((selectedDirectRouteIndex + delta) % count + count) % count
+        .accessibilityIdentifier("selectDirectRoute")
+        Divider()
     }
 
     private func directRouteRow(_ route: MKRoute) -> some View {
