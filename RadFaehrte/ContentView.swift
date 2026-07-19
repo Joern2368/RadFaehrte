@@ -35,9 +35,13 @@ struct ContentView: View {
     @State private var tourDistanceMeters: Double = 0
     @State private var lastTourLocation: CLLocation?
     @State private var tourSummary: TourSummary?
+    @State private var currentDirectRouteStepIndex = 0
 
     var body: some View {
         VStack(spacing: 12) {
+            if isNavigating {
+                navigationHeaderSection
+            }
             if !isNavigating {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(spacing: 8) {
@@ -103,6 +107,12 @@ struct ContentView: View {
             .overlay(alignment: .top) {
                 navigationControlsOverlay
             }
+            .overlay(alignment: .topTrailing) {
+                if isNavigating {
+                    compassBadge
+                        .padding()
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal)
             .padding(.bottom)
@@ -167,6 +177,7 @@ struct ContentView: View {
         tourStartTime = Date()
         tourDistanceMeters = 0
         lastTourLocation = locationManager.currentLocation
+        currentDirectRouteStepIndex = 0
         if let location = locationManager.currentLocation {
             updateNavigationCamera(location: location)
         } else {
@@ -219,6 +230,7 @@ struct ContentView: View {
         if isNavigating {
             if let location = locationManager.currentLocation {
                 accumulateTourDistance(location)
+                advanceDirectRouteStepIfNeeded(location)
             }
             updateNavigationCamera()
         } else if isResolvingCurrentLocationForStart, let location = locationManager.currentLocation {
@@ -241,6 +253,20 @@ struct ContentView: View {
             tourDistanceMeters += location.distance(from: lastTourLocation)
         }
         lastTourLocation = location
+    }
+
+    /// Rückt bei der direkten Fahrrad-Route (MKDirections) zum nächsten Navigationsschritt vor,
+    /// sobald der Nutzer nah genug (< 30 m) am Ende des aktuellen Schritts ist. Offizielle
+    /// Radrouten haben keine Schritt-Daten und werden hier nicht behandelt.
+    private func advanceDirectRouteStepIfNeeded(_ location: CLLocation) {
+        guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) else { return }
+        let steps = directRoutes[selectedDirectRouteIndex].steps
+        guard currentDirectRouteStepIndex < steps.count - 1,
+              let stepEnd = steps[currentDirectRouteStepIndex].polyline.coordinates.last else { return }
+        let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
+        if location.distance(from: stepEndLocation) < 30 {
+            currentDirectRouteStepIndex += 1
+        }
     }
 
     private func resolveCurrentLocationAsStart(_ location: CLLocation) {
@@ -272,6 +298,100 @@ struct ContentView: View {
         } else if isNavigating {
             isFollowingUser = false
         }
+    }
+
+    /// Kopfzeile im Navigationsmodus mit Richtungspfeil, aktueller Anweisung und Statistik-
+    /// Leiste (Tempo/Strecke/Zielentfernung), angelehnt an gängige Rad-Navigations-Apps.
+    /// Bei der direkten Fahrrad-Route (MKDirections) werden echte Turn-by-Turn-Anweisungen mit
+    /// Straßennamen gezeigt; offizielle Radrouten haben keine Straßennamen pro Wegabschnitt in
+    /// der Datenbank, daher hier nur eine generische "Route folgen"-Anzeige mit Routennamen.
+    private var navigationHeaderSection: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 16) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(navigationInstructionTitle)
+                        .font(.title3.bold())
+                        .foregroundStyle(.white)
+                    Text(navigationInstructionSubtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                Spacer()
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(red: 0.24, green: 0.29, blue: 0.16))
+
+            HStack(spacing: 0) {
+                navigationStat(value: String(format: "%.1f", currentSpeedKmh), unit: "km/h", label: "Aktuell")
+                Divider().frame(height: 32)
+                navigationStat(value: String(format: "%.1f", tourDistanceMeters / 1000), unit: "km", label: "Strecke")
+                if let distanceToDestinationKm {
+                    Divider().frame(height: 32)
+                    navigationStat(value: String(format: "%.1f", distanceToDestinationKm), unit: "km", label: "Ziel")
+                }
+            }
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(.background)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal)
+        .padding(.top)
+    }
+
+    private func navigationStat(value: String, unit: String, label: String) -> some View {
+        VStack(spacing: 2) {
+            Text("\(value) \(unit)")
+                .font(.headline)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var navigationInstructionTitle: String {
+        if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
+            let steps = directRoutes[selectedDirectRouteIndex].steps
+            if steps.indices.contains(currentDirectRouteStepIndex) {
+                let instruction = steps[currentDirectRouteStepIndex].instructions
+                return instruction.isEmpty ? "Los geht's" : instruction
+            }
+        }
+        return "Route folgen"
+    }
+
+    private var navigationInstructionSubtitle: String {
+        if isDirectRouteMode {
+            return "Direkte Fahrrad-Route"
+        }
+        return selectedMatch?.route.name ?? "Radroute"
+    }
+
+    private var currentSpeedKmh: Double {
+        guard let speed = locationManager.currentLocation?.speed, speed >= 0 else { return 0 }
+        return speed * 3.6
+    }
+
+    private var distanceToDestinationKm: Double? {
+        guard let location = locationManager.currentLocation, let ziel = zielPlace?.coordinate else { return nil }
+        return location.distance(from: CLLocation(latitude: ziel.latitude, longitude: ziel.longitude)) / 1000
+    }
+
+    private var compassBadge: some View {
+        ZStack {
+            Circle()
+                .fill(.black.opacity(0.85))
+            Image(systemName: "location.north.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(.red)
+                .rotationEffect(.degrees(-(locationManager.currentHeading ?? 0)))
+        }
+        .frame(width: 40, height: 40)
     }
 
     @ViewBuilder
@@ -722,6 +842,14 @@ private func formattedTourDuration(_ interval: TimeInterval) -> String {
     let hours = totalMinutes / 60
     let minutes = totalMinutes % 60
     return hours > 0 ? "\(hours) Std. \(minutes) Min." : "\(minutes) Min."
+}
+
+private extension MKPolyline {
+    var coordinates: [CLLocationCoordinate2D] {
+        var coords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: pointCount)
+        getCoordinates(&coords, range: NSRange(location: 0, length: pointCount))
+        return coords
+    }
 }
 
 private func hideKeyboard() {
