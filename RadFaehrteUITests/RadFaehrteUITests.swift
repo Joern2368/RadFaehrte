@@ -229,6 +229,68 @@ final class RadFaehrteUITests: XCTestCase {
     }
 
     @MainActor
+    func testNamedRouteShowsSegmentDistance() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let startField = app.textFields["Start"]
+        XCTAssertTrue(startField.waitForExistence(timeout: 5))
+        startField.tap()
+        startField.typeText("Bremen")
+        let startResult = app.buttons.containing(NSPredicate(format: "label CONTAINS 'Bremen'")).firstMatch
+        XCTAssertTrue(startResult.waitForExistence(timeout: 10))
+        startResult.tap()
+
+        let zielField = app.textFields["Ziel"]
+        zielField.tap()
+        zielField.typeText("Achim")
+        let zielResult = app.buttons.containing(NSPredicate(format: "label CONTAINS 'Achim'")).firstMatch
+        XCTAssertTrue(zielResult.waitForExistence(timeout: 10))
+        zielResult.tap()
+
+        let routeButton = app.buttons.containing(NSPredicate(format: "label CONTAINS 'Weser Radweg mit Alternativstrecken'")).firstMatch
+        XCTAssertTrue(routeButton.waitForExistence(timeout: 10), "Match für 'Weser Radweg mit Alternativstrecken' nicht gefunden")
+        routeButton.tap()
+
+        let subtitlePredicate = NSPredicate(format: "label CONTAINS 'km auf der Route'")
+        let subtitle = app.staticTexts.containing(subtitlePredicate).firstMatch
+        XCTAssertTrue(subtitle.waitForExistence(timeout: 15), "Hintergrund-Berechnung der Streckenlänge entlang der Route lieferte kein Ergebnis")
+
+        let screenshot = app.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
+    func testImportedRouteAppearsInHistoryAndCanBeStarted() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let ownRoutesTab = app.buttons["Eigene Routen"]
+        XCTAssertTrue(ownRoutesTab.waitForExistence(timeout: 5))
+        ownRoutesTab.tap()
+
+        let routeName = "Sonntagsrunde Bremen (Test)"
+        let routeText = app.staticTexts[routeName]
+        XCTAssertTrue(routeText.waitForExistence(timeout: 5), "Zuvor seedende importierte Test-Route nicht in der Eigene-Routen-Liste gefunden")
+
+        let startButton = app.buttons["startImportedRoute-\(routeName)"]
+        XCTAssertTrue(startButton.waitForExistence(timeout: 5))
+        startButton.tap()
+
+        let routeTab = app.buttons["Route"]
+        XCTAssertTrue(routeTab.waitForExistence(timeout: 5))
+
+        let zielField = app.textFields["Ziel"]
+        XCTAssertTrue(zielField.waitForExistence(timeout: 5), "Nach 'Starten' nicht automatisch zum Route-Tab gewechselt")
+        let zielValue = zielField.value as? String
+        XCTAssertEqual(zielValue, routeName, "Ziel-Feld zeigt nicht den Namen der importierten Route")
+
+        XCTAssertTrue(app.buttons["Los"].waitForExistence(timeout: 5), "Importierte Route wurde nicht als aktive Route ausgewählt")
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

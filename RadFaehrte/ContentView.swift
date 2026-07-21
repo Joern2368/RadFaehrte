@@ -7,6 +7,24 @@ import SwiftUI
 import MapKit
 
 struct ContentView: View {
+    @AppStorage(AppSettingsKey.averageSpeedKmh) private var averageSpeedKmh = AppSettingsDefaults.averageSpeedKmh
+
+    /// Aus dem Eigene-Routen-Tab per "Starten" gesetzt (siehe `RootTabView`). Wird über `onChange`
+    /// konsumiert (`startImportedRoute`) und danach wieder auf `nil` gesetzt.
+    @Binding var routeToStart: ImportedRoute?
+    /// Für die App gemeinsame Instanz aus `RootTabView`, damit eine hier beendete Fahrt im
+    /// Verlauf-Tab (`HistoryView`) auftaucht.
+    var drivenTourStore = DrivenTourStore()
+    /// Von `RootTabView` übergeben, um nach dem Speichern einer Fahrt den Verlauf-Tab zum
+    /// Neuladen zu bewegen (siehe `HistoryView.refreshTrigger`).
+    var onTourSaved: () -> Void = {}
+    /// Solange aktiv, ignoriert `runMatching()` Änderungen an `startPlace`/`zielPlace` - die
+    /// werden beim Start einer importierten Tour selbst gesetzt (für Marker/Anzeige), sollen
+    /// aber keine normale DB-Suche auslösen und das synthetische `RouteMatch` überschreiben.
+    /// Wird zurückgesetzt, sobald der Nutzer die Suchfelder selbst bedient (siehe `boundStartPlace`/
+    /// `boundZielPlace`) oder tauscht/den aktuellen Standort wählt.
+    @State private var isImportedRouteMode = false
+
     @State private var startPlace: SelectedPlace?
     @State private var zielPlace: SelectedPlace?
     @State private var cameraPosition: MapCameraPosition = .region(Self.germanyRegion)
@@ -14,6 +32,17 @@ struct ContentView: View {
     @State private var matcher = RouteMatcher(repository: RouteRepository())
     @State private var matches: [RouteMatch] = []
     @State private var selectedMatch: RouteMatch?
+    /// `true`, wenn `matches` nicht von `findMatches` (innerhalb des Schwellenwerts) stammen,
+    /// sondern vom Fallback `findClosestMatches` (keine Route in der Nähe gefunden, stattdessen
+    /// die nächstgelegenen Vorschläge unabhängig vom Schwellenwert). Steuert den Hinweistext in
+    /// `resultsSection`.
+    @State private var isFallbackMatches = false
+    /// Entlang der jeweiligen Routen-Geometrie berechnete Strecke zwischen den nächstgelegenen
+    /// Punkten zu Start und Ziel, pro Routen-ID. Wird asynchron nachgeladen (siehe
+    /// `loadRouteSegmentDistances`). Fehlender Key = noch nicht berechnet; Key mit `nil`-Wert =
+    /// berechnet, aber kein zusammenhängender Pfad gefunden (z. B. Lücke in den Kartendaten).
+    @State private var routeSegmentDistances: [Int64: RouteMatcher.RouteSegmentDistance?] = [:]
+    @State private var matchingGeneration = 0
 
     @State private var locationManager = LocationManager()
     @State private var isNavigating = false
@@ -22,6 +51,7 @@ struct ContentView: View {
     @State private var hasCenteredOnInitialLocation = false
     @State private var selectedRouteLines: [[CLLocationCoordinate2D]] = []
     @State private var is3DEnabled = false
+    @State private var isHeadingUpEnabled = true
     @State private var connectorRouteToStart: MKRoute?
     @State private var connectorRouteToEnd: MKRoute?
     @State private var isDirectRouteMode = false
@@ -34,6 +64,8 @@ struct ContentView: View {
     @State private var tourStartTime: Date?
     @State private var tourDistanceMeters: Double = 0
     @State private var lastTourLocation: CLLocation?
+    /// Aufgezeichnete Positionen der laufenden Fahrt, fürs Verlauf-Tab (siehe `DrivenTour`).
+    @State private var tourTrackPoints: [CLLocationCoordinate2D] = []
     @State private var tourSummary: TourSummary?
     @State private var currentDirectRouteStepIndex = 0
 
@@ -47,14 +79,14 @@ struct ContentView: View {
                     VStack(spacing: 8) {
                         LocationSearchField(
                             label: "Start",
-                            selectedPlace: $startPlace,
+                            selectedPlace: boundStartPlace,
                             isResolvingCurrentLocation: isResolvingCurrentLocationForStart,
                             onUseCurrentLocation: useCurrentLocationAsStart,
                             biasCoordinate: locationManager.currentLocation?.coordinate
                         )
                         LocationSearchField(
                             label: "Ziel",
-                            selectedPlace: $zielPlace,
+                            selectedPlace: boundZielPlace,
                             biasCoordinate: startPlace?.coordinate ?? locationManager.currentLocation?.coordinate
                         )
                     }
@@ -104,6 +136,7 @@ struct ContentView: View {
                     }
                     routeOverlayContent
                 }
+                .mapControls { } // Eigene Steuerelemente (compassBadge, navigationControlsOverlay) statt MapKits Standard-Overlays.
                 .onMapCameraChange(frequency: .onEnd, handleMapCameraChange)
                 .simultaneousGesture(SpatialTapGesture().onEnded { value in
                     handleMapTap(at: value.location, proxy: proxy)
@@ -117,12 +150,17 @@ struct ContentView: View {
                         .padding()
                     }
                 }
+                .overlay(alignment: .bottomTrailing) {
+                    recenterButtonOverlay
+                        .padding()
+                }
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .padding(.horizontal)
             .padding(.bottom)
         }
         .background(Color(.systemGroupedBackground))
+        .toolbar(isNavigating ? .hidden : .visible, for: .tabBar)
         .simultaneousGesture(TapGesture().onEnded {
             hideKeyboard()
         })
@@ -143,6 +181,12 @@ struct ContentView: View {
             }
             selectedRouteLines = newValue.map { Self.mergedLines($0.route.lines) } ?? []
             loadConnectorRoute(to: newValue)
+        }
+        .onChange(of: routeToStart) { _, newValue in
+            if let newValue {
+                startImportedRoute(newValue)
+                routeToStart = nil
+            }
         }
         .onChange(of: locationManager.locationUpdateCount) { handleLocationUpdate() }
         .onChange(of: locationManager.headingUpdateCount) { updateNavigationCamera() }
@@ -176,6 +220,7 @@ struct ContentView: View {
         tourStartTime = Date()
         tourDistanceMeters = 0
         lastTourLocation = locationManager.currentLocation
+        tourTrackPoints = locationManager.currentLocation.map { [$0.coordinate] } ?? []
         currentDirectRouteStepIndex = 0
         if let location = locationManager.currentLocation {
             updateNavigationCamera(location: location)
@@ -194,22 +239,53 @@ struct ContentView: View {
         if let tourStartTime {
             let duration = Date().timeIntervalSince(tourStartTime)
             let distanceKm = tourDistanceMeters / 1000
+            let averageSpeedKmh = duration > 0 ? distanceKm / (duration / 3600) : 0
             tourSummary = TourSummary(
                 distanceKm: distanceKm,
                 duration: duration,
-                averageSpeedKmh: duration > 0 ? distanceKm / (duration / 3600) : 0
+                averageSpeedKmh: averageSpeedKmh
             )
+            if tourTrackPoints.count >= 2 {
+                drivenTourStore.save(DrivenTour(
+                    distanceKm: distanceKm,
+                    duration: duration,
+                    averageSpeedKmh: averageSpeedKmh,
+                    coordinates: Self.decimated(tourTrackPoints)
+                ))
+                onTourSaved()
+            }
         }
         self.tourStartTime = nil
         lastTourLocation = nil
+        tourTrackPoints = []
+        // Suche zurücksetzen, damit direkt eine neue Route gesucht werden kann. Setzt zunächst
+        // `isImportedRouteMode = false`, damit der anschließende `runMatching()`-Aufruf (getriggert
+        // durch die `onChange`-Handler von `startPlace`/`zielPlace`) auch wirklich `matches`,
+        // `selectedMatch`, `isDirectRouteMode` etc. mit zurücksetzt statt früh abzubrechen.
+        isImportedRouteMode = false
+        startPlace = nil
+        zielPlace = nil
         updateCamera()
     }
 
     private func swapStartAndZiel() {
+        isImportedRouteMode = false
         swap(&startPlace, &zielPlace)
     }
 
+    /// `LocationSearchField` bindet hierüber statt direkt auf `$startPlace`/`$zielPlace`, damit
+    /// jede Bedienung der Suchfelder (Auswahl oder Löschen) `isImportedRouteMode` zurücksetzt -
+    /// `startImportedRoute` selbst setzt `startPlace`/`zielPlace` über die rohen `@State`-Werte,
+    /// ohne über diesen Weg zu laufen.
+    private var boundStartPlace: Binding<SelectedPlace?> {
+        Binding(get: { startPlace }, set: { isImportedRouteMode = false; startPlace = $0 })
+    }
+    private var boundZielPlace: Binding<SelectedPlace?> {
+        Binding(get: { zielPlace }, set: { isImportedRouteMode = false; zielPlace = $0 })
+    }
+
     private func useCurrentLocationAsStart() {
+        isImportedRouteMode = false
         switch locationManager.authorizationStatus {
         case .denied, .restricted:
             showLocationDeniedAlert = true
@@ -252,6 +328,7 @@ struct ContentView: View {
             tourDistanceMeters += location.distance(from: lastTourLocation)
         }
         lastTourLocation = location
+        tourTrackPoints.append(location.coordinate)
     }
 
     /// Rückt bei der direkten Fahrrad-Route (MKDirections) zum nächsten Navigationsschritt vor,
@@ -281,7 +358,7 @@ struct ContentView: View {
             cameraPosition = .camera(MapCamera(
                 centerCoordinate: location.coordinate,
                 distance: 300,
-                heading: locationManager.currentHeading ?? 0,
+                heading: isHeadingUpEnabled ? (locationManager.currentHeading ?? 0) : 0,
                 pitch: is3DEnabled ? 60 : 0
             ))
         }
@@ -395,7 +472,7 @@ struct ContentView: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(red: 0.24, green: 0.29, blue: 0.16))
+            .background(Color(red: 0.110, green: 0.290, blue: 0.341)) // Markenfarbe Petrol #1C4A57
 
             HStack(spacing: 0) {
                 navigationStat(value: String(format: "%.1f", currentSpeedKmh), unit: "km/h", label: "Aktuell")
@@ -459,45 +536,90 @@ struct ContentView: View {
             Circle()
                 .fill(.black.opacity(0.85))
             Image(systemName: "location.north.fill")
-                .font(.system(size: 16))
+                .font(.system(size: 13))
                 .foregroundStyle(.red)
                 .rotationEffect(.degrees(-(locationManager.currentHeading ?? 0)))
         }
-        .frame(width: 40, height: 40)
+        .frame(width: 32, height: 32)
     }
 
+    /// Statt drei einzelner schwebender Kreis-Buttons (Vorbild Komoot): ein gemeinsamer, an den
+    /// Ecken abgerundeter Kasten mit dünnen Trennlinien. Nur die Kompass/Fahrtrichtung-Zeile
+    /// bekommt einen orangen Hintergrund als Signalfarbe, die anderen beiden bleiben neutral.
     @ViewBuilder
     private var navigationControlsOverlay: some View {
         if isNavigating {
-            VStack(spacing: 10) {
+            VStack(spacing: 0) {
                 Button {
                     stopNavigating()
                 } label: {
-                    navigationIconButtonLabel("xmark")
+                    navigationControlsBoxRow(systemImage: "xmark")
                 }
                 .accessibilityLabel("Beenden")
+
+                Divider().frame(width: 28)
 
                 Button {
                     is3DEnabled.toggle()
                     isFollowingUser = true
                     updateNavigationCamera()
                 } label: {
-                    navigationIconButtonLabel("view.3d")
+                    // Zeigt den Zielzustand (worauf ein Tap umschaltet), nicht den aktuellen -
+                    // in 2D-Ansicht steht "3D" (zum Wechseln dorthin) und umgekehrt.
+                    Text(is3DEnabled ? "2D" : "3D")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
                 }
                 .accessibilityIdentifier("toggle2D3D")
-                .accessibilityLabel(is3DEnabled ? "3D" : "2D")
+                .accessibilityLabel(is3DEnabled ? "Zu 2D wechseln" : "Zu 3D wechseln")
 
-                if !isFollowingUser {
-                    Button {
-                        isFollowingUser = true
-                        updateNavigationCamera()
-                    } label: {
-                        navigationIconButtonLabel("location.fill")
-                    }
-                    .accessibilityIdentifier("recenterOnUser")
-                    .accessibilityLabel("Standort")
+                Divider().frame(width: 28)
+
+                Button {
+                    isHeadingUpEnabled.toggle()
+                    isFollowingUser = true
+                    updateNavigationCamera()
+                } label: {
+                    navigationControlsBoxRow(
+                        systemImage: isHeadingUpEnabled ? "arrow.up" : "location.north.line",
+                        tint: .white, background: .orange
+                    )
                 }
+                .accessibilityIdentifier("toggleHeadingUp")
+                .accessibilityLabel(isHeadingUpEnabled ? "Heading-up" : "Nord-up")
             }
+            .background(.thinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+    }
+
+    private func navigationControlsBoxRow(
+        systemImage: String, tint: Color = .primary, background: Color = .clear
+    ) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: 44, height: 44)
+            .background(background)
+    }
+
+    /// Eigener Button unten rechts statt in `navigationControlsOverlay` oben rechts: anders als
+    /// Beenden/2D-3D/Heading-Umschalter (dauerhaft sichtbare Steuerelemente) taucht dieser nur
+    /// situativ auf, wenn die Kamera dem Standort nicht mehr folgt (z. B. nach manuellem
+    /// Verschieben/Zoomen der Karte). Direkt neben dem Heading-Umschalter sah er - trotz
+    /// unterschiedlicher Symbole - wie ein zweiter, redundanter Umschalter aus.
+    @ViewBuilder
+    private var recenterButtonOverlay: some View {
+        if isNavigating && !isFollowingUser {
+            Button {
+                isFollowingUser = true
+                updateNavigationCamera()
+            } label: {
+                navigationIconButtonLabel("location.fill")
+            }
+            .accessibilityIdentifier("recenterOnUser")
+            .accessibilityLabel("Standort")
         }
     }
 
@@ -536,6 +658,52 @@ struct ContentView: View {
                     .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
             }
         }
+    }
+
+    /// Macht eine aus dem Verlauf-Tab gestartete, importierte Tour zur aktiven Route. Baut dafür
+    /// ein synthetisches `RouteMatch` (die Tourpunkte liegen bereits in Reihenfolge vor, daher
+    /// direkt die bekannte Gesamtlänge statt einer Dijkstra-Berechnung) und nutzt anschließend
+    /// dieselbe Anzeige-/Wegbeschreibungs-Logik wie bei einem normalen DB-Match: Das bestehende
+    /// `.onChange(of: selectedMatch)` setzt `selectedRouteLines` und berechnet über
+    /// `loadConnectorRoute` bei Bedarf automatisch eine Wegbeschreibung vom aktuellen Standort
+    /// zum Streckenanfang.
+    private func startImportedRoute(_ imported: ImportedRoute) {
+        let coordinates = imported.clCoordinates
+        guard coordinates.count >= 2 else { return }
+
+        let bikeRoute = BikeRoute(
+            id: Int64(imported.id.hashValue),
+            name: imported.name,
+            network: nil,
+            ref: nil,
+            distanceKm: nil,
+            operatorName: nil,
+            lines: [coordinates]
+        )
+        let endCoordinate = coordinates.last!
+        let usingCurrentLocation = locationManager.currentLocation != nil
+        let startCoordinate = locationManager.currentLocation?.coordinate ?? coordinates.first!
+        let nearestToStart = RouteMatcher.nearestPoint(from: startCoordinate, toLines: [coordinates])
+        let match = RouteMatch(
+            route: bikeRoute,
+            distanceToStartKm: nearestToStart?.distanceKm ?? 0,
+            distanceToEndKm: 0,
+            nearestPointToStart: nearestToStart?.coordinate ?? coordinates.first!,
+            nearestPointToEnd: endCoordinate
+        )
+
+        isImportedRouteMode = true
+        startPlace = SelectedPlace(
+            title: usingCurrentLocation ? "Aktueller Standort" : "Streckenanfang",
+            subtitle: "", coordinate: startCoordinate
+        )
+        zielPlace = SelectedPlace(title: imported.name, subtitle: "", coordinate: endCoordinate)
+        matches = [match]
+        selectedMatch = match
+        routeSegmentDistances[bikeRoute.id] = RouteMatcher.RouteSegmentDistance(
+            distanceKm: imported.totalDistanceKm, alternateDistanceKm: nil
+        )
+        updateCamera()
     }
 
     /// Berechnet eine direkte Fahrrad-Wegbeschreibung von Start zu Ziel, unabhängig vom
@@ -665,6 +833,14 @@ struct ContentView: View {
                     .padding(.horizontal, 4)
             } else {
                 Divider()
+                if isFallbackMatches {
+                    Text("Keine Radroute in der Nähe – nächstgelegene Vorschläge:")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 8)
+                        .padding(.horizontal, 4)
+                }
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(matches) { match in
@@ -727,7 +903,7 @@ struct ContentView: View {
     private func directRouteSubtitle(for route: MKRoute) -> String {
         var parts = [
             "\(String(format: "%.1f", route.distance / 1000)) km",
-            "ca. \(Int(route.expectedTravelTime / 60)) Min.",
+            estimatedTravelTimeText(distanceKm: route.distance / 1000),
             "außerhalb des Radroutennetzes"
         ]
         if directRoutes.count > 1 {
@@ -777,26 +953,108 @@ struct ContentView: View {
 
     private func subtitle(for match: RouteMatch) -> String {
         var parts: [String] = []
-        if let network = match.route.network {
-            parts.append(network)
-        }
         if let distanceKm = match.route.distanceKm {
             parts.append("\(Int(distanceKm)) km Gesamtlänge")
+        }
+        if let segmentState = routeSegmentDistances[match.id] {
+            if let segment = segmentState {
+                var segmentText = "~\(String(format: "%.1f", segment.distanceKm)) km auf der Route"
+                if let alternateKm = segment.alternateDistanceKm {
+                    segmentText += " (andere Richtung ~\(String(format: "%.1f", alternateKm)) km)"
+                }
+                parts.append(segmentText)
+                parts.append(estimatedTravelTimeText(distanceKm: segment.distanceKm))
+            } else {
+                parts.append("Kartendaten hier lückenhaft")
+            }
         }
         parts.append("~\(String(format: "%.1f", match.combinedDistanceKm)) km Entfernung zur Route")
         return parts.joined(separator: " · ")
     }
 
+    /// Grobe Fahrzeit-Schätzung (Distanz ÷ in den Einstellungen hinterlegte Durchschnitts-
+    /// geschwindigkeit), einheitlich für alle Routenarten verwendet (auch "Direkte Fahrrad-
+    /// Route" statt MKDirections' eigener Schätzung, damit die Einstellung überall greift).
+    private func estimatedTravelTimeText(distanceKm: Double) -> String {
+        guard averageSpeedKmh > 0 else { return "" }
+        let minutes = Int((distanceKm / averageSpeedKmh * 60).rounded())
+        if minutes >= 60 {
+            let hours = minutes / 60
+            let remainder = minutes % 60
+            return remainder == 0 ? "ca. \(hours) h" : "ca. \(hours) h \(remainder) min"
+        }
+        return "ca. \(minutes) Min."
+    }
+
     private func runMatching() {
+        guard !isImportedRouteMode else { return }
         isDirectRouteMode = false
         directRoutes = []
+        matchingGeneration += 1
+        routeSegmentDistances = [:]
         guard let start = startPlace?.coordinate, let end = zielPlace?.coordinate else {
             matches = []
+            isFallbackMatches = false
             selectedMatch = nil
             return
         }
-        matches = matcher.findMatches(start: start, end: end)
+        let strictMatches = matcher.findMatches(start: start, end: end)
+        if strictMatches.isEmpty {
+            matches = matcher.findClosestMatches(start: start, end: end)
+            isFallbackMatches = !matches.isEmpty
+        } else {
+            matches = strictMatches
+            isFallbackMatches = false
+        }
         selectedMatch = matches.first
+        loadRouteSegmentDistances(for: matches, generation: matchingGeneration)
+    }
+
+    /// Berechnet für jeden Treffer im Hintergrund die tatsächlich zu fahrende Strecke entlang
+    /// der Routen-Geometrie zwischen den nächstgelegenen Punkten zu Start und Ziel, inklusive
+    /// einer längeren Alternative, falls vorhanden (siehe `RouteMatcher.routeSegmentDistance`).
+    /// `generation` verwirft veraltete Ergebnisse, falls Start/Ziel sich ändern, bevor eine
+    /// frühere Berechnung fertig ist.
+    private func loadRouteSegmentDistances(for matches: [RouteMatch], generation: Int) {
+        let expectedCount = matches.count
+        for match in matches {
+            let routeId = match.id
+            let lines = match.route.lines
+            let start = match.nearestPointToStart
+            let end = match.nearestPointToEnd
+            Task.detached(priority: .userInitiated) {
+                let result = RouteMatcher.routeSegmentDistance(along: lines, from: start, to: end)
+                await MainActor.run {
+                    guard matchingGeneration == generation else { return }
+                    routeSegmentDistances[routeId] = result
+                    // Sobald für alle Treffer die tatsächliche Streckenlänge bekannt ist, nach der
+                    // real zu fahrenden Gesamtstrecke neu sortieren (siehe `reorderMatchesByPracticalDistance`).
+                    if routeSegmentDistances.count == expectedCount {
+                        reorderMatchesByPracticalDistance()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Sortiert `matches` neu, sobald für alle Treffer die tatsächliche Streckenlänge entlang der
+    /// Route bekannt ist: nach der Gesamtstrecke, die man real fahren würde (Anfahrt zum
+    /// Streckenanfang + Strecke auf der Route + Anfahrt vom Streckenende zum Ziel) statt nur nach
+    /// der Anfahrtsdistanz. So landet ein Fernweg, der nur zufällig nah an Start und Ziel
+    /// vorbeikommt, dazwischen aber einen großen Umweg macht, weiter unten als eine Route, die
+    /// beide Punkte tatsächlich direkt verbindet.
+    private func reorderMatchesByPracticalDistance() {
+        matches.sort { practicalDistanceKm(for: $0) < practicalDistanceKm(for: $1) }
+    }
+
+    /// Realistische Gesamtstrecke für einen Treffer. Fehlt ein zusammenhängender Pfad entlang der
+    /// Route (Lücke in den Kartendaten), landet der Treffer ans Ende der Liste, da seine
+    /// tatsächliche Länge unbekannt ist.
+    private func practicalDistanceKm(for match: RouteMatch) -> Double {
+        guard let segment = routeSegmentDistances[match.id], let segment else {
+            return .greatestFiniteMagnitude
+        }
+        return match.distanceToStartKm + segment.distanceKm + match.distanceToEndKm
     }
 
     private func updateCamera() {
@@ -909,13 +1167,6 @@ struct TourSummary: Identifiable {
     let averageSpeedKmh: Double
 }
 
-private func formattedTourDuration(_ interval: TimeInterval) -> String {
-    let totalMinutes = Int(interval / 60)
-    let hours = totalMinutes / 60
-    let minutes = totalMinutes % 60
-    return hours > 0 ? "\(hours) Std. \(minutes) Min." : "\(minutes) Min."
-}
-
 private extension MKPolyline {
     var coordinates: [CLLocationCoordinate2D] {
         var coords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: pointCount)
@@ -929,5 +1180,5 @@ private func hideKeyboard() {
 }
 
 #Preview {
-    ContentView()
+    ContentView(routeToStart: .constant(nil))
 }

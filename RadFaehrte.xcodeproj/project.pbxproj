@@ -29,9 +29,22 @@
 		80314EC3300A52A300FF6910 /* RadFaehrteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RadFaehrteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		80314ED9300A52A300FF6900 /* Exceptions for "RadFaehrte" folder in "RadFaehrte" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Supplemental-Info.plist",
+			);
+			target = 80314EAB300A52A100FF6910 /* RadFaehrte */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		80314EAE300A52A100FF6910 /* RadFaehrte */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				80314ED9300A52A300FF6900 /* Exceptions for "RadFaehrte" folder in "RadFaehrte" target */,
+			);
 			path = RadFaehrte;
 			sourceTree = "<group>";
 		};
@@ -400,11 +413,12 @@
 				DEVELOPMENT_TEAM = 8WNRX5RP7M;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RadFaehrte/Supplemental-Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Der Standort wird verwendet, um deine Position während der Fahrt auf der Karte anzuzeigen.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -434,11 +448,12 @@
 				DEVELOPMENT_TEAM = 8WNRX5RP7M;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RadFaehrte/Supplemental-Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Der Standort wird verwendet, um deine Position während der Fahrt auf der Karte anzuzeigen.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
