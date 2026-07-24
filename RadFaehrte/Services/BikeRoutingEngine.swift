@@ -1,0 +1,227 @@
+//
+//  BikeRoutingEngine.swift
+//  RadFaehrte
+//
+
+import CoreLocation
+
+/// A*-Routing über den Wege-Graphen eines heruntergeladenen Bundeslands (`WayGraphRepository`),
+/// das ruhige Wege/Radwege bevorzugt statt nur die kürzeste Verbindung zu suchen (das leistet
+/// bereits Apples MKDirections für die "Direkte Fahrrad-Route" online).
+final class BikeRoutingEngine {
+    /// Kleinstmöglicher Gewichtungsfaktor aus `Scripts/build_way_graph.py`
+    /// (HIGHWAY_WEIGHTS["cycleway"] * CYCLE_INFRA_BONUS = 0.6 * 0.7 = 0.42) als konservative
+    /// Untergrenze für die A*-Heuristik, damit sie nie die tatsächlichen Restkosten überschätzt
+    /// (sonst wäre die gefundene Route nicht mehr garantiert die günstigste). Muss angepasst
+    /// werden, falls sich die Gewichtung dort ändert.
+    private static let minWeightMultiplier = 0.4
+
+    /// Seitlicher Versatz für Kanten mit `cycleway=track/lane` (siehe `offsetSide` in
+    /// `WayGraphRepository.Edge`): Diese Radwege sind in OSM nur als Attribut an der
+    /// Straßen-Mittellinie vermerkt, nicht als eigene Geometrie gezeichnet. Ohne Versatz würde
+    /// die Route optisch auf der Fahrbahn statt auf dem tatsächlich danebenliegenden Radweg
+    /// verlaufen. 3,5 m ist eine grobe Schätzung für den typischen Abstand eines baulich
+    /// getrennten Radwegs zur Fahrbahnmitte, keine echte Vermessung.
+    private static let cycleOffsetMeters = 3.5
+
+    private let repository: WayGraphRepository
+
+    init(repository: WayGraphRepository) {
+        self.repository = repository
+    }
+
+    struct Result {
+        let coordinates: [CLLocationCoordinate2D]
+        let distanceMeters: Double
+    }
+
+    /// Knoten werden als dichte 0-basierte Array-Indizes referenziert (siehe
+    /// `WayGraphRepository`), nicht die ursprünglichen OSM-IDs.
+    private struct EdgeKey: Hashable {
+        let from: Int
+        let to: Int
+    }
+
+    /// Einzelne "ruhigste" Route zwischen zwei Punkten - Kurzform von
+    /// `routes(from:to:maxAlternatives:)` ohne Alternativen.
+    func route(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) -> Result? {
+        routes(from: start, to: end, maxAlternatives: 0).first
+    }
+
+    /// Berechnet die "ruhigste" Route sowie bis zu `maxAlternatives` weitere, spürbar andere
+    /// Alternativen - analog zu `RouteMatcher.routeSegmentDistance`s Alternativstrecken-Suche:
+    /// Kanten der bereits gefundenen Pfade ausschließen und erneut suchen. Liefert weniger als
+    /// `maxAlternatives + 1` Ergebnisse, sobald sich keine trennbare Alternative mehr finden
+    /// lässt; leeres Array, wenn kein Knoten in der Nähe von `start`/`end` liegt (außerhalb des
+    /// heruntergeladenen Bundeslands) oder gar kein Pfad existiert.
+    func routes(
+        from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D, maxAlternatives: Int = 2
+    ) -> [Result] {
+        guard let startNode = repository.nearestNode(to: start),
+              let endNode = repository.nearestNode(to: end)
+        else { return [] }
+
+        var results: [Result] = []
+        var excludedEdges: Set<EdgeKey> = []
+
+        for _ in 0...maxAlternatives {
+            guard let (result, path) = search(from: startNode, to: endNode, excluding: excludedEdges)
+            else { break }
+            results.append(result)
+            for i in 1..<path.count {
+                excludedEdges.insert(EdgeKey(from: path[i - 1], to: path[i]))
+            }
+        }
+        return results
+    }
+
+    /// Dictionaries statt Arrays über die volle Knotenzahl, obwohl Knoten dichte Indizes haben:
+    /// eine A*-Suche berührt bei einem großen Bundesland (Millionen Knoten) typischerweise nur
+    /// einen kleinen, lokalen Ausschnitt - Arrays in Graphgröße vorzuallozieren wäre für jede
+    /// einzelne Suche unnötig speicherhungrig.
+    private func search(
+        from startNode: Int, to endNode: Int, excluding excludedEdges: Set<EdgeKey>
+    ) -> (Result, [Int])? {
+        guard endNode < repository.nodeLocations.count else { return nil }
+        let endLocation = repository.nodeLocations[endNode]
+        let endCLLocation = CLLocation(latitude: endLocation.latitude, longitude: endLocation.longitude)
+        func heuristic(_ nodeId: Int) -> Double {
+            let location = repository.nodeLocations[nodeId]
+            return CLLocation(latitude: location.latitude, longitude: location.longitude)
+                .distance(from: endCLLocation) * Self.minWeightMultiplier
+        }
+
+        var gScore: [Int: Double] = [startNode: 0]
+        var realDistance: [Int: Double] = [startNode: 0]
+        var cameFrom: [Int: Int] = [:]
+        // Versatz-Seite der Kante, über die ein Knoten auf dem bisher besten Pfad erreicht
+        // wurde - nötig, um beim Rekonstruieren des Pfads (unten) die Anzeige-Koordinaten pro
+        // Kante statt pro Knoten seitlich zu verschieben.
+        var cameFromOffsetSide: [Int: Int] = [:]
+        var visited: Set<Int> = []
+        var queue = AStarQueue()
+        queue.push(priority: heuristic(startNode), node: startNode)
+
+        while let current = queue.popMin() {
+            guard !visited.contains(current.node) else { continue }
+            visited.insert(current.node)
+            if current.node == endNode { break }
+
+            for edge in repository.adjacency[current.node] {
+                guard !visited.contains(edge.toNode),
+                      !excludedEdges.contains(EdgeKey(from: current.node, to: edge.toNode))
+                else { continue }
+                let tentativeG = (gScore[current.node] ?? .greatestFiniteMagnitude) + edge.weight
+                if tentativeG < (gScore[edge.toNode] ?? .greatestFiniteMagnitude) {
+                    gScore[edge.toNode] = tentativeG
+                    realDistance[edge.toNode] = (realDistance[current.node] ?? 0) + edge.distanceMeters
+                    cameFrom[edge.toNode] = current.node
+                    cameFromOffsetSide[edge.toNode] = edge.offsetSide
+                    queue.push(priority: tentativeG + heuristic(edge.toNode), node: edge.toNode)
+                }
+            }
+        }
+
+        guard gScore[endNode] != nil else { return nil }
+
+        var path = [endNode]
+        var node = endNode
+        while let prev = cameFrom[node] {
+            path.append(prev)
+            node = prev
+        }
+        path.reverse()
+
+        let result = Result(
+            coordinates: Self.displayCoordinates(for: path, offsetSide: cameFromOffsetSide, repository: repository),
+            distanceMeters: realDistance[endNode] ?? 0
+        )
+        return (result, path)
+    }
+
+    /// Baut die Anzeige-Koordinaten kantenweise statt einfach `path.map { nodeLocations[$0] }`,
+    /// damit Kanten mit `cycleway=track/lane` (siehe `WayGraphRepository.Edge.offsetSide`)
+    /// seitlich versetzt dargestellt werden. An Übergängen zwischen versetzten und
+    /// nicht-versetzten Kanten entstehen dadurch kleine Sprünge in der Linie - das ist
+    /// gewollt, da der reale Radweg dort tatsächlich beginnt bzw. endet.
+    private static func displayCoordinates(
+        for path: [Int], offsetSide: [Int: Int], repository: WayGraphRepository
+    ) -> [CLLocationCoordinate2D] {
+        guard path.count >= 2 else {
+            return path.map { repository.nodeLocations[$0] }
+        }
+        var coordinates: [CLLocationCoordinate2D] = []
+        for i in 1..<path.count {
+            let from = repository.nodeLocations[path[i - 1]]
+            let to = repository.nodeLocations[path[i]]
+            let side = offsetSide[path[i]] ?? 0
+            let (offsetFrom, offsetTo) = offsetPoint(from: from, to: to, side: side, meters: cycleOffsetMeters)
+            if coordinates.isEmpty {
+                coordinates.append(offsetFrom)
+            }
+            coordinates.append(offsetTo)
+        }
+        return coordinates
+    }
+
+    /// Verschiebt eine Strecke `from -> to` senkrecht zu ihrer Richtung um `meters`, nach rechts
+    /// (`side == 1`) oder links (`side == 2`); `side == 0` gibt die Punkte unverändert zurück.
+    /// Rechnet lokal in Metern (kurze Distanz, Erdkrümmung vernachlässigbar) statt mit echter
+    /// geodätischer Projektion - für wenige Meter Versatz ausreichend genau.
+    private static func offsetPoint(
+        from: CLLocationCoordinate2D, to: CLLocationCoordinate2D, side: Int, meters: Double
+    ) -> (CLLocationCoordinate2D, CLLocationCoordinate2D) {
+        guard side == 1 || side == 2 else { return (from, to) }
+        let metersPerDegreeLat = 111_320.0
+        let midLatRad = (from.latitude + to.latitude) / 2 * .pi / 180
+        let metersPerDegreeLon = metersPerDegreeLat * max(cos(midLatRad), 0.1)
+        let dxMeters = (to.longitude - from.longitude) * metersPerDegreeLon
+        let dyMeters = (to.latitude - from.latitude) * metersPerDegreeLat
+        let length = (dxMeters * dxMeters + dyMeters * dyMeters).squareRoot()
+        guard length > 0 else { return (from, to) }
+        // Rechts der Richtung (from -> to) in Nord-oben-Kartenorientierung: (dy, -dx) normiert.
+        let (px, py) = side == 1 ? (dyMeters / length, -dxMeters / length) : (-dyMeters / length, dxMeters / length)
+        let offsetLon = (px * meters) / metersPerDegreeLon
+        let offsetLat = (py * meters) / metersPerDegreeLat
+        let offsetFrom = CLLocationCoordinate2D(latitude: from.latitude + offsetLat, longitude: from.longitude + offsetLon)
+        let offsetTo = CLLocationCoordinate2D(latitude: to.latitude + offsetLat, longitude: to.longitude + offsetLon)
+        return (offsetFrom, offsetTo)
+    }
+}
+
+/// Binärer Min-Heap für A*, geordnet nach Priorität (f-Score). Analog `DijkstraQueue` in
+/// `RouteMatcher.swift`.
+private struct AStarQueue {
+    private var elements: [(priority: Double, node: Int)] = []
+
+    mutating func push(priority: Double, node: Int) {
+        elements.append((priority, node))
+        var i = elements.count - 1
+        while i > 0 {
+            let parent = (i - 1) / 2
+            guard elements[parent].priority > elements[i].priority else { break }
+            elements.swapAt(parent, i)
+            i = parent
+        }
+    }
+
+    mutating func popMin() -> (priority: Double, node: Int)? {
+        guard !elements.isEmpty else { return nil }
+        let result = elements[0]
+        let last = elements.removeLast()
+        if !elements.isEmpty {
+            elements[0] = last
+            var i = 0
+            while true {
+                let left = 2 * i + 1, right = 2 * i + 2
+                var smallest = i
+                if left < elements.count, elements[left].priority < elements[smallest].priority { smallest = left }
+                if right < elements.count, elements[right].priority < elements[smallest].priority { smallest = right }
+                guard smallest != i else { break }
+                elements.swapAt(i, smallest)
+                i = smallest
+            }
+        }
+        return result
+    }
+}

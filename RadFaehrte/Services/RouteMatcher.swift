@@ -234,6 +234,38 @@ final class RouteMatcher {
         return Array(matches.sorted { $0.combinedDistanceKm < $1.combinedDistanceKm }.prefix(limit))
     }
 
+    /// Radrouten rund um einen einzelnen Punkt, unabhängig von einem Ziel - für die Vorschau
+    /// direkt nach der Standortwahl, bevor ein Ziel eingegeben wurde. `distanceToStartKm` und
+    /// `distanceToEndKm` sind hier identisch (beide = Distanz zum Punkt), da `RouteMatch`
+    /// eigentlich für Start+Ziel-Paare gedacht ist - die UI verwendet für diesen Fall eine eigene
+    /// Beschriftung statt `combinedDistanceKm` (siehe `ContentView.nearbySubtitle`).
+    func findNearby(
+        around point: CLLocationCoordinate2D, limit: Int = 10, searchRadiusKm: Double = 15
+    ) -> [RouteMatch] {
+        let latPad = searchRadiusKm / 111.32
+        let lonPad = searchRadiusKm / (111.32 * max(cos(point.latitude * .pi / 180), 0.1))
+
+        let candidates = repository.routesOverlapping(
+            minLon: point.longitude - lonPad, minLat: point.latitude - latPad,
+            maxLon: point.longitude + lonPad, maxLat: point.latitude + latPad
+        )
+
+        var nearby: [RouteMatch] = []
+        for route in candidates {
+            guard let name = route.name, !name.isEmpty else { continue }
+            guard let nearest = Self.nearestPoint(from: point, toLines: route.lines),
+                  nearest.distanceKm <= searchRadiusKm else { continue }
+            nearby.append(RouteMatch(
+                route: route,
+                distanceToStartKm: nearest.distanceKm,
+                distanceToEndKm: nearest.distanceKm,
+                nearestPointToStart: nearest.coordinate,
+                nearestPointToEnd: nearest.coordinate
+            ))
+        }
+        return Array(nearby.sorted { $0.distanceToStartKm < $1.distanceToStartKm }.prefix(limit))
+    }
+
     /// Nächstgelegener Punkt auf einer Liniengeometrie zu einem Punkt, mit Distanz in km.
     /// Rechnet lokal in einer ebenen Näherung um den Punkt (ausreichend genau
     /// auf der hier relevanten Skala von wenigen Kilometern).
@@ -277,6 +309,37 @@ final class RouteMatcher {
         }
         guard let bestPoint, let bestSegment, bestDistance.isFinite else { return nil }
         return (toCoordinate(bestPoint), bestDistance / 1000, bestSegment.start, bestSegment.end)
+    }
+
+    /// Projiziert einen Punkt auf ein einzelnes, vorgegebenes Liniensegment statt auf die
+    /// komplette Routen-Geometrie - für die Trägheit beim Einrasten in
+    /// `ContentView.snapToActiveRoute` (bevorzugt das zuletzt genutzte Segment, um Zickzack an
+    /// Kurven/Ecken zu vermeiden).
+    nonisolated static func nearestPoint(
+        from point: CLLocationCoordinate2D,
+        onSegment segmentStart: CLLocationCoordinate2D,
+        _ segmentEnd: CLLocationCoordinate2D
+    ) -> (coordinate: CLLocationCoordinate2D, distanceKm: Double) {
+        let metersPerDegreeLat = 111_320.0
+        let metersPerDegreeLon = 111_320.0 * max(cos(point.latitude * .pi / 180), 0.1)
+
+        func toLocal(_ c: CLLocationCoordinate2D) -> (x: Double, y: Double) {
+            (
+                (c.longitude - point.longitude) * metersPerDegreeLon,
+                (c.latitude - point.latitude) * metersPerDegreeLat
+            )
+        }
+        func toCoordinate(_ p: (x: Double, y: Double)) -> CLLocationCoordinate2D {
+            CLLocationCoordinate2D(
+                latitude: point.latitude + p.y / metersPerDegreeLat,
+                longitude: point.longitude + p.x / metersPerDegreeLon
+            )
+        }
+
+        let (distance, projected) = closestPointOnSegmentMeters(
+            point: (x: 0, y: 0), a: toLocal(segmentStart), b: toLocal(segmentEnd)
+        )
+        return (toCoordinate(projected), distance / 1000)
     }
 
     private nonisolated static func closestPointOnSegmentMeters(

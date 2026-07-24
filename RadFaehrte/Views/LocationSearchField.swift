@@ -12,6 +12,9 @@ struct LocationSearchField: View {
     var isResolvingCurrentLocation: Bool = false
     var onUseCurrentLocation: (() -> Void)? = nil
     var biasCoordinate: CLLocationCoordinate2D? = nil
+    /// Meldet Fokus-Änderungen nach außen, damit `ContentView` z. B. die Ergebnisliste ausblenden
+    /// kann, solange dieses Feld aktiv bearbeitet wird (mehr Platz für die Vorschlagsliste).
+    var onFocusChange: ((Bool) -> Void)? = nil
 
     @State private var viewModel = LocationSearchViewModel()
     @FocusState private var isFocused: Bool
@@ -89,6 +92,9 @@ struct LocationSearchField: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .shadow(radius: 2)
             }
+        }
+        .onChange(of: isFocused) { _, newValue in
+            onFocusChange?(newValue)
         }
         .onChange(of: selectedPlace) { _, newValue in
             if let newValue, newValue.title != viewModel.queryFragment {

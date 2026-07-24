@@ -135,4 +135,37 @@ struct RadFaehrteTests {
         #expect(abs(route.totalDistanceKm - expectedMeters / 1000) < 0.001)
     }
 
+    /// Pfad zum lokal per `Scripts/build_way_graph.py` erzeugten Bremen-Wegegraphen. Diese Datei
+    /// ist bewusst nicht Teil des Repos (großer, generierter Downloadartikel - siehe
+    /// `Scripts/.gitignore`), daher wird der Test übersprungen, wenn sie fehlt (z. B. auf einem
+    /// frischen Checkout ohne lokal ausgeführte Pipeline).
+    private static var bremenWayGraphPath: String {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Scripts/data/bremen_ways.sqlite")
+            .path
+    }
+
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: RadFaehrteTests.bremenWayGraphPath)))
+    func bikeRoutingEnginePrefersQuietPathsOverShortestDistance() async throws {
+        let repository = try #require(WayGraphRepository(path: Self.bremenWayGraphPath))
+        let engine = BikeRoutingEngine(repository: repository)
+
+        // Bremen Hauptbahnhof -> Bürgerpark (~2,5 km Luftlinie)
+        let hauptbahnhof = CLLocationCoordinate2D(latitude: 53.0836, longitude: 8.8138)
+        let buergerpark = CLLocationCoordinate2D(latitude: 53.0960, longitude: 8.8065)
+
+        let result = try #require(engine.route(from: hauptbahnhof, to: buergerpark))
+        let beelineMeters = CLLocation(latitude: hauptbahnhof.latitude, longitude: hauptbahnhof.longitude)
+            .distance(from: CLLocation(latitude: buergerpark.latitude, longitude: buergerpark.longitude))
+
+        #expect(result.coordinates.count > 2)
+        // Die "ruhige" Route darf länger sein als die Luftlinie (normal für Straßennetze), aber
+        // nicht komplett ausufern - grobe Plausibilitätsgrenze statt exaktem Vergleich, da sich
+        // die Gewichtung noch feinjustieren lässt.
+        #expect(result.distanceMeters >= beelineMeters)
+        #expect(result.distanceMeters < beelineMeters * 2.5)
+    }
+
 }

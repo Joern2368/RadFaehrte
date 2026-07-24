@@ -32,6 +32,9 @@ struct RootTabView: View {
     /// Hochgezählt, sobald `ContentView` eine beendete Fahrt speichert, damit `HistoryView` seine
     /// Liste neu lädt (analog `importedRoutesVersion`).
     @State private var drivenToursVersion = 0
+    /// Eine Instanz für die ganze App, damit ein in den Einstellungen heruntergeladenes
+    /// Bundesland sofort von `ContentView`s "Direkte Fahrrad-Route" gesehen wird.
+    private let wayGraphStore = WayGraphStore()
 
     var body: some View {
         ZStack {
@@ -40,6 +43,7 @@ struct RootTabView: View {
                     ContentView(
                         routeToStart: $routeToStart,
                         drivenTourStore: drivenTourStore,
+                        wayGraphStore: wayGraphStore,
                         onTourSaved: { drivenToursVersion += 1 }
                     )
                 }
@@ -57,7 +61,7 @@ struct RootTabView: View {
                     )
                 }
                 Tab("Einstellungen", systemImage: "gearshape", value: AppTab.settings) {
-                    SettingsView()
+                    SettingsView(wayGraphStore: wayGraphStore)
                 }
             }
 
@@ -67,7 +71,7 @@ struct RootTabView: View {
             }
         }
         .task {
-            try? await Task.sleep(for: .seconds(1.2))
+            try? await Task.sleep(for: .seconds(2))
             withAnimation(.easeOut(duration: 0.3)) {
                 showSplash = false
             }

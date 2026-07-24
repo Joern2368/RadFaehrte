@@ -87,6 +87,9 @@ final class RadFaehrteUITests: XCTestCase {
         XCTAssertTrue(beendenButton.waitForExistence(timeout: 5), "Navigationsmodus wurde nicht gestartet")
 
         beendenButton.tap()
+        let confirmEndButton = app.buttons["Navigation beenden"]
+        XCTAssertTrue(confirmEndButton.waitForExistence(timeout: 3), "Sicherheitsabfrage beim Beenden wurde nicht angezeigt")
+        confirmEndButton.tap()
 
         let doneButton = app.buttons["Fertig"]
         if doneButton.waitForExistence(timeout: 3) {
@@ -145,6 +148,10 @@ final class RadFaehrteUITests: XCTestCase {
         _ = beendenButton.waitForExistence(timeout: 5)
         if beendenButton.exists {
             beendenButton.tap()
+            let confirmEndButton = app.buttons["Navigation beenden"]
+            if confirmEndButton.waitForExistence(timeout: 3) {
+                confirmEndButton.tap()
+            }
             let doneButton = app.buttons["Fertig"]
             if doneButton.waitForExistence(timeout: 3) {
                 doneButton.tap()

@@ -11,14 +11,15 @@ import SwiftUI
 /// kurz sichtbar, siehe `RootTabView`.
 struct SplashView: View {
     var body: some View {
-        Color(red: 0.10980392156862745, green: 0.29019607843137257, blue: 0.3411764705882353)
-            .ignoresSafeArea()
-            .overlay {
-                Image("LaunchIcon")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 220, height: 220)
-            }
+        GeometryReader { geometry in
+            Image("SplashArt")
+                .resizable()
+                .scaledToFill()
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .clipped()
+        }
+        .background(Color(red: 0.10980392156862745, green: 0.29019607843137257, blue: 0.3411764705882353))
+        .ignoresSafeArea()
     }
 }
 
