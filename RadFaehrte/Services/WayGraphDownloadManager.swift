@@ -10,32 +10,38 @@ import Observation
 /// `Scripts/build_way_graph.py`, hochgeladen als Release-Assets im `RadFaehrte`-Repo).
 extension Bundesland {
     var downloadURL: URL {
-        // v2: Kanten enthalten zusätzlich einen Versatz-Wert für seitlich verschobene
-        // cycleway=track/lane-Darstellung (siehe `BikeRoutingEngine.offsetPoint`) - inkompatibel
-        // zum alten Format, deshalb neuer Release-Tag statt Assets im alten zu überschreiben.
-        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/way-graphs-v2/\(rawValue)_ways.sqlite")!
+        // v4: Kanten enthalten zusätzlich einen Namens-Index in eine deduplizierte
+        // Straßennamen-Tabelle (siehe `WayGraphRepository`, `BikeRoutingEngine.buildSteps`) für
+        // echte Turn-by-Turn-Anweisungen. Ursprünglich als v3 mit UInt16-Index versucht -
+        // Baden-Württemberg erreichte beim echten Bau aber dessen 65.535er-Grenze, deshalb direkt
+        // auf UInt32 umgestellt (v4) statt v3 fehlerhaft auszuliefern. Inkompatibel zum alten
+        // Format, deshalb neuer Release-Tag statt Assets im alten (way-graphs-v2) zu
+        // überschreiben.
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/way-graphs-v4/\(rawValue)_ways.sqlite")!
     }
 
     /// Tatsächliche Dateigröße der generierten Wege-Graphen (siehe `Scripts/build_way_graph.py`),
     /// für die Anzeige vor dem Download.
     var approximateSizeMB: Int {
+        // v4-Größen (mit Straßennamen-Tabelle) - ca. 20-27 % größer als die alten v2-Werte, s.
+        // Doc-Kommentar an `downloadURL`.
         switch self {
-        case .badenWuerttemberg: return 448
-        case .bayern: return 650
-        case .berlin: return 26
-        case .brandenburg: return 132
-        case .bremen: return 7
-        case .hamburg: return 19
-        case .hessen: return 231
-        case .mecklenburgVorpommern: return 60
-        case .niedersachsen: return 259
-        case .nordrheinWestfalen: return 432
-        case .rheinlandPfalz: return 220
-        case .saarland: return 30
-        case .sachsen: return 159
-        case .sachsenAnhalt: return 105
-        case .schleswigHolstein: return 81
-        case .thueringen: return 123
+        case .badenWuerttemberg: return 563
+        case .bayern: return 815
+        case .berlin: return 33
+        case .brandenburg: return 165
+        case .bremen: return 9
+        case .hamburg: return 23
+        case .hessen: return 290
+        case .mecklenburgVorpommern: return 75
+        case .niedersachsen: return 326
+        case .nordrheinWestfalen: return 543
+        case .rheinlandPfalz: return 276
+        case .saarland: return 38
+        case .sachsen: return 200
+        case .sachsenAnhalt: return 132
+        case .schleswigHolstein: return 102
+        case .thueringen: return 154
         }
     }
 }

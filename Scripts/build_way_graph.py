@@ -64,6 +64,13 @@ CYCLE_INFRA_VALUES = {"track", "lane", "opposite_track", "opposite_lane", "share
 # konkreten Kante) sich der Radweg befindet. 0 = kein Versatz, 1 = rechts, 2 = links.
 OFFSET_NONE, OFFSET_RIGHT, OFFSET_LEFT = 0, 1, 2
 
+# Sentinel für "kein `name`-Tag" (unbenannter Weg, z. B. viele Wirtschaftswege/Trampelpfade).
+# Erster Versuch nutzte UInt16 (0xFFFF, max. 65.534 Namen) um die Hälfte Platz zu sparen -
+# Baden-Württemberg erreichte beim echten Bau aber exakt 65.535 eindeutige Namen (die Grenze),
+# hätte also weitere Namen fälschlich als "unbenannt" behandelt. UInt32 hat dafür ausreichend
+# Reserve.
+NO_NAME = 0xFFFFFFFF
+
 
 def offset_side(tags):
     """Seite des Radwegs relativ zur digitalisierten Richtung des Ways (erster -> letzter
@@ -141,7 +148,10 @@ def build(pbf_path: str, output_path: str):
     # routes.sqlite.
     node_index = {}  # osm_id -> dense index
     node_coords = []  # index -> (lat, lon)
-    edge_rows = []  # (from_index, to_index, distance_m, weight)
+    edge_rows = []  # (from_index, to_index, distance_m, weight, offset_side, name_index)
+    name_index_map = {}  # name string -> dense index (Deduplizierung - viele Kanten teilen sich
+    # denselben Straßennamen, ihn pro Kante als Text zu wiederholen wäre reine Platzverschwendung)
+    name_list = []  # index -> name string
     way_count = 0
 
     def index_for(osm_id, location):
@@ -150,6 +160,20 @@ def build(pbf_path: str, output_path: str):
             idx = len(node_coords)
             node_index[osm_id] = idx
             node_coords.append((location.lat, location.lon))
+        return idx
+
+    def name_index_for(name):
+        if not name:
+            return NO_NAME
+        idx = name_index_map.get(name)
+        if idx is None:
+            idx = len(name_list)
+            if idx >= NO_NAME:
+                # Praktisch nie erreicht (>4 Mrd. eindeutige Namen in einem Bundesland), aber
+                # ohne diese Bremse würde ein Überlauf den Sentinel-Wert selbst überschreiben.
+                return NO_NAME
+            name_index_map[name] = idx
+            name_list.append(name)
         return idx
 
     for way in osmium.FileProcessor(pbf_path).with_locations():
@@ -166,6 +190,7 @@ def build(pbf_path: str, output_path: str):
         multiplier = weight_multiplier(tags)
         forward, backward = direction(tags)
         side = offset_side(tags)
+        name_idx = name_index_for(tags.get("name"))
         way_count += 1
 
         for i in range(len(nodes) - 1):
@@ -180,26 +205,36 @@ def build(pbf_path: str, output_path: str):
             b_idx = index_for(b.ref, b.location)
 
             if forward:
-                edge_rows.append((a_idx, b_idx, distance, weight, side))
+                edge_rows.append((a_idx, b_idx, distance, weight, side, name_idx))
             if backward:
                 # gleicher physischer Radweg, aber aus umgekehrter Fahrtrichtung gesehen liegt
-                # er auf der jeweils anderen Seite.
+                # er auf der jeweils anderen Seite. Der Straßenname bleibt unabhängig von der
+                # Fahrtrichtung derselbe.
                 backward_side = {OFFSET_NONE: OFFSET_NONE, OFFSET_RIGHT: OFFSET_LEFT, OFFSET_LEFT: OFFSET_RIGHT}[side]
-                edge_rows.append((b_idx, a_idx, distance, weight, backward_side))
+                edge_rows.append((b_idx, a_idx, distance, weight, backward_side, name_idx))
 
     nodes_blob = b"".join(struct.pack("<ff", lat, lon) for lat, lon in node_coords)
     edges_blob = b"".join(
-        struct.pack("<IIffB", f, t, d, w, s) for f, t, d, w, s in edge_rows
+        struct.pack("<IIffBI", f, t, d, w, s, n) for f, t, d, w, s, n in edge_rows
+    )
+    # Namenstabelle: pro eindeutigem Namen `UInt16 byteLength` + UTF-8-Bytes, in Index-Reihenfolge
+    # (Index 0 = erster in `name_list` usw.) - so kann die App beim Lesen einfach der Reihe nach
+    # durchgehen, ohne Trennzeichen im Text selbst zu riskieren.
+    names_blob = b"".join(
+        struct.pack("<H", len(encoded)) + encoded
+        for encoded in (name.encode("utf-8") for name in name_list)
     )
 
     conn = sqlite3.connect(output_path)
     conn.execute("DROP TABLE IF EXISTS graph")
     conn.execute(
-        "CREATE TABLE graph (node_count INTEGER, edge_count INTEGER, nodes BLOB, edges BLOB)"
+        "CREATE TABLE graph ("
+        "node_count INTEGER, edge_count INTEGER, nodes BLOB, edges BLOB, "
+        "name_count INTEGER, names BLOB)"
     )
     conn.execute(
-        "INSERT INTO graph VALUES (?, ?, ?, ?)",
-        (len(node_coords), len(edge_rows), nodes_blob, edges_blob),
+        "INSERT INTO graph VALUES (?, ?, ?, ?, ?, ?)",
+        (len(node_coords), len(edge_rows), nodes_blob, edges_blob, len(name_list), names_blob),
     )
     conn.commit()
     conn.execute("VACUUM")
@@ -207,6 +242,7 @@ def build(pbf_path: str, output_path: str):
     print(f"Wege verarbeitet: {way_count}")
     print(f"Knoten: {len(node_coords)}")
     print(f"Kanten: {len(edge_rows)}")
+    print(f"Eindeutige Straßennamen: {len(name_list)}")
     conn.close()
 
 

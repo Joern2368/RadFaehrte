@@ -50,7 +50,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "arrow.down.circle",
             title: "Offline-Karten",
-            text: "Für die \"Direkte Fahrrad-Route\" lassen sich in den Einstellungen Bundesländer herunterladen. Ist eins verfügbar, bevorzugt die App automatisch ruhige Wege und Radwege statt nur der kürzesten Verbindung - auch ganz ohne Internetverbindung. Verläuft neben der Straße ein baulich getrennter Radweg, wird die Linie dafür leicht seitlich versetzt dargestellt statt auf der Straßenmitte."
+            text: "Für die \"Direkte Fahrrad-Route\" lassen sich in den Einstellungen Bundesländer herunterladen. Ist eins verfügbar, bevorzugt die App automatisch ruhige Wege und Radwege statt nur der kürzesten Verbindung - auch ganz ohne Internetverbindung. Verläuft neben der Straße ein baulich getrennter Radweg, wird die Linie dafür leicht seitlich versetzt dargestellt statt auf der Straßenmitte. Die Navigations-Kopfzeile zeigt dabei echte Anweisungen mit Straßennamen und geschätzter Abbiege-Richtung, keine reine \"Route folgen\"-Anzeige mehr."
         )
     ]
 

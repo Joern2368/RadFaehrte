@@ -721,14 +721,17 @@ struct ContentView: View {
     }
 
     /// Kopfzeile im Navigationsmodus mit Richtungspfeil, aktueller Anweisung und Statistik-
-    /// Leiste (Tempo/Strecke/Zielentfernung), angelehnt an gängige Rad-Navigations-Apps.
-    /// Bei der direkten Fahrrad-Route (MKDirections) werden echte Turn-by-Turn-Anweisungen mit
-    /// Straßennamen gezeigt; offizielle Radrouten haben keine Straßennamen pro Wegabschnitt in
-    /// der Datenbank, daher hier nur eine generische "Route folgen"-Anzeige mit Routennamen.
+    /// Leiste (Tempo/Strecke/Zielentfernung), angelehnt an gängige Rad-Navigations-Apps. Bei der
+    /// direkten Fahrrad-Route (online MKDirections oder offline `BikeRoutingEngine`) werden echte
+    /// Turn-by-Turn-Anweisungen mit Straßennamen gezeigt, der Pfeil zeigt bei Offline-Routen
+    /// zusätzlich die geschätzte Abbiege-Richtung (`navigationInstructionIcon`) und der
+    /// Untertitel die Live-Entfernung zur nächsten Anweisung (`currentStepDistanceText`);
+    /// offizielle Radrouten haben keine Straßennamen pro Wegabschnitt in der Datenbank, daher
+    /// hier nur eine generische "Route folgen"-Anzeige mit Routennamen.
     private var navigationHeaderSection: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 16) {
-                Image(systemName: "arrow.up")
+                Image(systemName: navigationInstructionIcon)
                     .font(.system(size: 32, weight: .bold))
                     .foregroundStyle(.white)
                 VStack(alignment: .leading, spacing: 2) {
@@ -774,18 +777,67 @@ struct ContentView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var navigationInstructionTitle: String {
-        if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
-            let steps = directRoutes[selectedDirectRouteIndex].steps
-            if steps.indices.contains(currentDirectRouteStepIndex) {
-                let instruction = steps[currentDirectRouteStepIndex].instructions
-                return instruction.isEmpty ? "Los geht's" : instruction
-            }
+    /// `Step.instructions`/`direction` beschreiben das Manöver **am Anfang** des jeweiligen
+    /// Schritts (analog `MKRoute.Step`) - während man `currentDirectRouteStepIndex` entlangfährt,
+    /// ist genau die Anweisung des **nächsten** Schritts die bevorstehende Abbiegung, auf die man
+    /// sich vorbereiten soll (samt Entfernung zu ihrem Beginn, s. `currentStepDistanceText`) -
+    /// nicht die des aktuellen Schritts, die ja beim Betreten schon "passiert" ist. Nur beim
+    /// letzten Schritt (kein nächster mehr vorhanden) bleibt es bei dessen eigener Anweisung, da
+    /// es nichts mehr anzukündigen gibt.
+    private var previewedStep: DirectRoute.Step? {
+        guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) else { return nil }
+        let steps = directRoutes[selectedDirectRouteIndex].steps
+        guard steps.indices.contains(currentDirectRouteStepIndex) else { return nil }
+        if steps.indices.contains(currentDirectRouteStepIndex + 1) {
+            return steps[currentDirectRouteStepIndex + 1]
         }
-        return "Route folgen"
+        return steps[currentDirectRouteStepIndex]
+    }
+
+    private var navigationInstructionTitle: String {
+        guard let previewedStep else { return "Route folgen" }
+        return previewedStep.instructions.isEmpty ? "Los geht's" : previewedStep.instructions
+    }
+
+    /// Pfeil-Icon passend zur `direction` des angekündigten Schritts (`previewedStep`) - siehe
+    /// `DirectRoute.Step.Direction` (nur bei Offline-Routen tatsächlich links/rechts, sonst immer
+    /// geradeaus).
+    private var navigationInstructionIcon: String {
+        switch previewedStep?.direction ?? .straight {
+        case .straight: return "arrow.up"
+        case .left: return "arrow.turn.up.left"
+        case .right: return "arrow.turn.up.right"
+        }
+    }
+
+    /// Live-Entfernung zum Ende des **aktuellen** Schritts (z. B. "In 150 m") - das ist genau der
+    /// Punkt, an dem das in `previewedStep` angekündigte Manöver stattfindet. Auf 10 m gerundet,
+    /// damit die Anzeige nicht bei jedem GPS-Update um 1-2 m "zittert". `nil` ohne aktive
+    /// Schritt-Daten (kuratierte/importierte Routen ohne Straßennamen), dann zeigt die
+    /// Kopfzeile stattdessen wie bisher den Routennamen.
+    private var currentStepDistanceText: String? {
+        guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex),
+              let location = locationManager.currentLocation
+        else { return nil }
+        let steps = directRoutes[selectedDirectRouteIndex].steps
+        guard steps.indices.contains(currentDirectRouteStepIndex) else { return nil }
+        let end = steps[currentDirectRouteStepIndex].endCoordinate
+        let distanceMeters = location.distance(from: CLLocation(latitude: end.latitude, longitude: end.longitude))
+        // Je näher die Abbiegung, desto feiner die Rundung - aus 10-m-Schritten über die ganze
+        // Strecke wurde beim Radfahren als zu unruhig empfunden (Nutzer-Feedback); 10 m sind nur
+        // noch im Nahbereich (< 100 m) nötig, wo es auf den genauen Punkt ankommt.
+        let step: Double = distanceMeters >= 1000 ? 100 : (distanceMeters >= 100 ? 50 : 10)
+        let roundedMeters = Int((distanceMeters / step).rounded()) * Int(step)
+        if roundedMeters >= 1000 {
+            return String(format: "In %.1f km", Double(roundedMeters) / 1000)
+        }
+        return "In \(roundedMeters) m"
     }
 
     private var navigationInstructionSubtitle: String {
+        if let currentStepDistanceText {
+            return currentStepDistanceText
+        }
         if isDirectRouteMode {
             return "Direkte Fahrrad-Route"
         }
@@ -1569,31 +1621,51 @@ struct TourSummary: Identifiable {
 /// öffentlicher Initializer), daher dieser eigene, leichtgewichtige Typ statt `[MKRoute]`.
 struct DirectRoute: Identifiable {
     struct Step {
+        /// Grobe Richtung fürs Pfeil-Icon in der Navigations-Kopfzeile. Nur bei Offline-Routen
+        /// (`BikeRoutingEngine`) tatsächlich `.left`/`.right` - MKDirections liefert online keine
+        /// strukturierte Abbiege-Richtung, nur den fertigen `instructions`-Text (Apples eigene
+        /// Formulierung reicht dort bereits ohne zusätzliches Icon).
+        enum Direction {
+            case straight, left, right
+        }
+
         let instructions: String
         let endCoordinate: CLLocationCoordinate2D
+        let direction: Direction
     }
 
     let id = UUID()
     let coordinates: [CLLocationCoordinate2D]
     let distanceMeters: Double
     let isOffline: Bool
-    /// Leer bei Offline-Routen - Abbiege-Hinweise pro Wegabschnitt brauchen Straßennamen, die der
-    /// Wege-Graph aktuell nicht enthält (siehe ROADMAP.md, Phase 3). Die Navigations-UI fällt in
-    /// dem Fall automatisch auf "Route folgen" zurück, genau wie bei DB-/importierten Routen.
+    /// Bei Offline-Routen aus `BikeRoutingEngine.Result.steps` (Straßenname + grob geschätzte
+    /// Abbiege-Richtung, s. dort) - leer nur, wenn der heruntergeladene Wege-Graph noch im alten
+    /// Format ohne Namen vorliegt oder kein Pfad gefunden wurde. Die Navigations-UI fällt in dem
+    /// Fall automatisch auf "Route folgen" zurück, genau wie bei DB-/importierten Routen.
     let steps: [Step]
 
     init(route: MKRoute) {
         coordinates = route.polyline.coordinates
         distanceMeters = route.distance
         isOffline = false
-        steps = route.steps.map { Step(instructions: $0.instructions, endCoordinate: $0.polyline.coordinates.last ?? route.polyline.coordinate) }
+        steps = route.steps.map {
+            Step(instructions: $0.instructions, endCoordinate: $0.polyline.coordinates.last ?? route.polyline.coordinate, direction: .straight)
+        }
     }
 
     init(offlineResult: BikeRoutingEngine.Result) {
         coordinates = offlineResult.coordinates
         distanceMeters = offlineResult.distanceMeters
         isOffline = true
-        steps = []
+        steps = offlineResult.steps.map {
+            let direction: Step.Direction
+            switch $0.direction {
+            case .straight: direction = .straight
+            case .left: direction = .left
+            case .right: direction = .right
+            }
+            return Step(instructions: $0.instructions, endCoordinate: $0.endCoordinate, direction: direction)
+        }
     }
 }
 

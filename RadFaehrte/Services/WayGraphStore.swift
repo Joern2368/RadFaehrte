@@ -64,7 +64,7 @@ nonisolated final class WayGraphStore {
     /// `Scripts/build_way_graph.py`) hochzählen: bereits heruntergeladene Graphen im alten
     /// Format würden sonst mit falscher Byte-Schrittweite fehlinterpretiert statt sauber neu
     /// heruntergeladen zu werden.
-    private static let formatVersion = 2
+    private static let formatVersion = 4
 
     private let directory: URL
 

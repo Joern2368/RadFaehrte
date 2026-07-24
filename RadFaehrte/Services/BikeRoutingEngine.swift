@@ -31,8 +31,24 @@ final class BikeRoutingEngine {
     }
 
     struct Result {
+        struct Step {
+            enum Direction {
+                case straight, left, right
+            }
+
+            let instructions: String
+            let endCoordinate: CLLocationCoordinate2D
+            let direction: Direction
+        }
+
         let coordinates: [CLLocationCoordinate2D]
         let distanceMeters: Double
+        /// Abschnitte nach Straßenname gruppiert, mit grob aus dem Abbiege-Winkel geschätzter
+        /// Richtungsangabe (siehe `instructions(incomingBearing:outgoingBearing:name:)`) - analog
+        /// zu `MKRoute.steps` bei der Online-Route, nur ohne Apples Kreuzungs-Heuristiken. Leer,
+        /// wenn der Wege-Graph keine Namen enthält (altes Datenformat vor `WayGraphRepository`s
+        /// `wayNames`) oder kein Pfad gefunden wurde.
+        let steps: [Step]
     }
 
     /// Knoten werden als dichte 0-basierte Array-Indizes referenziert (siehe
@@ -98,6 +114,9 @@ final class BikeRoutingEngine {
         // wurde - nötig, um beim Rekonstruieren des Pfads (unten) die Anzeige-Koordinaten pro
         // Kante statt pro Knoten seitlich zu verschieben.
         var cameFromOffsetSide: [Int: Int] = [:]
+        // Straßenname der Kante, über die ein Knoten erreicht wurde - für die Schritt-Erzeugung
+        // (`buildSteps`), analog zu `cameFromOffsetSide`.
+        var cameFromNameIndex: [Int: Int] = [:]
         var visited: Set<Int> = []
         var queue = AStarQueue()
         queue.push(priority: heuristic(startNode), node: startNode)
@@ -117,6 +136,7 @@ final class BikeRoutingEngine {
                     realDistance[edge.toNode] = (realDistance[current.node] ?? 0) + edge.distanceMeters
                     cameFrom[edge.toNode] = current.node
                     cameFromOffsetSide[edge.toNode] = edge.offsetSide
+                    cameFromNameIndex[edge.toNode] = edge.nameIndex
                     queue.push(priority: tentativeG + heuristic(edge.toNode), node: edge.toNode)
                 }
             }
@@ -134,9 +154,89 @@ final class BikeRoutingEngine {
 
         let result = Result(
             coordinates: Self.displayCoordinates(for: path, offsetSide: cameFromOffsetSide, repository: repository),
-            distanceMeters: realDistance[endNode] ?? 0
+            distanceMeters: realDistance[endNode] ?? 0,
+            steps: Self.buildSteps(path: path, nameIndex: cameFromNameIndex, repository: repository)
         )
         return (result, path)
+    }
+
+    /// Gruppiert den Pfad in Abschnitte mit demselben Straßennamen (`WayGraphRepository.Edge.
+    /// nameIndex`) - ein neuer Schritt beginnt, sobald sich der Name ändert (auch von/zu
+    /// unbenannt). Für jeden Übergang wird aus der Winkeländerung zwischen der letzten Kante des
+    /// vorherigen und der ersten Kante des neuen Abschnitts grob eine Abbiege-Richtung geschätzt -
+    /// ohne die Kreuzungs-/Namensänderungs-Heuristiken echter Navigations-Engines, kann also bei
+    /// sanften Straßenschwenks gelegentlich daneben liegen (Live-Test/Kalibrierung nötig).
+    private static func buildSteps(
+        path: [Int], nameIndex: [Int: Int], repository: WayGraphRepository
+    ) -> [Result.Step] {
+        guard path.count >= 2 else { return [] }
+
+        func bearing(ofEdgeEndingAt edgeEnd: Int) -> Double {
+            bearingDegrees(
+                from: repository.nodeLocations[path[edgeEnd - 1]],
+                to: repository.nodeLocations[path[edgeEnd]]
+            )
+        }
+
+        var steps: [Result.Step] = []
+        var groupStart = 1
+        var groupNameIndex = nameIndex[path[1]] ?? WayGraphRepository.noNameIndex
+
+        func closeGroup(end: Int) {
+            let incomingBearing = groupStart > 1 ? bearing(ofEdgeEndingAt: groupStart - 1) : nil
+            let outgoingBearing = bearing(ofEdgeEndingAt: groupStart)
+            let name = repository.wayName(forIndex: groupNameIndex)
+            let (text, direction) = stepDetails(incomingBearing: incomingBearing, outgoingBearing: outgoingBearing, name: name)
+            steps.append(Result.Step(instructions: text, endCoordinate: repository.nodeLocations[path[end]], direction: direction))
+        }
+
+        for edgeEnd in 2..<path.count {
+            let currentNameIndex = nameIndex[path[edgeEnd]] ?? WayGraphRepository.noNameIndex
+            if currentNameIndex != groupNameIndex {
+                closeGroup(end: edgeEnd - 1)
+                groupStart = edgeEnd
+                groupNameIndex = currentNameIndex
+            }
+        }
+        closeGroup(end: path.count - 1)
+        return steps
+    }
+
+    /// Anfangs-Peilung (0–360°, 0 = Norden) von `a` nach `b`.
+    private static func bearingDegrees(from a: CLLocationCoordinate2D, to b: CLLocationCoordinate2D) -> Double {
+        let lat1 = a.latitude * .pi / 180
+        let lat2 = b.latitude * .pi / 180
+        let deltaLon = (b.longitude - a.longitude) * .pi / 180
+        let y = sin(deltaLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(deltaLon)
+        let bearing = atan2(y, x) * 180 / .pi
+        return bearing < 0 ? bearing + 360 : bearing
+    }
+
+    /// Formuliert die Anweisung für einen neuen Abschnitt und die grobe Richtung fürs Pfeil-Icon
+    /// in der Navigations-Kopfzeile. `incomingBearing == nil` beim allerersten Abschnitt der
+    /// Route - dort gibt es noch keine vorherige Fahrtrichtung, mit der sich ein Abbiegen
+    /// vergleichen ließe. Schwellenwerte (20°/120°) grob geschätzt, nicht gegen echte Kreuzungen
+    /// kalibriert.
+    private static func stepDetails(
+        incomingBearing: Double?, outgoingBearing: Double, name: String?
+    ) -> (text: String, direction: Result.Step.Direction) {
+        guard let incomingBearing else {
+            return (name.map { "Weiter auf \($0)" } ?? "Route folgen", .straight)
+        }
+        var delta = outgoingBearing - incomingBearing
+        while delta > 180 { delta -= 360 }
+        while delta < -180 { delta += 360 }
+        let magnitude = abs(delta)
+        guard magnitude >= 20 else {
+            return (name.map { "Weiter auf \($0)" } ?? "Route folgen", .straight)
+        }
+        let isRight = delta > 0
+        let turn = magnitude >= 120
+            ? (isRight ? "Scharf rechts abbiegen" : "Scharf links abbiegen")
+            : (isRight ? "Rechts abbiegen" : "Links abbiegen")
+        let text = name.map { "\(turn) auf \($0)" } ?? turn
+        return (text, isRight ? .right : .left)
     }
 
     /// Baut die Anzeige-Koordinaten kantenweise statt einfach `path.map { nodeLocations[$0] }`,
