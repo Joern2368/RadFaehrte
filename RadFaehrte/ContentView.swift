@@ -1513,6 +1513,15 @@ struct ContentView: View {
         selectedMatch = nearbyMatches.first
     }
 
+    /// Unterhalb dieser Streckenlänge "auf der Route" (zwischen den nächstgelegenen Punkten zu
+    /// Start und Ziel) wird ein Treffer als eigenständige Routenempfehlung ausgefiltert -
+    /// Nutzer-Entscheidung: Ein Umweg zu einer benannten Route lohnt sich nicht, wenn man sie
+    /// danach nur ein kurzes Stück nutzt (Beispiel: "Premiumroute D15" mit nur ~1,3 km
+    /// nutzbarem Abschnitt bei einer insgesamt kurzen Fahrt). Gilt nur für die Start+Ziel-Suche
+    /// (`matches`), nicht für die ziellose Nähe-Vorschau (`nearbyMatches`, `RouteMatcher.findNearby`),
+    /// die kein Start→Ziel-Teilstück kennt.
+    private static let minimumRouteSegmentKm: Double = 5
+
     /// Berechnet für jeden Treffer im Hintergrund die tatsächlich zu fahrende Strecke entlang
     /// der Routen-Geometrie zwischen den nächstgelegenen Punkten zu Start und Ziel, inklusive
     /// einer längeren Alternative, falls vorhanden (siehe `RouteMatcher.routeSegmentDistance`).
@@ -1530,29 +1539,42 @@ struct ContentView: View {
                 await MainActor.run {
                     guard matchingGeneration == generation else { return }
                     routeSegmentDistances[routeId] = result
-                    // Sobald für alle Treffer die tatsächliche Streckenlänge bekannt ist, nach der
-                    // real zu fahrenden Gesamtstrecke neu sortieren (siehe `reorderMatchesByPracticalDistance`).
+                    // Sobald für alle Treffer die tatsächliche Streckenlänge bekannt ist, zu kurze
+                    // Treffer aussortieren und den Rest neu sortieren (siehe
+                    // `filterAndReorderMatchesByPracticalDistance`).
                     if routeSegmentDistances.count == expectedCount {
-                        reorderMatchesByPracticalDistance()
+                        filterAndReorderMatchesByPracticalDistance()
                     }
                 }
             }
         }
     }
 
-    /// Sortiert `matches` neu, sobald für alle Treffer die tatsächliche Streckenlänge entlang der
-    /// Route bekannt ist: nach der Gesamtstrecke, die man real fahren würde (Anfahrt zum
-    /// Streckenanfang + Strecke auf der Route + Anfahrt vom Streckenende zum Ziel) statt nur nach
-    /// der Anfahrtsdistanz. So landet ein Fernweg, der nur zufällig nah an Start und Ziel
+    /// Entfernt Treffer, deren Streckenabschnitt "auf der Route" zu kurz ist, um als eigenständige
+    /// Routenempfehlung sinnvoll zu sein (`minimumRouteSegmentKm`), oder bei denen sich mangels
+    /// zusammenhängendem Pfad (Lücke in den Kartendaten) gar keine Länge ermitteln ließ - für
+    /// Letzteres lässt sich ja nicht prüfen, ob der Abschnitt lang genug wäre. Sortiert die
+    /// verbleibenden Treffer danach nach der Gesamtstrecke, die man real fahren würde (Anfahrt
+    /// zum Streckenanfang + Strecke auf der Route + Anfahrt vom Streckenende zum Ziel) statt nur
+    /// nach der Anfahrtsdistanz. So landet ein Fernweg, der nur zufällig nah an Start und Ziel
     /// vorbeikommt, dazwischen aber einen großen Umweg macht, weiter unten als eine Route, die
-    /// beide Punkte tatsächlich direkt verbindet.
-    private func reorderMatchesByPracticalDistance() {
+    /// beide Punkte tatsächlich direkt verbindet. Zeigte die entfernte Auswahl selbst gerade auf
+    /// einen jetzt aussortierten Treffer, fällt die Auswahl zurück auf die "Direkte Fahrrad-Route".
+    private func filterAndReorderMatchesByPracticalDistance() {
+        matches.removeAll { match in
+            guard let segment = routeSegmentDistances[match.id], let segment else { return true }
+            return segment.distanceKm < Self.minimumRouteSegmentKm
+        }
         matches.sort { practicalDistanceKm(for: $0) < practicalDistanceKm(for: $1) }
+
+        if let selectedMatch, !matches.contains(where: { $0.id == selectedMatch.id }) {
+            self.selectedMatch = nil
+            isDirectRouteMode = true
+        }
     }
 
-    /// Realistische Gesamtstrecke für einen Treffer. Fehlt ein zusammenhängender Pfad entlang der
-    /// Route (Lücke in den Kartendaten), landet der Treffer ans Ende der Liste, da seine
-    /// tatsächliche Länge unbekannt ist.
+    /// Realistische Gesamtstrecke für einen Treffer (Anfahrt zum Streckenanfang + Strecke auf der
+    /// Route + Anfahrt vom Streckenende zum Ziel).
     private func practicalDistanceKm(for match: RouteMatch) -> Double {
         guard let segment = routeSegmentDistances[match.id], let segment else {
             return .greatestFiniteMagnitude
