@@ -18,6 +18,10 @@ struct HistoryView: View {
     @State private var tours: [DrivenTour] = []
     @State private var selectedTour: DrivenTour?
 
+    /// Feste deutsche Locale, da die App-Oberfläche nicht lokalisiert ist und `.formatted()`
+    /// sonst je nach Sprach-/Regionseinstellung des Geräts z.B. ein englisches "at" anzeigt.
+    private static let dateFormat = Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: "de_DE"))
+
     var body: some View {
         NavigationStack {
             Group {
@@ -53,7 +57,7 @@ struct HistoryView: View {
     private func tourRow(_ tour: DrivenTour) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(tour.date.formatted(date: .abbreviated, time: .shortened))
+                Text(Self.dateFormat.format(tour.date))
                     .font(.subheadline.weight(.medium))
                 Text(
                     "\(String(format: "%.1f", tour.distanceKm)) km · \(formattedTourDuration(tour.duration))"
@@ -93,7 +97,7 @@ struct HistoryView: View {
                 }
                 .padding()
             }
-            .navigationTitle(tour.date.formatted(date: .abbreviated, time: .shortened))
+            .navigationTitle(Self.dateFormat.format(tour.date))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
