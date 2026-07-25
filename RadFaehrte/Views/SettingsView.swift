@@ -10,6 +10,7 @@ import SwiftUI
 /// hier zu stehen - sonst wurde der Screen unübersichtlich lang.
 struct SettingsView: View {
     @AppStorage(AppSettingsKey.averageSpeedKmh) private var averageSpeedKmh = AppSettingsDefaults.averageSpeedKmh
+    @AppStorage(AppSettingsKey.navigationLookaheadMeters) private var navigationLookaheadMeters = AppSettingsDefaults.navigationLookaheadMeters
     let wayGraphStore: WayGraphStore
 
     init(wayGraphStore: WayGraphStore = WayGraphStore()) {
@@ -30,6 +31,29 @@ struct SettingsView: View {
                     }
                 } footer: {
                     Text("Wird für die geschätzte Fahrzeit in der Routenliste verwendet.")
+                }
+
+                Section {
+                    Stepper(value: $navigationLookaheadMeters, in: AppSettingsDefaults.navigationLookaheadRange, step: 10) {
+                        HStack {
+                            Text("Sichtweite beim Navigieren")
+                            Spacer()
+                            Text("\(Int(navigationLookaheadMeters)) m")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } footer: {
+                    Text("Wie viele Meter voraus in der 2D-Kartenansicht während der Navigation sichtbar sind - z. B. wie früh eine bevorstehende Abbiegung zu sehen ist. Gilt nicht im 3D-Modus.")
+                }
+
+                Section {
+                    NavigationLink {
+                        NavigationStatSettingsView()
+                    } label: {
+                        Label("Statistik-Leiste", systemImage: "square.grid.3x2")
+                    }
+                } footer: {
+                    Text("Welche Werte in der Statistik-Leiste über der Karte während der Navigation angezeigt werden.")
                 }
 
                 Section {

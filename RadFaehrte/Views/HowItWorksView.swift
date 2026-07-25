@@ -28,9 +28,14 @@ struct HowItWorksView: View {
             text: "Mit \"Los\" startest du die Navigation. Die Karte folgt automatisch deiner Position und Fahrtrichtung, die bereits gefahrene Strecke wird rot eingezeichnet. Weichst du bei der direkten Route ab, wird automatisch neu berechnet."
         ),
         Topic(
+            icon: "square.grid.3x2",
+            title: "Statistik-Leiste anpassen",
+            text: "Die Zeile unter der Anweisung während der Navigation zeigt 3 oder 6 frei wählbare Werte - z. B. aktuelles oder maximales Tempo, zurückgelegte Strecke, Entfernung zum Ziel, aktuelle Höhe, Höhenmeter berg­auf/-ab, Durchschnittstempo, Fahrtzeit, reine Fahrzeit ohne Stopps, geschätzte Ankunftszeit oder Restzeit bis zum Ziel. In den Einstellungen unter \"Anzeige während der Navigation\" stellst du Anzahl und Belegung jedes einzelnen Feldes ein."
+        ),
+        Topic(
             icon: "hand.tap",
             title: "Steuerung während der Fahrt",
-            text: "Oben rechts: Navigation beenden (✕), zwischen 2D- und 3D-Ansicht wechseln, sowie zwischen \"Gehrichtung oben\" und \"Norden oben\" umschalten. Verschiebst oder zoomst du die Karte selbst, pausiert die automatische Verfolgung - ein \"Zentrieren\"-Banner unten bringt dich mit einem Tipp zurück zu deiner Position."
+            text: "Oben rechts: Navigation beenden (✕), zwischen 2D- und 3D-Ansicht wechseln, sowie zwischen \"Gehrichtung oben\" und \"Norden oben\" umschalten. Verschiebst oder zoomst du die Karte selbst, pausiert die automatische Verfolgung - ein \"Zentrieren\"-Banner unten bringt dich mit einem Tipp zurück zu deiner Position. Wie viele Meter du in der 2D-Ansicht vorausschauen kannst (z. B. wie früh eine Abbiegung sichtbar wird), stellst du in den Einstellungen unter \"Sichtweite beim Navigieren\" ein."
         ),
         Topic(
             icon: "location.fill.viewfinder",

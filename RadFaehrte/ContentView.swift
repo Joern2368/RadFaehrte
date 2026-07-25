@@ -68,6 +68,7 @@ struct ContentView: View {
     @State private var selectedRouteLines: [[CLLocationCoordinate2D]] = []
     @State private var is3DEnabled = false
     @State private var isHeadingUpEnabled = true
+    @AppStorage(AppSettingsKey.navigationLookaheadMeters) private var navigationLookaheadMeters = AppSettingsDefaults.navigationLookaheadMeters
     @State private var connectorRouteToStart: MKRoute?
     @State private var connectorRouteToEnd: MKRoute?
     @State private var isDirectRouteMode = false
@@ -85,7 +86,20 @@ struct ContentView: View {
     @State private var currentRegionSpan: MKCoordinateSpan?
     @State private var tourStartTime: Date?
     @State private var tourDistanceMeters: Double = 0
+    /// Aufsummierte positive/negative Höhenänderung seit Navigationsstart (siehe
+    /// `accumulateTourDistance`). Naive Punkt-zu-Punkt-Summe wie bei `tourDistanceMeters` - ohne
+    /// Barometer entsprechend GPS-rauschanfällig, aber für eine grobe Anzeige ausreichend.
+    @State private var tourElevationGainMeters: Double = 0
+    @State private var tourElevationLossMeters: Double = 0
+    @State private var tourMaxSpeedKmh: Double = 0
+    /// Reine Bewegungszeit seit Start, ohne Stillstand (Ampeln, Pausen) - siehe
+    /// `accumulateTourDistance` (`isMoving`/`lastMovingUpdateTimestamp`). Im Gegensatz zu
+    /// `tourStartTime`, aus dem die "Fahrtzeit" (inkl. Pausen) abgeleitet wird.
+    @State private var tourMovingSeconds: Double = 0
+    @State private var lastMovingUpdateTimestamp: Date?
     @State private var lastTourLocation: CLLocation?
+    @AppStorage(AppSettingsKey.navigationStatFieldCount) private var navigationStatFieldCount = AppSettingsDefaults.navigationStatFieldCount
+    @AppStorage(AppSettingsKey.navigationStatSlots) private var navigationStatSlotsRaw = AppSettingsDefaults.navigationStatSlots
     /// Aufgezeichnete Positionen der laufenden Fahrt, fürs Verlauf-Tab (siehe `DrivenTour`).
     @State private var tourTrackPoints: [CLLocationCoordinate2D] = []
     @State private var tourSummary: TourSummary?
@@ -147,7 +161,12 @@ struct ContentView: View {
 
             MapReader { proxy in
                 Map(position: $cameraPosition) {
-                    UserAnnotation()
+                    if let userLocationDisplayCoordinate {
+                        Annotation("Standort", coordinate: userLocationDisplayCoordinate) {
+                            userLocationMarker
+                        }
+                        .annotationTitles(.hidden)
+                    }
                     if !isNavigating {
                         if let startPlace {
                             Marker(startPlace.title, systemImage: "flag.circle.fill", coordinate: startPlace.coordinate)
@@ -294,9 +313,17 @@ struct ContentView: View {
         isFollowingUser = true
         tourStartTime = Date()
         tourDistanceMeters = 0
+        tourElevationGainMeters = 0
+        tourElevationLossMeters = 0
+        tourMaxSpeedKmh = 0
+        tourMovingSeconds = 0
+        lastMovingUpdateTimestamp = nil
         lastTourLocation = locationManager.currentLocation
         tourTrackPoints = locationManager.currentLocation.map { [$0.coordinate] } ?? []
         lastSnapSegment = nil
+        lastUserMarkerSnapSegment = nil
+        isUserLocationSnapped = false
+        snappedUserLocationCoordinate = locationManager.currentLocation?.coordinate
         currentDirectRouteStepIndex = 0
         if let location = locationManager.currentLocation {
             updateNavigationCamera(location: location)
@@ -341,6 +368,9 @@ struct ContentView: View {
         lastTourLocation = nil
         tourTrackPoints = []
         lastSnapSegment = nil
+        lastUserMarkerSnapSegment = nil
+        isUserLocationSnapped = false
+        snappedUserLocationCoordinate = nil
         // Suche zurücksetzen, damit direkt eine neue Route gesucht werden kann. Setzt zunächst
         // `isImportedRouteMode = false`, damit der anschließende `runMatching()`-Aufruf (getriggert
         // durch die `onChange`-Handler von `startPlace`/`zielPlace`) auch wirklich `matches`,
@@ -390,6 +420,7 @@ struct ContentView: View {
                 accumulateTourDistance(location)
                 advanceDirectRouteStepIfNeeded(location)
                 checkDirectRouteDeviation(location)
+                updateDisplayedUserLocation(location)
             }
             updateNavigationCamera()
         } else if isResolvingCurrentLocationForStart, let location = locationManager.currentLocation {
@@ -434,8 +465,23 @@ struct ContentView: View {
     /// springen.
     private static let routeSnapThresholdKm: Double = 0.007
 
+    /// Einrasten/Lösen-Schwellenwerte für den sichtbaren blauen Standort-Punkt (separat von
+    /// `routeSnapThresholdKm`, das nur die rote Strecke betrifft). Bewusst mit zwei
+    /// unterschiedlichen Werten (Hysterese) statt einem einzelnen Schwellenwert: Bei nur einem
+    /// Wert würde der Punkt bei einer GPS-Position, die genau um die Schwelle herum pendelt,
+    /// bei jedem Update zwischen eingerastet/frei hin- und herspringen. Mit einer niedrigeren
+    /// Einraste- (10 m) als Löse-Schwelle (20 m) bleibt der einmal erreichte Zustand stabil.
+    private static let userLocationSnapEngageThresholdKm: Double = 0.010
+    private static let userLocationSnapReleaseThresholdKm: Double = 0.020
+
     /// Zuletzt zum Einrasten genutztes Segment - für die Trägheit in `snapToActiveRoute`.
     @State private var lastSnapSegment: (start: CLLocationCoordinate2D, end: CLLocationCoordinate2D)?
+
+    /// Analog `lastSnapSegment`, aber für den sichtbaren blauen Punkt (`userLocationDisplayCoordinate`)
+    /// statt die rote Strecke - eigener Zustand, da beide unterschiedliche Schwellenwerte nutzen.
+    @State private var lastUserMarkerSnapSegment: (start: CLLocationCoordinate2D, end: CLLocationCoordinate2D)?
+    @State private var isUserLocationSnapped = false
+    @State private var snappedUserLocationCoordinate: CLLocationCoordinate2D?
 
     /// Rastet einen Punkt auf die nächstgelegene Stelle der aktuellen Routen-Geometrie ein, falls
     /// nah genug (`routeSnapThresholdKm`). Bevorzugt dabei das zuletzt genutzte Segment
@@ -446,7 +492,8 @@ struct ContentView: View {
     /// zurück, damit der Aufrufer es sich fürs nächste Mal merken kann.
     private func snapToActiveRoute(
         _ point: CLLocationCoordinate2D,
-        preferredSegment: (start: CLLocationCoordinate2D, end: CLLocationCoordinate2D)?
+        preferredSegment: (start: CLLocationCoordinate2D, end: CLLocationCoordinate2D)?,
+        thresholdKm: Double = Self.routeSnapThresholdKm
     ) -> (point: CLLocationCoordinate2D, segment: (start: CLLocationCoordinate2D, end: CLLocationCoordinate2D)?) {
         let routeLines = activeNavigationRouteLines
         guard !routeLines.isEmpty, let globalNearest = RouteMatcher.nearestPoint(from: point, toLines: routeLines) else {
@@ -465,8 +512,23 @@ struct ContentView: View {
             }
         }
 
-        guard chosenDistanceKm < Self.routeSnapThresholdKm else { return (point, nil) }
+        guard chosenDistanceKm < thresholdKm else { return (point, nil) }
         return (chosenCoordinate, chosenSegment)
+    }
+
+    /// Aktualisiert `snappedUserLocationCoordinate`/`isUserLocationSnapped` für den sichtbaren
+    /// blauen Punkt, mit Hysterese (s. `userLocationSnapEngageThresholdKm`/
+    /// `...ReleaseThresholdKm`): Solange noch nicht eingerastet, gilt die engere Einraste-Schwelle;
+    /// sobald eingerastet, gilt die weitere Löse-Schwelle, damit der Zustand bei leicht
+    /// schwankender GPS-Position nicht bei jedem Update kippt.
+    private func updateDisplayedUserLocation(_ location: CLLocation) {
+        let threshold = isUserLocationSnapped
+            ? Self.userLocationSnapReleaseThresholdKm
+            : Self.userLocationSnapEngageThresholdKm
+        let snap = snapToActiveRoute(location.coordinate, preferredSegment: lastUserMarkerSnapSegment, thresholdKm: threshold)
+        lastUserMarkerSnapSegment = snap.segment
+        isUserLocationSnapped = snap.segment != nil
+        snappedUserLocationCoordinate = snap.point
     }
 
     /// `tourTrackPoints` plus die aktuelle Live-Position als zusätzlicher, nicht dauerhaft
@@ -474,12 +536,17 @@ struct ContentView: View {
     /// `minTrackPointDistanceMeters` fortgeschrieben (gegen GPS-Rauschen, s. dort), dadurch blieb
     /// die rote Linie sichtbar bis zu ~18 m hinter dem blauen Punkt zurück statt bis zu ihm
     /// durchzugehen. Diese Eigenschaft schließt die Lücke, ohne die gespeicherten (für
-    /// Distanzberechnung/Tour-Speicherung genutzten) Punkte selbst dichter zu machen. Nutzt
-    /// `lastSnapSegment` nur lesend (keine State-Änderung während des Renderns) - das Merken des
-    /// Segments passiert ausschließlich in `accumulateTourDistance`.
+    /// Distanzberechnung/Tour-Speicherung genutzten) Punkte selbst dichter zu machen.
+    /// Nutzt bewusst dieselbe Koordinate wie der blaue Punkt (`userLocationDisplayCoordinate`)
+    /// statt eine eigene `snapToActiveRoute`-Berechnung: Beide unabhängig zu berechnen führte an
+    /// Kreuzungen/Rampen mit mehreren nah beieinanderliegenden Routen-Segmenten (unterschiedliche
+    /// Einraste-Schwellenwerte für blauen Punkt vs. rote Linie, s. `userLocationSnapEngageThresholdKm`
+    /// vs. `routeSnapThresholdKm`) dazu, dass beide auf unterschiedliche Segmente einrasteten - die
+    /// rote Linie erschien dadurch sichtbar neben statt exakt hinter dem blauen Punkt
+    /// (Nutzer-Screenshot 2026-07-25 an einer Autobahnrampen-Kreuzung). Mit derselben Koordinate
+    /// endet die rote Linie jetzt immer exakt dort, wo auch der blaue Punkt sitzt.
     private var displayedTourTrackPoints: [CLLocationCoordinate2D] {
-        guard let current = locationManager.currentLocation?.coordinate else { return tourTrackPoints }
-        let point = snapToActiveRoute(current, preferredSegment: lastSnapSegment).point
+        guard let point = userLocationDisplayCoordinate else { return tourTrackPoints }
         return tourTrackPoints + [point]
     }
 
@@ -487,14 +554,43 @@ struct ContentView: View {
         // Ungenaue Fixe (z. B. zwischen Gebäuden; `horizontalAccuracy < 0` bedeutet ungültig)
         // fließen weder in die Distanz noch in die Linie ein.
         guard location.horizontalAccuracy >= 0, location.horizontalAccuracy < 30 else { return }
+
+        if location.speed >= 0 {
+            tourMaxSpeedKmh = max(tourMaxSpeedKmh, location.speed * 3.6)
+        }
+
+        // Bei verlässlich niedriger gemeldeter Geschwindigkeit (`speed >= 0` heißt gültig) gilt
+        // die Position als Stillstand; bei unbekannter Geschwindigkeit (`< 0`) wie bisher als
+        // Bewegung behandelt.
+        let isMoving = location.speed < 0 || location.speed >= 0.5
+
+        // Reine Bewegungszeit ("Moving Time", `tourMovingSeconds`): `lastMovingUpdateTimestamp`
+        // wird bei *jedem* Update aktualisiert, auch bei Stillstand - sonst würde eine Pause beim
+        // nächsten Loslegen fälschlich mitgezählt (der letzte verarbeitete Zeitstempel läge dann
+        // vor der Pause). Nur das Zeitintervall selbst wird je nach aktuellem Bewegungszustand
+        // gezählt oder verworfen; Cap bei 10 s gegen große Lücken (z. B. App im Hintergrund).
+        if let lastMovingUpdateTimestamp {
+            let delta = location.timestamp.timeIntervalSince(lastMovingUpdateTimestamp)
+            if isMoving, delta > 0, delta < 10 {
+                tourMovingSeconds += delta
+            }
+        }
+        lastMovingUpdateTimestamp = location.timestamp
+
         // Bei Stillstand (z. B. kurz angehalten, in einem Geschäft) kann die gemeldete Position
         // ohne echte Bewegung um mehrere Zehnermeter "wandern", was sonst eine sichtbare
-        // Ausreißer-Spitze in der Linie erzeugte. Bei verlässlich niedriger gemeldeter
-        // Geschwindigkeit (`speed >= 0` heißt gültig) wird das Update ignoriert; bei unbekannter
-        // Geschwindigkeit (`< 0`) unverändert wie bisher verarbeitet.
-        if location.speed >= 0, location.speed < 0.5 { return }
+        // Ausreißer-Spitze in der Linie erzeugte.
+        guard isMoving else { return }
         if let lastTourLocation {
             tourDistanceMeters += location.distance(from: lastTourLocation)
+            if location.verticalAccuracy >= 0, lastTourLocation.verticalAccuracy >= 0 {
+                let elevationDelta = location.altitude - lastTourLocation.altitude
+                if elevationDelta > 0 {
+                    tourElevationGainMeters += elevationDelta
+                } else {
+                    tourElevationLossMeters += -elevationDelta
+                }
+            }
         }
         lastTourLocation = location
 
@@ -660,16 +756,31 @@ struct ContentView: View {
     /// echten, zügigen Kurve (die gemeldete Kamera hinkte der zuletzt gesetzten kurz hinterher) -
     /// und schaltete die Verfolgung dann fälschlich ab. Entfernt und durch den expliziten
     /// `RotationGesture`-Handler ersetzt, der nur auf echte Zwei-Finger-Gesten reagiert.
-    private static let navigationCameraUpdateInterval: TimeInterval = 0.2
+    private static let navigationCameraUpdateInterval: TimeInterval = 0.3
 
     /// `recenterAnimation` überschreibt die sonst genutzte lineare Kurz-Animation (s. u.) für den
     /// "Zentrieren"-Banner: ein einzelner, deutlich größerer Sprung nach längerem manuellem
     /// Verschieben wirkt mit einer sanfteren, etwas längeren Ease-Animation weniger abrupt als mit
-    /// der sonst für viele kleine, aneinandergereihte Updates gedachten linearen 0,2-s-Animation.
+    /// der sonst für viele kleine, aneinandergereihte Updates gedachten linearen 0,3-s-Animation.
     /// Frühere Version verzichtete beim Zentrieren komplett auf Animation (`animated: false`),
     /// weil ein großer *animierter* Sprung das blaue Standort-Symbol laut Live-Test kurz komplett
     /// verschwinden ließ (MapKit-Eigenheit) - falls das wieder auftritt, ist das der erste
     /// Verdächtige.
+    /// Rechnet den einstellbaren "Wieviele Meter voraus sichtbar"-Wert (`navigationLookaheadMeters`,
+    /// Einstellungen) in die von `MapCamera` erwartete `distance` um. Nur für die 2D-Ansicht (`pitch:
+    /// 0`) kalibriert - bei aktiviertem 3D-Modus verzerrt der gekippte Blickwinkel den Zusammenhang
+    /// zwischen `distance` und tatsächlich sichtbaren Metern spürbar, deshalb bleibt 3D bei der
+    /// bisherigen festen Distanz. Der Skalierungsfaktor ist eine erste, grobe Schätzung (Live-Test
+    /// auf dem iPhone steht noch aus) - er ist so gewählt, dass der Default-Wert exakt die bisherige
+    /// feste Distanz von 300 ergibt, es sich für Nutzer, die den Regler nicht anfassen, also nichts
+    /// ändert.
+    private static let lookaheadMetersToDistanceScale = 300 / AppSettingsDefaults.navigationLookaheadMeters
+
+    private var navigationCameraDistance: CLLocationDistance {
+        guard !is3DEnabled else { return 300 }
+        return navigationLookaheadMeters * Self.lookaheadMetersToDistanceScale
+    }
+
     private func updateNavigationCamera(
         location: CLLocation? = nil, animated: Bool = true, recenterAnimation: Bool = false
     ) {
@@ -680,7 +791,7 @@ struct ContentView: View {
         }
         let newCamera = MapCamera(
             centerCoordinate: locationManager.smoothedCameraCoordinate ?? location.coordinate,
-            distance: 300,
+            distance: navigationCameraDistance,
             heading: isHeadingUpEnabled ? (locationManager.currentHeading ?? 0) : 0,
             pitch: is3DEnabled ? 60 : 0
         )
@@ -807,33 +918,159 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(red: 0.110, green: 0.290, blue: 0.341)) // Markenfarbe Petrol #1C4A57
 
-            HStack(spacing: 0) {
-                navigationStat(value: String(format: "%.1f", currentSpeedKmh), unit: "km/h", label: "Aktuell")
-                Divider().frame(height: 32)
-                navigationStat(value: String(format: "%.1f", tourDistanceMeters / 1000), unit: "km", label: "Strecke")
-                if let distanceToDestinationKm {
-                    Divider().frame(height: 32)
-                    navigationStat(value: String(format: "%.1f", distanceToDestinationKm), unit: "km", label: "Ziel")
-                }
-            }
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity)
-            .background(.background)
+            navigationStatsRow
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(.background)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
         .padding(.top)
     }
 
+    /// Nutzer-konfigurierbare Statistik-Leiste (3 oder 6 frei wählbare Felder, s.
+    /// `NavigationStatKind` + `SettingsView`) - eine Zeile bei 3 Feldern, zwei Zeilen à drei bei 6.
+    private var navigationStatsRow: some View {
+        let kinds = navigationStatKinds
+        let rows: [[NavigationStatKind]] = kinds.count <= 3
+            ? [kinds]
+            : [Array(kinds.prefix(3)), Array(kinds.dropFirst(3))]
+        return VStack(spacing: 10) {
+            ForEach(rows.indices, id: \.self) { rowIndex in
+                if rowIndex > 0 {
+                    Divider()
+                }
+                HStack(spacing: 0) {
+                    ForEach(rows[rowIndex].indices, id: \.self) { columnIndex in
+                        if columnIndex > 0 {
+                            Divider().frame(height: 32)
+                        }
+                        let kind = rows[rowIndex][columnIndex]
+                        let display = statDisplay(for: kind)
+                        navigationStat(value: display.value, unit: display.unit, label: kind.label)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Liest die persistierten Slot-Auswahl (`navigationStatSlotsRaw`) und schneidet sie auf die
+    /// eingestellte Feld-Anzahl zu. Fehlt ein gespeicherter Slot (z. B. nach App-Update mit neuen
+    /// Kategorien), wird mit den Standardwerten aufgefüllt statt eine zu kurze Leiste zu zeigen.
+    private var navigationStatKinds: [NavigationStatKind] {
+        let parsed = navigationStatSlotsRaw.split(separator: ",").compactMap { NavigationStatKind(rawValue: String($0)) }
+        var slots = parsed
+        for kind in AppSettingsDefaults.navigationStatSlotsDefaultKinds where slots.count < 6 {
+            if !slots.contains(kind) { slots.append(kind) }
+        }
+        return Array(slots.prefix(navigationStatFieldCount))
+    }
+
     private func navigationStat(value: String, unit: String, label: String) -> some View {
         VStack(spacing: 2) {
-            Text("\(value) \(unit)")
+            Text(unit.isEmpty ? value : "\(value) \(unit)")
                 .font(.headline)
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Anzeigewert + Einheit für ein einzelnes Statistik-Feld. Leere Einheit bedeutet, dass
+    /// `value` bereits die vollständige Anzeige ist (z. B. eine Uhrzeit).
+    private func statDisplay(for kind: NavigationStatKind) -> (value: String, unit: String) {
+        switch kind {
+        case .currentSpeed:
+            return (String(format: "%.1f", currentSpeedKmh), "km/h")
+        case .distanceTraveled:
+            return (String(format: "%.1f", tourDistanceMeters / 1000), "km")
+        case .distanceToDestination:
+            guard let distanceToDestinationKm else { return ("–", "") }
+            return (String(format: "%.1f", distanceToDestinationKm), "km")
+        case .arrivalTimeSetSpeed:
+            return (arrivalTimeText(speedKmh: averageSpeedKmh) ?? "–", "")
+        case .arrivalTimeAverageSpeed:
+            return (arrivalTimeText(speedKmh: currentAverageSpeedKmh) ?? "–", "")
+        case .averageSpeed:
+            return (String(format: "%.1f", currentAverageSpeedKmh), "km/h")
+        case .elapsedTime:
+            return elapsedTimeDisplay
+        case .elevationGain:
+            return (String(format: "%.0f", tourElevationGainMeters), "hm")
+        case .elevationLoss:
+            return (String(format: "%.0f", tourElevationLossMeters), "hm")
+        case .maxSpeed:
+            return (String(format: "%.1f", tourMaxSpeedKmh), "km/h")
+        case .movingTime:
+            return movingTimeDisplay
+        case .remainingTimeSetSpeed:
+            return remainingTimeDisplay(speedKmh: averageSpeedKmh)
+        case .remainingTimeAverageSpeed:
+            return remainingTimeDisplay(speedKmh: currentAverageSpeedKmh)
+        case .currentAltitude:
+            guard let currentAltitudeMeters else { return ("–", "") }
+            return (String(format: "%.0f", currentAltitudeMeters), "m")
+        }
+    }
+
+    /// Durchschnittstempo der laufenden Fahrt seit `tourStartTime` (nicht die in den Einstellungen
+    /// hinterlegte Wunschgeschwindigkeit, s. `averageSpeedKmh`).
+    private var currentAverageSpeedKmh: Double {
+        guard let tourStartTime else { return 0 }
+        let hours = Date().timeIntervalSince(tourStartTime) / 3600
+        guard hours > 0 else { return 0 }
+        return (tourDistanceMeters / 1000) / hours
+    }
+
+    private var currentAltitudeMeters: Double? {
+        guard let location = locationManager.currentLocation, location.verticalAccuracy >= 0 else { return nil }
+        return location.altitude
+    }
+
+    private var elapsedTimeDisplay: (value: String, unit: String) {
+        guard let tourStartTime else { return ("–", "") }
+        return durationDisplay(seconds: Int(Date().timeIntervalSince(tourStartTime)))
+    }
+
+    private var movingTimeDisplay: (value: String, unit: String) {
+        guard tourStartTime != nil else { return ("–", "") }
+        return durationDisplay(seconds: Int(tourMovingSeconds))
+    }
+
+    private func durationDisplay(seconds: Int) -> (value: String, unit: String) {
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        if hours > 0 {
+            return (String(format: "%d:%02d", hours, minutes), "h")
+        }
+        return ("\(minutes)", "min")
+    }
+
+    /// Verbleibende Fahrzeit in Stunden bis zum Ziel, basierend auf der übergebenen Geschwindigkeit
+    /// (eingestellte Wunschgeschwindigkeit oder bisheriges Ø-Tempo der Fahrt). `nil` ohne Ziel oder
+    /// ohne (noch) plausible Geschwindigkeit - gemeinsame Grundlage für `arrivalTimeText` und
+    /// `remainingTimeDisplay`.
+    private func remainingHours(speedKmh: Double) -> Double? {
+        guard speedKmh > 0, let distanceToDestinationKm else { return nil }
+        return distanceToDestinationKm / speedKmh
+    }
+
+    /// Geschätzte Ankunftszeit basierend auf der verbleibenden Entfernung zum Ziel und der
+    /// übergebenen Geschwindigkeit (s. `remainingHours`).
+    private func arrivalTimeText(speedKmh: Double) -> String? {
+        guard let remainingHours = remainingHours(speedKmh: speedKmh) else { return nil }
+        let arrival = Date().addingTimeInterval(remainingHours * 3600)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "de_DE")
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: arrival)
+    }
+
+    private func remainingTimeDisplay(speedKmh: Double) -> (value: String, unit: String) {
+        guard let remainingHours = remainingHours(speedKmh: speedKmh) else { return ("–", "") }
+        return durationDisplay(seconds: Int(remainingHours * 3600))
     }
 
     /// `Step.instructions`/`direction` beschreiben das Manöver **am Anfang** des jeweiligen
@@ -911,6 +1148,49 @@ struct ContentView: View {
     private var distanceToDestinationKm: Double? {
         guard let location = locationManager.currentLocation, let ziel = zielPlace?.coordinate else { return nil }
         return location.distance(from: CLLocation(latitude: ziel.latitude, longitude: ziel.longitude)) / 1000
+    }
+
+    /// Anzeigeposition des blauen Standort-Punkts: während der Navigation eingerastet auf die
+    /// aktive Routen-Geometrie (`snappedUserLocationCoordinate`, s. `updateDisplayedUserLocation`),
+    /// sonst die rohe GPS-Position. Ersetzt MapKits `UserAnnotation()`, die sich nicht einrasten
+    /// lässt (s. ROADMAP.md, "Offene Idee: blauen Punkt selbst einrasten").
+    private var userLocationDisplayCoordinate: CLLocationCoordinate2D? {
+        guard let raw = locationManager.currentLocation?.coordinate else { return nil }
+        return isNavigating ? (snappedUserLocationCoordinate ?? raw) : raw
+    }
+
+    /// Rotation des Richtungspfeils in `userLocationMarker` relativ zum Bildschirm: `0`, wenn die
+    /// Karte sich bereits selbst mit der Fahrtrichtung mitdreht (Heading-up, s.
+    /// `updateNavigationCamera`) - der Pfeil zeigt dann unabhängig vom Kompass immer nach oben,
+    /// genau wie die Fahrtrichtung auf dem Bildschirm. Sonst (Nord-up oder außerhalb der
+    /// Navigation) die volle Kompass-Richtung, da oben dort immer Norden ist.
+    private var userLocationMarkerRotationDegrees: Double {
+        let heading = locationManager.currentHeading ?? 0
+        let cameraHeading = (isNavigating && isHeadingUpEnabled) ? heading : 0
+        return heading - cameraHeading
+    }
+
+    /// Eigene Standort-Markierung statt `UserAnnotation()` (s. `userLocationDisplayCoordinate`).
+    /// Richtungspfeil nur bei Bewegung mit verlässlichem Kompasswert sichtbar, analog zu MapKits
+    /// eingebautem Verhalten (s. ROADMAP.md: "im Stillstand erscheint erwartungsgemäß nur ein
+    /// einfacher Punkt").
+    private var userLocationMarker: some View {
+        let showsHeading = isNavigating && currentSpeedKmh > 1 && locationManager.currentHeading != nil
+        return ZStack {
+            if showsHeading {
+                UserHeadingCone()
+                    .fill(Color.blue.opacity(0.35))
+                    .frame(width: 44, height: 44)
+                    .rotationEffect(.degrees(userLocationMarkerRotationDegrees))
+            }
+            Circle()
+                .fill(.white)
+                .frame(width: 20, height: 20)
+                .shadow(radius: 1)
+            Circle()
+                .fill(Color.blue)
+                .frame(width: 15, height: 15)
+        }
     }
 
     private var compassBadge: some View {
@@ -1747,6 +2027,20 @@ struct DirectRoute: Identifiable {
             }
             return Step(instructions: $0.instructions, endCoordinate: $0.endCoordinate, direction: direction)
         }
+    }
+}
+
+/// Richtungspfeil hinter `ContentView.userLocationMarker` - Basis überlappt den Standort-Punkt
+/// (wird von dessen opaken Kreisen verdeckt), Spitze zeigt nach oben (Fahrtrichtung nach Rotation).
+private struct UserHeadingCone: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY * 0.72))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 
