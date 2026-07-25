@@ -63,8 +63,12 @@ nonisolated final class WayGraphStore {
     /// Bei jeder inkompatiblen Änderung am `.sqlite`-Binärformat (siehe
     /// `Scripts/build_way_graph.py`) hochzählen: bereits heruntergeladene Graphen im alten
     /// Format würden sonst mit falscher Byte-Schrittweite fehlinterpretiert statt sauber neu
-    /// heruntergeladen zu werden.
-    private static let formatVersion = 4
+    /// heruntergeladen zu werden. Auch bei reinen Gewichtungs-Änderungen ohne Format-Bruch
+    /// hochzählen (wie hier, s. `weight_multiplier` in `build_way_graph.py`) - die App hat sonst
+    /// keine Möglichkeit zu erkennen, dass sich die Zahlenwerte in einer bereits
+    /// heruntergeladenen Datei geändert haben, und würde die veraltete Version stillschweigend
+    /// weiterbenutzen.
+    private static let formatVersion = 6
 
     private let directory: URL
 

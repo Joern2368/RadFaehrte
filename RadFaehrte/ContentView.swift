@@ -513,15 +513,74 @@ struct ContentView: View {
     /// Rückt bei der direkten Fahrrad-Route (MKDirections) zum nächsten Navigationsschritt vor,
     /// sobald der Nutzer nah genug (< 30 m) am Ende des aktuellen Schritts ist. Offizielle
     /// Radrouten haben keine Schritt-Daten und werden hier nicht behandelt.
+    ///
+    /// Reicht dieser einfache Radius-Check nicht (Nutzer-Meldung: nach einem Tunnel ohne
+    /// GPS-Empfang blieb die vor dem Tunnel angekündigte Abbiegung stehen, obwohl die Straße
+    /// längst hinter dem Nutzer lag, und die Entfernungsanzeige wuchs nur noch), wird zusätzlich
+    /// per Fortschritts-Vergleich entlang der Routen-Geometrie nachgeholt: Setzt GPS irgendwo
+    /// deutlich weiter vorn auf der Strecke wieder ein (mehrere Schritt-Enden übersprungen, nicht
+    /// nur eins), erkennt `nearestSegmentIndex` das am Vergleich der Segment-Indizes und
+    /// überspringt alle bereits passierten Schritte auf einmal, statt für immer auf dem
+    /// 30-m-Radius um den ersten (längst passierten) Schritt hängen zu bleiben.
     private func advanceDirectRouteStepIfNeeded(_ location: CLLocation) {
         guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) else { return }
-        let steps = directRoutes[selectedDirectRouteIndex].steps
+        let route = directRoutes[selectedDirectRouteIndex]
+        let steps = route.steps
         guard currentDirectRouteStepIndex < steps.count - 1 else { return }
+
         let stepEnd = steps[currentDirectRouteStepIndex].endCoordinate
         let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
         if location.distance(from: stepEndLocation) < 30 {
             currentDirectRouteStepIndex += 1
+            return
         }
+
+        // Der erste Fix nach einer Funklücke (z. B. Tunnelausgang) ist oft noch ungenau (analog
+        // `accumulateTourDistance`) - ohne diesen Filter könnte ein einzelner schlecht platzierter
+        // Fix den Fortschritts-Vergleich fälschlich zu weit vorspringen lassen.
+        guard location.horizontalAccuracy >= 0, location.horizontalAccuracy < 30,
+              let locationSegmentIndex = Self.nearestSegmentIndex(of: location.coordinate, in: route.coordinates)
+        else { return }
+        var advanced = currentDirectRouteStepIndex
+        while advanced < steps.count - 1,
+              let endSegmentIndex = Self.nearestSegmentIndex(of: steps[advanced].endCoordinate, in: route.coordinates),
+              locationSegmentIndex > endSegmentIndex {
+            advanced += 1
+        }
+        if advanced != currentDirectRouteStepIndex {
+            currentDirectRouteStepIndex = advanced
+        }
+    }
+
+    /// Index des Liniensegments in `coordinates`, dem `point` am nächsten liegt - Grundlage für
+    /// den Fortschritts-Vergleich in `advanceDirectRouteStepIfNeeded` (ein höherer Index bedeutet
+    /// "weiter auf der Route fortgeschritten"). Nutzt dieselbe ebene Punkt-zu-Segment-Projektion
+    /// wie `distanceMeters(from:toLine:)`, gibt zusätzlich den Index zurück statt nur die Distanz.
+    private static func nearestSegmentIndex(of point: CLLocationCoordinate2D, in coordinates: [CLLocationCoordinate2D]) -> Int? {
+        guard coordinates.count >= 2 else { return nil }
+        let metersPerDegreeLat = 111_320.0
+        let metersPerDegreeLon = 111_320.0 * max(cos(point.latitude * .pi / 180), 0.1)
+
+        func toLocal(_ c: CLLocationCoordinate2D) -> (x: Double, y: Double) {
+            (
+                (c.longitude - point.longitude) * metersPerDegreeLon,
+                (c.latitude - point.latitude) * metersPerDegreeLat
+            )
+        }
+
+        var bestIndex: Int?
+        var bestDistance = Double.greatestFiniteMagnitude
+        var prev = toLocal(coordinates[0])
+        for i in 1..<coordinates.count {
+            let curr = toLocal(coordinates[i])
+            let distance = distanceFromOriginToSegmentMeters(a: prev, b: curr)
+            if distance < bestDistance {
+                bestDistance = distance
+                bestIndex = i - 1
+            }
+            prev = curr
+        }
+        return bestIndex
     }
 
     /// Meter-Schwellenwert, ab dem ein Abweichen von der "Direkten Fahrrad-Route" während der
@@ -739,8 +798,8 @@ struct ContentView: View {
                         .font(.title3.bold())
                         .foregroundStyle(.white)
                     Text(navigationInstructionSubtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.8))
+                        .font(.headline)
+                        .foregroundStyle(Color(red: 0.62, green: 0.85, blue: 0.90))
                 }
                 Spacer()
             }

@@ -76,15 +76,26 @@ def offset_side(tags):
     """Seite des Radwegs relativ zur digitalisierten Richtung des Ways (erster -> letzter
     Knoten in `way.nodes`). `cycleway:right`/`cycleway:left` sind eindeutig; bei `cycleway:both`
     oder unqualifiziertem `cycleway=track/lane` ist die Seite in OSM nicht angebbar - dort wird
-    vereinfachend rechts angenommen (in Deutschland die deutlich häufigere Lage)."""
+    vereinfachend eine Seite angenommen (s. u.).
+
+    ⚠️ Rückgabewerte bewusst gegenüber der OSM-Tag-Bedeutung vertauscht (`cycleway:right` ->
+    `OFFSET_LEFT` statt `OFFSET_RIGHT` usw.): Die erste Version folgte der OSM-Konvention direkt
+    und zeigte die Linie live an drei realen Stellen in Bremen (Findorffstraße, Crüsemannallee,
+    Richtweg) konsequent auf der falschen (linken statt rechten) Seite - an allen drei gleich,
+    was für einen systematischen Fehler irgendwo in der Verarbeitungskette spricht statt für
+    OSM-Dateneigenheiten. Mit vertauschten Rückgabewerten an allen drei Stellen per Live-Test
+    bestätigt korrekt. Die genaue Ursache der Vertauschung (Python hier vs. `offsetPoint` in
+    `BikeRoutingEngine.swift`) ist nicht abschließend geklärt - falls hier oder an der Kanten-
+    Richtungslogik (`forward`/`backward` weiter unten) künftig etwas geändert wird, unbedingt
+    wieder gegen echte Fahrten testen, nicht nur gegen die OSM-Tag-Definition."""
     if tags.get("cycleway:right") in CYCLE_INFRA_VALUES:
-        return OFFSET_RIGHT
-    if tags.get("cycleway:left") in CYCLE_INFRA_VALUES:
         return OFFSET_LEFT
+    if tags.get("cycleway:left") in CYCLE_INFRA_VALUES:
+        return OFFSET_RIGHT
     if tags.get("cycleway:both") in CYCLE_INFRA_VALUES:
-        return OFFSET_RIGHT
+        return OFFSET_LEFT
     if tags.get("cycleway") in CYCLE_INFRA_VALUES:
-        return OFFSET_RIGHT
+        return OFFSET_LEFT
     return OFFSET_NONE
 
 
@@ -112,9 +123,26 @@ def is_bikeable(tags):
 
 def weight_multiplier(tags):
     highway = tags.get("highway")
+    bicycle = tags.get("bicycle")
+    # Ein eigener, ausgewiesener Rad-/Fußweg (highway=path/footway/pedestrian mit
+    # bicycle=designated) ist ein echter Radweg, keine x-beliebige Trampelpfad-Qualität -
+    # genauso attraktiv gewichten wie highway=cycleway, statt der pauschalen path/pedestrian-
+    # Werte (0.9) bzw. dem generischen Default (footway steht gar nicht in HIGHWAY_WEIGHTS,
+    # bekäme sonst den schlechtesten Wert von allen, 1.2). Live-Fund (Nutzer-Meldung, Findorff-
+    # straße Bremen): ohne diese Regel war ein danebenliegender, richtig ausgewiesener Radweg
+    # kaum attraktiver gewichtet als die Straße selbst, wodurch der Router gelegentlich einen
+    # kurzen Straßen-Abstecher vorzog statt konsequent auf dem Radweg zu bleiben.
+    if highway in ("path", "footway", "pedestrian") and bicycle == "designated":
+        return HIGHWAY_WEIGHTS["cycleway"]
     multiplier = HIGHWAY_WEIGHTS.get(highway, 1.2)
     if any(tags.get(key) in CYCLE_INFRA_VALUES for key in CYCLE_INFRA_TAGS):
         multiplier *= CYCLE_INFRA_BONUS
+    # `bicycle=use_sidepath` heißt "hier gibt es eine benutzungspflichtige Radwegausweisung
+    # nebenan, auf der Fahrbahn selbst soll eigentlich nicht Rad gefahren werden" - deutlich
+    # unattraktiver machen statt die Straße wie eine normale, uneingeschränkt radfreundliche
+    # Straße zu behandeln (derselbe Live-Fund wie oben).
+    if bicycle == "use_sidepath":
+        multiplier *= 2.0
     return multiplier
 
 
