@@ -4,6 +4,7 @@
 //
 
 import CoreLocation
+import MapKit
 
 /// Eine tatsächlich gefahrene Tour (Aufzeichnung aus dem Navigationsmodus), fürs Verlauf-Tab.
 /// Anders als `ImportedRoute` (eine vom Nutzer importierte Ziel-Tour) ist das hier ein
@@ -39,6 +40,23 @@ struct DrivenTour: Identifiable, Codable, Equatable {
 
     var clCoordinates: [CLLocationCoordinate2D] {
         coordinates.map { $0.clLocationCoordinate }
+    }
+
+    /// Kartenregion, die die komplette aufgezeichnete Strecke mit etwas Rand umfasst - genutzt
+    /// sowohl für die Detailkarte im Verlauf (`HistoryView`) als auch für die kleinen
+    /// Routen-Vorschaubilder (`TourMapSnapshotCache`).
+    func region(padding: Double = 1.3) -> MKCoordinateRegion {
+        let coords = clCoordinates
+        let lats = coords.map(\.latitude)
+        let lons = coords.map(\.longitude)
+        let minLat = lats.min() ?? 0, maxLat = lats.max() ?? 0
+        let minLon = lons.min() ?? 0, maxLon = lons.max() ?? 0
+        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        let span = MKCoordinateSpan(
+            latitudeDelta: max(0.01, (maxLat - minLat) * padding),
+            longitudeDelta: max(0.01, (maxLon - minLon) * padding)
+        )
+        return MKCoordinateRegion(center: center, span: span)
     }
 }
 
