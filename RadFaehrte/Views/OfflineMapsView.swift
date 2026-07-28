@@ -5,27 +5,34 @@
 
 import SwiftUI
 
-/// Eigener Screen für die Bundesländer-Downloads (Offline-Routing-Engine für die "Direkte
+/// Eigener Screen für Wege-Graph-Downloads (Offline-Routing-Engine für die "Direkte
 /// Fahrrad-Route") - aus `SettingsView` ausgelagert, damit die Haupt-Einstellungen nicht durch
-/// 16 einzelne Zeilen unübersichtlich lang werden.
-struct OfflineMapsView: View {
-    @State private var downloadManager: WayGraphDownloadManager
+/// viele einzelne Zeilen unübersichtlich lang werden. Generisch über `Region` (`Bundesland` oder
+/// `EuropaLand`), damit dieselbe Liste/Download-UI für Deutschland ("Offline-Karten Deutschland")
+/// und weitere Länder ("Offline-Karten Europa") wiederverwendet wird, statt zwei fast identische
+/// Views zu pflegen.
+struct OfflineMapsView<Region: DownloadableRegion>: View {
+    @State private var downloadManager: WayGraphDownloadManager<Region>
+    private let title: String
+    private let footer: String
 
-    init(wayGraphStore: WayGraphStore = WayGraphStore()) {
-        _downloadManager = State(initialValue: WayGraphDownloadManager(store: wayGraphStore))
+    init(store: WayGraphStore<Region>, title: String, footer: String) {
+        _downloadManager = State(initialValue: WayGraphDownloadManager(store: store))
+        self.title = title
+        self.footer = footer
     }
 
     var body: some View {
         Form {
             Section {
-                ForEach(Bundesland.allCases) { bundesland in
-                    bundeslandRow(bundesland)
+                ForEach(Array(Region.allCases)) { region in
+                    regionRow(region)
                 }
             } footer: {
-                Text("Für heruntergeladene Bundesländer nutzt \"Direkte Fahrrad-Route\" eine eigene Offline-Engine, die ruhige Wege und Radwege bevorzugt, statt online über Apple zu routen - funktioniert auch ganz ohne Internetverbindung.")
+                Text(footer)
             }
         }
-        .navigationTitle("Offline-Karten")
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .alert(
             "Fehler", isPresented: .constant(downloadManager.errorMessage != nil),
@@ -38,32 +45,36 @@ struct OfflineMapsView: View {
     }
 
     @ViewBuilder
-    private func bundeslandRow(_ bundesland: Bundesland) -> some View {
+    private func regionRow(_ region: Region) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(bundesland.displayName)
-                if let progress = downloadManager.progress[bundesland] {
+                Text(region.displayName)
+                if let progress = downloadManager.progress[region] {
                     ProgressView(value: progress)
                         .frame(maxWidth: 120)
-                } else if downloadManager.isDownloaded(bundesland) {
+                } else if downloadManager.isDownloaded(region) {
                     Text("Heruntergeladen")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("~\(bundesland.approximateSizeMB) MB")
+                    Text("~\(region.approximateSizeMB) MB")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer()
-            if downloadManager.progress[bundesland] == nil {
-                if downloadManager.isDownloaded(bundesland) {
+            if downloadManager.progress[region] != nil {
+                Button("Abbrechen", role: .destructive) {
+                    downloadManager.cancel(region)
+                }
+            } else {
+                if downloadManager.isDownloaded(region) {
                     Button("Löschen", role: .destructive) {
-                        downloadManager.delete(bundesland)
+                        downloadManager.delete(region)
                     }
                 } else {
                     Button("Herunterladen") {
-                        downloadManager.download(bundesland)
+                        downloadManager.download(region)
                     }
                 }
             }
@@ -73,6 +84,10 @@ struct OfflineMapsView: View {
 
 #Preview {
     NavigationStack {
-        OfflineMapsView()
+        OfflineMapsView(
+            store: WayGraphStore<Bundesland>(),
+            title: "Offline-Karten Deutschland",
+            footer: "Für heruntergeladene Bundesländer nutzt \"Direkte Fahrrad-Route\" eine eigene Offline-Engine, die ruhige Wege und Radwege bevorzugt, statt online über Apple zu routen - funktioniert auch ganz ohne Internetverbindung."
+        )
     }
 }

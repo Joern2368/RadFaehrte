@@ -9,58 +9,79 @@ import SwiftUI
 /// stecken in eigenen Unterseiten (`OfflineMapsView`, `HowItWorksView`, `AboutView`) statt allesamt
 /// hier zu stehen - sonst wurde der Screen unübersichtlich lang.
 struct SettingsView: View {
-    @AppStorage(AppSettingsKey.averageSpeedKmh) private var averageSpeedKmh = AppSettingsDefaults.averageSpeedKmh
-    @AppStorage(AppSettingsKey.navigationLookaheadMeters) private var navigationLookaheadMeters = AppSettingsDefaults.navigationLookaheadMeters
-    let wayGraphStore: WayGraphStore
+    @AppStorage(AppSettingsKey.appearanceMode) private var appearanceModeRaw = AppSettingsDefaults.appearanceMode
+    @AppStorage(AppSettingsKey.mapStyle) private var mapStyleRaw = AppSettingsDefaults.mapStyle
+    @AppStorage(AppSettingsKey.navigationDefaultHeadingUp) private var navigationDefaultHeadingUp = AppSettingsDefaults.navigationDefaultHeadingUp
+    let wayGraphStore: WayGraphStore<Bundesland>
+    let europaWayGraphStore: WayGraphStore<EuropaLand>
 
-    init(wayGraphStore: WayGraphStore = WayGraphStore()) {
+    init(
+        wayGraphStore: WayGraphStore<Bundesland> = WayGraphStore(),
+        europaWayGraphStore: WayGraphStore<EuropaLand> = WayGraphStore()
+    ) {
         self.wayGraphStore = wayGraphStore
+        self.europaWayGraphStore = europaWayGraphStore
     }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Stepper(value: $averageSpeedKmh, in: AppSettingsDefaults.averageSpeedRange, step: 1) {
-                        HStack {
-                            Text("Durchschnittsgeschwindigkeit")
-                            Spacer()
-                            Text("\(Int(averageSpeedKmh)) km/h")
-                                .foregroundStyle(.secondary)
-                        }
+                    NavigationLink {
+                        NavigationSettingsView()
+                    } label: {
+                        Label("Navigation", systemImage: "location.north.line")
                     }
                 } footer: {
-                    Text("Wird für die geschätzte Fahrzeit in der Routenliste verwendet.")
+                    Text("Durchschnittsgeschwindigkeit, Sichtweite und Statistik-Leiste während der Navigation.")
                 }
 
                 Section {
-                    Stepper(value: $navigationLookaheadMeters, in: AppSettingsDefaults.navigationLookaheadRange, step: 10) {
-                        HStack {
-                            Text("Sichtweite beim Navigieren")
-                            Spacer()
-                            Text("\(Int(navigationLookaheadMeters)) m")
-                                .foregroundStyle(.secondary)
+                    Picker("Kartenstil", selection: $mapStyleRaw) {
+                        ForEach(MapStyleOption.allCases) { style in
+                            Text(style.label).tag(style.rawValue)
                         }
                     }
+                    .pickerStyle(.segmented)
+
+                    Picker("Standard-Kartenausrichtung", selection: $navigationDefaultHeadingUp) {
+                        Text("Fahrtrichtung oben").tag(true)
+                        Text("Norden oben").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Karte")
                 } footer: {
-                    Text("Wie viele Meter voraus in der 2D-Kartenansicht während der Navigation sichtbar sind - z. B. wie früh eine bevorstehende Abbiegung zu sehen ist. Gilt nicht im 3D-Modus.")
+                    Text("Die Kartenausrichtung gilt als Vorgabe beim Start einer neuen Navigation - während der Fahrt lässt sie sich über den Umschalt-Button jederzeit ändern.")
+                }
+
+                Section {
+                    Picker("Erscheinungsbild", selection: $appearanceModeRaw) {
+                        ForEach(AppearanceMode.allCases) { mode in
+                            Text(mode.label).tag(mode.rawValue)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
 
                 Section {
                     NavigationLink {
-                        NavigationStatSettingsView()
+                        OfflineMapsView(
+                            store: wayGraphStore,
+                            title: "Offline-Karten Deutschland",
+                            footer: "Für heruntergeladene Bundesländer nutzt \"Direkte Fahrrad-Route\" eine eigene Offline-Engine, die ruhige Wege und Radwege bevorzugt, statt online über Apple zu routen - funktioniert auch ganz ohne Internetverbindung."
+                        )
                     } label: {
-                        Label("Statistik-Leiste", systemImage: "square.grid.3x2")
+                        Label("Offline-Karten Deutschland", systemImage: "arrow.down.circle")
                     }
-                } footer: {
-                    Text("Welche Werte in der Statistik-Leiste über der Karte während der Navigation angezeigt werden.")
-                }
-
-                Section {
                     NavigationLink {
-                        OfflineMapsView(wayGraphStore: wayGraphStore)
+                        OfflineMapsView(
+                            store: europaWayGraphStore,
+                            title: "Offline-Karten Europa",
+                            footer: "Wie bei den Bundesländern: Für ein heruntergeladenes Land nutzt \"Direkte Fahrrad-Route\" dort eine eigene Offline-Engine statt online über Apple zu routen - funktioniert auch ganz ohne Internetverbindung."
+                        )
                     } label: {
-                        Label("Offline-Karten", systemImage: "arrow.down.circle")
+                        Label("Offline-Karten Europa", systemImage: "arrow.down.circle")
                     }
                 }
 

@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct RadFaehrteApp: App {
+    @AppStorage(AppSettingsKey.appearanceMode) private var appearanceModeRaw = AppSettingsDefaults.appearanceMode
+
     var body: some Scene {
         WindowGroup {
             RootTabView()
+                .preferredColorScheme((AppearanceMode(rawValue: appearanceModeRaw) ?? .system).colorScheme)
         }
     }
 }

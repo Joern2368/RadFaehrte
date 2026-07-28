@@ -17,7 +17,9 @@ struct ContentView: View {
     var drivenTourStore = DrivenTourStore()
     /// Für die App gemeinsame Instanz, um heruntergeladene Bundesländer für die
     /// "ruhige Wege"-Offline-Routing-Engine zu finden (siehe `selectDirectRoute`).
-    var wayGraphStore = WayGraphStore()
+    var wayGraphStore = WayGraphStore<Bundesland>()
+    /// Analog `wayGraphStore`, aber für Länder außerhalb Deutschlands (aktuell nur Niederlande).
+    var europaWayGraphStore = WayGraphStore<EuropaLand>()
     /// Von `RootTabView` übergeben, um nach dem Speichern einer Fahrt den Verlauf-Tab zum
     /// Neuladen zu bewegen (siehe `HistoryView.refreshTrigger`).
     var onTourSaved: () -> Void = {}
@@ -68,7 +70,26 @@ struct ContentView: View {
     @State private var selectedRouteLines: [[CLLocationCoordinate2D]] = []
     @State private var is3DEnabled = false
     @State private var isHeadingUpEnabled = true
+    /// Nutzer-Wunsch: Anweisungs-Banner + Statistik-Leiste per Button ein-/ausblendbar - ist er
+    /// ausgeblendet, geht die Karte bis an den Bildschirmrand, sonst nur bis zur Unterkante des
+    /// Banners (s. `mapFillsFullScreen`). Startet bei jeder neuen Navigation wieder eingeblendet
+    /// (s. `startNavigating`).
+    @State private var isNavigationBannerVisible = true
+    /// Nutzer-Feedback: Während der Navigation ist die Tab-Leiste ausgeblendet, daher war der
+    /// Einstellungen-Tab (z. B. für eine Tempo-Änderung mitten in der Fahrt) unerreichbar. Zahnrad-
+    /// Button in `navigationControlsOverlay` öffnet stattdessen dieses Sheet, Navigation läuft
+    /// währenddessen unverändert im Hintergrund weiter.
+    @State private var showQuickSettings = false
     @AppStorage(AppSettingsKey.navigationLookaheadMeters) private var navigationLookaheadMeters = AppSettingsDefaults.navigationLookaheadMeters
+    @AppStorage(AppSettingsKey.mapStyle) private var mapStyleRaw = AppSettingsDefaults.mapStyle
+    @AppStorage(AppSettingsKey.navigationDefaultHeadingUp) private var navigationDefaultHeadingUp = AppSettingsDefaults.navigationDefaultHeadingUp
+
+    /// Ausgelagert aus dem `Map`-Modifier-Aufruf selbst - dort inline führte der Swift-Compiler-
+    /// Typchecker sonst zu "unable to type-check this expression in reasonable time" (die ohnehin
+    /// schon sehr komplexe `body`-Ausdruck-Kette der Karte wurde dadurch zu viel).
+    private var currentMapStyle: MapStyle {
+        (MapStyleOption(rawValue: mapStyleRaw) ?? .standard).mapStyle
+    }
     @State private var connectorRouteToStart: MKRoute?
     @State private var connectorRouteToEnd: MKRoute?
     @State private var isDirectRouteMode = false
@@ -105,11 +126,15 @@ struct ContentView: View {
     @State private var tourSummary: TourSummary?
     @State private var currentDirectRouteStepIndex = 0
 
+    /// Karte geht bis an den Bildschirmrand (kein Rand, keine abgerundeten Ecken), solange
+    /// navigiert wird und der Nutzer den Banner per Button ausgeblendet hat. Ist er eingeblendet,
+    /// bleibt die Karte wie gewohnt unterhalb des Banners begrenzt (s. `isNavigationBannerVisible`).
+    private var mapFillsFullScreen: Bool {
+        isNavigating && !isNavigationBannerVisible
+    }
+
     var body: some View {
         VStack(spacing: 12) {
-            if isNavigating {
-                navigationHeaderSection
-            }
             if !isNavigating {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(spacing: 8) {
@@ -159,6 +184,11 @@ struct ContentView: View {
                 }
             }
 
+            if isNavigating && isNavigationBannerVisible {
+                navigationHeaderSection
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
             MapReader { proxy in
                 Map(position: $cameraPosition) {
                     if let userLocationDisplayCoordinate {
@@ -184,6 +214,7 @@ struct ContentView: View {
                     }
                 }
                 .mapControls { } // Eigene Steuerelemente (compassBadge, navigationControlsOverlay) statt MapKits Standard-Overlays.
+                .mapStyle(currentMapStyle)
                 .onMapCameraChange(frequency: .onEnd, handleMapCameraChange)
                 .simultaneousGesture(SpatialTapGesture().onEnded { value in
                     handleMapTap(at: value.location, proxy: proxy)
@@ -228,14 +259,17 @@ struct ContentView: View {
                     endNavigationButton
                         .padding()
                 }
+                .overlay(alignment: .top) {
+                    navigationBannerHandle
+                }
                 .overlay(alignment: .bottom) {
                     recenterButtonOverlay
                         .padding(.bottom, 24)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: mapFillsFullScreen ? 0 : 12))
             }
-            .padding(.horizontal)
-            .padding(.bottom)
+            .padding(.horizontal, mapFillsFullScreen ? 0 : nil)
+            .padding(.bottom, mapFillsFullScreen ? 0 : nil)
         }
         .background(Color(.systemGroupedBackground))
         .toolbar(isNavigating ? .hidden : .visible, for: .tabBar)
@@ -295,6 +329,9 @@ struct ContentView: View {
         .sheet(item: $tourSummary) { summary in
             tourSummarySheet(summary)
         }
+        .sheet(isPresented: $showQuickSettings) {
+            NavigationQuickSettingsView()
+        }
     }
 
     private func startNavigating() {
@@ -311,6 +348,8 @@ struct ContentView: View {
         UIApplication.shared.isIdleTimerDisabled = true
         isNavigating = true
         isFollowingUser = true
+        isNavigationBannerVisible = true
+        isHeadingUpEnabled = navigationDefaultHeadingUp
         tourStartTime = Date()
         tourDistanceMeters = 0
         tourElevationGainMeters = 0
@@ -326,7 +365,16 @@ struct ContentView: View {
         snappedUserLocationCoordinate = locationManager.currentLocation?.coordinate
         currentDirectRouteStepIndex = 0
         if let location = locationManager.currentLocation {
-            updateNavigationCamera(location: location)
+            // Bewusst `animated: false` (sofortiges Setzen ohne Animation), nicht
+            // `recenterAnimation: true`: Live-Test mit einer sehr langen Strecke (Rotterdam→
+            // München, 660 km, 2026-07-27) zeigte, dass MapKit den Kamerawechsel von der
+            // Ganze-Route-Übersicht (`.region(...)`, s. `updateCamera`) auf die enge
+            // Navigationsansicht (`.camera(...)`, 300 m) bei einem so großen Zoom-Unterschied
+            // sichtbar über mehrere Sekunden selbst "kriechen" ließ - unabhängig von der
+            // angegebenen SwiftUI-Animationsdauer (weder `recenterAnimation`s 0,6 s noch die
+            // normale kurze lineare Animation griffen). Direktes Setzen ohne Animation umgeht das
+            // zuverlässig - Geschwindigkeit war dem Nutzer wichtiger als ein animierter Übergang.
+            updateNavigationCamera(location: location, animated: false)
         } else {
             withAnimation {
                 cameraPosition = .region(Self.regionToFit(
@@ -707,12 +755,13 @@ struct ContentView: View {
         guard let ziel = zielPlace?.coordinate else { return }
         isRerouting = true
         lastRerouteAt = Date()
-        let offlineGraphPath = Bundesland.allCases.compactMap { wayGraphStore.path(for: $0) }.first
+        let candidatePaths = offlineGraphCandidatePaths()
         Task {
             defer { isRerouting = false }
             var newRoutes: [DirectRoute] = []
-            if let offlineGraphPath {
-                newRoutes = await Self.offlineDirectRoutes(path: offlineGraphPath, from: location, to: ziel)
+            for path in candidatePaths {
+                newRoutes = await Self.offlineDirectRoutes(path: path, from: location, to: ziel)
+                if !newRoutes.isEmpty { break }
             }
             if newRoutes.isEmpty {
                 newRoutes = await Self.directions(from: location, to: ziel, alternates: true)
@@ -723,6 +772,20 @@ struct ContentView: View {
             selectedDirectRouteIndex = 0
             currentDirectRouteStepIndex = 0
         }
+    }
+
+    /// Pfade aller heruntergeladenen Wege-Graphen (Bundesländer + weitere Länder), in der
+    /// Reihenfolge, in der sie für die Offline-Engine versucht werden sollen (s. `loadDirectRoute`/
+    /// `rerouteDirectRoute`). `path(for:)` ist eine schnelle, synchrone Existenzprüfung, daher
+    /// unproblematisch außerhalb eines Tasks. Es wird bewusst nicht nur die erste gefundene Region
+    /// verwendet: Sind z. B. sowohl ein deutsches Bundesland als auch die Niederlande
+    /// heruntergeladen, würde sonst ein Fahrtziel in der jeweils anderen Region niemals die
+    /// Offline-Engine nutzen, obwohl eine passende Region vorhanden wäre - `offlineDirectRoutes`
+    /// liefert für eine nicht abgedeckte Region ohnehin ein leeres Ergebnis, wird also einfach
+    /// übersprungen.
+    private func offlineGraphCandidatePaths() -> [String] {
+        Bundesland.allCases.compactMap { wayGraphStore.path(for: $0) }
+            + EuropaLand.allCases.compactMap { europaWayGraphStore.path(for: $0) }
     }
 
     private func resolveCurrentLocationAsStart(_ location: CLLocation) {
@@ -926,6 +989,54 @@ struct ContentView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
         .padding(.top)
+        // Nach oben wischen blendet den Banner aus statt eines eigenen Buttons (Nutzer-Wunsch:
+        // ein Button weniger auf der Karte) - `translation.height` negativ genug (< -30) reicht als
+        // Schwelle, ohne einen normalen Tap auf die Statistik-Leiste versehentlich auszulösen.
+        .gesture(
+            DragGesture(minimumDistance: 20)
+                .onEnded { value in
+                    guard value.translation.height < -30 else { return }
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isNavigationBannerVisible = false
+                    }
+                }
+        )
+    }
+
+    /// Ersetzt den Banner, solange er ausgeblendet ist (s. `navigationHeaderSection`): schmaler
+    /// Griff statt eines vollen Buttons, damit auf der Karte möglichst wenig Bedienelemente zu sehen
+    /// sind. Tap oder Wisch nach unten holen den Banner zurück - Tap zusätzlich zur Wisch-Geste, da
+    /// Wischen auf einem so schmalen Ziel weniger zuverlässig zu treffen ist.
+    @ViewBuilder
+    private var navigationBannerHandle: some View {
+        if isNavigating && !isNavigationBannerVisible {
+            Capsule()
+                .fill(.regularMaterial)
+                .frame(width: 44, height: 20)
+                .overlay {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 8)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isNavigationBannerVisible = true
+                    }
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 15)
+                        .onEnded { value in
+                            guard value.translation.height > 20 else { return }
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                isNavigationBannerVisible = true
+                            }
+                        }
+                )
+                .accessibilityIdentifier("showNavigationBanner")
+                .accessibilityLabel("Hinweise einblenden")
+        }
     }
 
     /// Nutzer-konfigurierbare Statistik-Leiste (3 oder 6 frei wählbare Felder, s.
@@ -1159,30 +1270,9 @@ struct ContentView: View {
         return isNavigating ? (snappedUserLocationCoordinate ?? raw) : raw
     }
 
-    /// Rotation des Richtungspfeils in `userLocationMarker` relativ zum Bildschirm: `0`, wenn die
-    /// Karte sich bereits selbst mit der Fahrtrichtung mitdreht (Heading-up, s.
-    /// `updateNavigationCamera`) - der Pfeil zeigt dann unabhängig vom Kompass immer nach oben,
-    /// genau wie die Fahrtrichtung auf dem Bildschirm. Sonst (Nord-up oder außerhalb der
-    /// Navigation) die volle Kompass-Richtung, da oben dort immer Norden ist.
-    private var userLocationMarkerRotationDegrees: Double {
-        let heading = locationManager.currentHeading ?? 0
-        let cameraHeading = (isNavigating && isHeadingUpEnabled) ? heading : 0
-        return heading - cameraHeading
-    }
-
     /// Eigene Standort-Markierung statt `UserAnnotation()` (s. `userLocationDisplayCoordinate`).
-    /// Richtungspfeil nur bei Bewegung mit verlässlichem Kompasswert sichtbar, analog zu MapKits
-    /// eingebautem Verhalten (s. ROADMAP.md: "im Stillstand erscheint erwartungsgemäß nur ein
-    /// einfacher Punkt").
     private var userLocationMarker: some View {
-        let showsHeading = isNavigating && currentSpeedKmh > 1 && locationManager.currentHeading != nil
-        return ZStack {
-            if showsHeading {
-                UserHeadingCone()
-                    .fill(Color.blue.opacity(0.35))
-                    .frame(width: 44, height: 44)
-                    .rotationEffect(.degrees(userLocationMarkerRotationDegrees))
-            }
+        ZStack {
             Circle()
                 .fill(.white)
                 .frame(width: 20, height: 20)
@@ -1259,6 +1349,18 @@ struct ContentView: View {
                 }
                 .accessibilityIdentifier("toggleHeadingUp")
                 .accessibilityLabel(isHeadingUpEnabled ? "Heading-up" : "Nord-up")
+
+                Button {
+                    showQuickSettings = true
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .accessibilityIdentifier("openQuickSettings")
+                .accessibilityLabel("Einstellungen")
             }
         }
     }
@@ -1398,13 +1500,13 @@ struct ContentView: View {
         selectedDirectRouteIndex = 0
         guard let start = startPlace?.coordinate, let ziel = zielPlace?.coordinate else { return }
         isLoadingDirectRoute = true
-        // Bevorzugt die Offline-Engine, falls ein Bundesland heruntergeladen ist (ruhige Wege
-        // statt nur die kürzeste Verbindung) - `path(for:)` ist eine schnelle, synchrone
-        // Existenzprüfung, daher unproblematisch vor dem Start des Tasks.
-        let offlineGraphPath = Bundesland.allCases.compactMap { wayGraphStore.path(for: $0) }.first
+        // Bevorzugt die Offline-Engine, falls eine Region (Bundesland oder Land) heruntergeladen
+        // ist, die Start und Ziel abdeckt (ruhige Wege statt nur die kürzeste Verbindung) - s.
+        // `offlineGraphCandidatePaths`.
+        let candidatePaths = offlineGraphCandidatePaths()
         Task {
-            if let offlineGraphPath {
-                let offlineRoutes = await Self.offlineDirectRoutes(path: offlineGraphPath, from: start, to: ziel)
+            for path in candidatePaths {
+                let offlineRoutes = await Self.offlineDirectRoutes(path: path, from: start, to: ziel)
                 if !offlineRoutes.isEmpty {
                     isLoadingDirectRoute = false
                     if isDirectRouteMode { directRoutes = offlineRoutes }
@@ -1418,18 +1520,20 @@ struct ContentView: View {
     }
 
     /// Berechnet die Route(n) über die heruntergeladene Offline-Engine (siehe
-    /// `WayGraphRepository`/`BikeRoutingEngine`), abseits des Hauptthreads (Laden des Graphen +
-    /// A*-Suche). Leeres Array, wenn Start oder Ziel außerhalb der Reichweite des
-    /// heruntergeladenen Bundeslands liegen.
+    /// `WayGraphRepository`/`BikeRoutingEngine`), abseits des Hauptthreads (A*-Suche). Der Graph
+    /// selbst wird über `WayGraphCache` nur beim allerersten Zugriff von der Festplatte geladen -
+    /// bei großen Ländern (Niederlande: 466 MB) dauerte das erneute Parsen bei **jeder**
+    /// Berechnung spürbar lange (Live-Test Rotterdam, 2026-07-26). Leeres Array, wenn Start oder
+    /// Ziel außerhalb der Reichweite der heruntergeladenen Region liegen.
     private static func offlineDirectRoutes(
         path: String, from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D
     ) async -> [DirectRoute] {
-        await Task.detached(priority: .userInitiated) {
-            guard let repository = WayGraphRepository(path: path) else { return [] }
+        let results = await Task.detached(priority: .userInitiated) { () -> [BikeRoutingEngine.Result] in
+            guard let repository = WayGraphCache.shared.repository(for: path) else { return [] }
             return BikeRoutingEngine(repository: repository)
                 .routes(from: start, to: end, maxAlternatives: 2)
-                .map(DirectRoute.init(offlineResult:))
         }.value
+        return results.map(DirectRoute.init(offlineResult:))
     }
 
     /// Zeigt Wegbeschreibungen zwischen Start/Ziel und dem jeweils nächstgelegenen Punkt der
@@ -1460,8 +1564,8 @@ struct ContentView: View {
     private static func directions(
         from source: CLLocationCoordinate2D, to destination: CLLocationCoordinate2D, alternates: Bool = false
     ) async -> [MKRoute] {
-        let sourceItem = MKMapItem(placemark: MKPlacemark(coordinate: source))
-        let destinationItem = MKMapItem(placemark: MKPlacemark(coordinate: destination))
+        let sourceItem = MKMapItem(location: CLLocation(latitude: source.latitude, longitude: source.longitude), address: nil)
+        let destinationItem = MKMapItem(location: CLLocation(latitude: destination.latitude, longitude: destination.longitude), address: nil)
 
         let cyclingRequest = MKDirections.Request()
         cyclingRequest.source = sourceItem
@@ -2027,20 +2131,6 @@ struct DirectRoute: Identifiable {
             }
             return Step(instructions: $0.instructions, endCoordinate: $0.endCoordinate, direction: direction)
         }
-    }
-}
-
-/// Richtungspfeil hinter `ContentView.userLocationMarker` - Basis überlappt den Standort-Punkt
-/// (wird von dessen opaken Kreisen verdeckt), Spitze zeigt nach oben (Fahrtrichtung nach Rotation).
-private struct UserHeadingCone: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY * 0.72))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
-        return path
     }
 }
 

@@ -54,7 +54,7 @@ final class LocationSearchViewModel: NSObject, MKLocalSearchCompleterDelegate {
         let searchRequest = MKLocalSearch.Request(completion: completion)
         let search = MKLocalSearch(request: searchRequest)
         let response = try await search.start()
-        guard let coordinate = response.mapItems.first?.placemark.coordinate else {
+        guard let coordinate = response.mapItems.first?.location.coordinate else {
             throw ResolveError.noResult
         }
         return coordinate

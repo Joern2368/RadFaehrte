@@ -6,32 +6,53 @@
 import CoreLocation
 import SQLite3
 
-/// Liest die im App-Bundle mitgelieferte Radrouten-Datenbank (read-only).
+/// Liest die im App-Bundle mitgelieferten Radrouten-Datenbanken (read-only). Deutschland
+/// (`routes.sqlite`) ist Pflicht, weitere Länder (z. B. `netherlands.sqlite`) werden nur
+/// eingebunden, wenn die jeweilige Datei tatsächlich im Bundle liegt - alle Datenbanken teilen
+/// sich dasselbe Schema, Ergebnisse werden einfach zusammengeführt. OSM-Relations-IDs sind
+/// global eindeutig (planetweiter Namensraum), daher keine Kollisionsgefahr zwischen Ländern.
 final class RouteRepository {
 
-    private var db: OpaquePointer?
+    private static let bundledResourceNames = ["routes", "netherlands", "poland"]
+
+    private var databases: [OpaquePointer] = []
 
     init() {
-        guard let url = Bundle.main.url(forResource: "routes", withExtension: "sqlite") else {
-            assertionFailure("routes.sqlite fehlt im App-Bundle")
-            return
-        }
-        if sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil) != SQLITE_OK {
-            assertionFailure("Konnte routes.sqlite nicht öffnen: \(String(cString: sqlite3_errmsg(db)))")
-            db = nil
+        for name in Self.bundledResourceNames {
+            guard let url = Bundle.main.url(forResource: name, withExtension: "sqlite") else {
+                if name == "routes" {
+                    assertionFailure("routes.sqlite fehlt im App-Bundle")
+                }
+                continue
+            }
+            var handle: OpaquePointer?
+            guard sqlite3_open_v2(url.path, &handle, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,
+                  let handle else {
+                assertionFailure("Konnte \(name).sqlite nicht öffnen: \(String(cString: sqlite3_errmsg(handle)))")
+                continue
+            }
+            databases.append(handle)
         }
     }
 
     deinit {
-        sqlite3_close(db)
+        for db in databases {
+            sqlite3_close(db)
+        }
     }
 
     /// Alle Routen, deren Bounding Box das übergebene Rechteck überschneidet.
     func routesOverlapping(
         minLon: Double, minLat: Double, maxLon: Double, maxLat: Double
     ) -> [BikeRoute] {
-        guard let db else { return [] }
+        databases.flatMap {
+            routesOverlapping(in: $0, minLon: minLon, minLat: minLat, maxLon: maxLon, maxLat: maxLat)
+        }
+    }
 
+    private func routesOverlapping(
+        in db: OpaquePointer, minLon: Double, minLat: Double, maxLon: Double, maxLat: Double
+    ) -> [BikeRoute] {
         let sql = """
             SELECT id, name, network, ref, distance_km, operator, geometry
             FROM routes

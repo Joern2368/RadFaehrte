@@ -34,7 +34,9 @@ struct RootTabView: View {
     @State private var drivenToursVersion = 0
     /// Eine Instanz für die ganze App, damit ein in den Einstellungen heruntergeladenes
     /// Bundesland sofort von `ContentView`s "Direkte Fahrrad-Route" gesehen wird.
-    private let wayGraphStore = WayGraphStore()
+    private let wayGraphStore = WayGraphStore<Bundesland>()
+    /// Analog `wayGraphStore`, aber für Länder außerhalb Deutschlands (aktuell nur Niederlande).
+    private let europaWayGraphStore = WayGraphStore<EuropaLand>()
 
     var body: some View {
         ZStack {
@@ -44,6 +46,7 @@ struct RootTabView: View {
                         routeToStart: $routeToStart,
                         drivenTourStore: drivenTourStore,
                         wayGraphStore: wayGraphStore,
+                        europaWayGraphStore: europaWayGraphStore,
                         onTourSaved: { drivenToursVersion += 1 }
                     )
                 }
@@ -61,7 +64,7 @@ struct RootTabView: View {
                     )
                 }
                 Tab("Einstellungen", systemImage: "gearshape", value: AppTab.settings) {
-                    SettingsView(wayGraphStore: wayGraphStore)
+                    SettingsView(wayGraphStore: wayGraphStore, europaWayGraphStore: europaWayGraphStore)
                 }
             }
 
@@ -76,7 +79,28 @@ struct RootTabView: View {
                 showSplash = false
             }
         }
+        .task {
+            preloadDownloadedWayGraphs()
+        }
         .onOpenURL(perform: importSharedGPX)
+    }
+
+    /// Lädt bereits heruntergeladene Wege-Graphen (Bundesländer + Länder) direkt beim App-Start
+    /// im Hintergrund in den `WayGraphCache` vor, statt erst bei der ersten Routenberechnung -
+    /// bei großen Ländern (Niederlande: 466 MB) war genau dieses erste Laden beim Live-Test in
+    /// Rotterdam spürbar langsam (2026-07-26/27). Ist der Nutzer schon länger in der App
+    /// unterwegs (Adresse eingeben, Karte ansehen), bevor er tatsächlich eine Route anfragt, ist
+    /// der Graph mit etwas Glück bereits fertig geladen. `.background`-Priorität, damit das nicht
+    /// mit dem eigentlichen App-Start/der UI um Ressourcen konkurriert.
+    private func preloadDownloadedWayGraphs() {
+        let paths = Bundesland.allCases.compactMap { wayGraphStore.path(for: $0) }
+            + EuropaLand.allCases.compactMap { europaWayGraphStore.path(for: $0) }
+        guard !paths.isEmpty else { return }
+        Task.detached(priority: .background) {
+            for path in paths {
+                _ = WayGraphCache.shared.repository(for: path)
+            }
+        }
     }
 
     /// Wird aufgerufen, wenn eine GPX-Datei über das Teilen-Menü/"Öffnen mit" an die App

@@ -413,7 +413,7 @@
 				DEVELOPMENT_TEAM = 8WNRX5RP7M;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = RadFaehrte/Supplemental-Info.plist;
+				INFOPLIST_FILE = "RadFaehrte/Supplemental-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Der Standort wird verwendet, um deine Position während der Fahrt auf der Karte anzuzeigen.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -448,7 +448,7 @@
 				DEVELOPMENT_TEAM = 8WNRX5RP7M;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = RadFaehrte/Supplemental-Info.plist;
+				INFOPLIST_FILE = "RadFaehrte/Supplemental-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Der Standort wird verwendet, um deine Position während der Fahrt auf der Karte anzuzeigen.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

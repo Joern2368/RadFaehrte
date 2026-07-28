@@ -12,6 +12,9 @@ enum AppSettingsKey {
     static let navigationLookaheadMeters = "navigationLookaheadMeters"
     static let navigationStatFieldCount = "navigationStatFieldCount"
     static let navigationStatSlots = "navigationStatSlots"
+    static let appearanceMode = "appearanceMode"
+    static let mapStyle = "mapStyle"
+    static let navigationDefaultHeadingUp = "navigationDefaultHeadingUp"
 }
 
 enum AppSettingsDefaults {
@@ -34,4 +37,12 @@ enum AppSettingsDefaults {
     ]
     static let navigationStatSlots: String =
         navigationStatSlotsDefaultKinds.map(\.rawValue).joined(separator: ",")
+
+    static let appearanceMode: String = AppearanceMode.system.rawValue
+    static let mapStyle: String = MapStyleOption.standard.rawValue
+
+    /// Entspricht dem bisher fest verdrahteten Start-Zustand von `isHeadingUpEnabled` in
+    /// `ContentView` (`true`), damit sich für Nutzer, die die Einstellung nicht anfassen, am
+    /// bisherigen Verhalten nichts ändert.
+    static let navigationDefaultHeadingUp: Bool = true
 }

@@ -8,7 +8,7 @@ import CoreLocation
 /// A*-Routing über den Wege-Graphen eines heruntergeladenen Bundeslands (`WayGraphRepository`),
 /// das ruhige Wege/Radwege bevorzugt statt nur die kürzeste Verbindung zu suchen (das leistet
 /// bereits Apples MKDirections für die "Direkte Fahrrad-Route" online).
-final class BikeRoutingEngine {
+nonisolated final class BikeRoutingEngine {
     /// Kleinstmöglicher Gewichtungsfaktor aus `Scripts/build_way_graph.py`
     /// (HIGHWAY_WEIGHTS["cycleway"] * CYCLE_INFRA_BONUS = 0.6 * 0.7 = 0.42) als konservative
     /// Untergrenze für die A*-Heuristik, damit sie nie die tatsächlichen Restkosten überschätzt
@@ -23,6 +23,21 @@ final class BikeRoutingEngine {
     /// verlaufen. 3,5 m ist eine grobe Schätzung für den typischen Abstand eines baulich
     /// getrennten Radwegs zur Fahrbahnmitte, keine echte Vermessung.
     private static let cycleOffsetMeters = 3.5
+
+    /// Obergrenze für besuchte Knoten pro Suche - ohne sie würde eine erfolglose Suche (z. B. weil
+    /// `start`/`end` zwar auf einen Knoten snappen, aber keine sinnvolle Verbindung dazwischen
+    /// existiert) im schlimmsten Fall den kompletten Graphen durchlaufen, bevor sie aufgibt. Bei
+    /// den ursprünglichen, kleinen Bundesländern (Bremen, Saarland) unkritisch, bei ganzen Ländern
+    /// wie den Niederlanden (9,6 Mio. Knoten) oder Polen (31 Mio.) aber ein reales Problem: eine
+    /// erfolglose Suche über Minuten und mit stark wachsendem Speicherverbrauch (`gScore`/
+    /// `cameFrom`/`visited` wachsen mit jedem besuchten Knoten) - beobachtet als scheinbarer
+    /// App-Absturz beim Live-Test in Rotterdam (2026-07-26). Bricht die Suche stattdessen früh ab
+    /// und liefert `nil` zurück, `routes(from:to:)` fällt dann wie bei "kein Pfad gefunden" auf
+    /// Online-Routing zurück (s. `ContentView.offlineGraphCandidatePaths`). 300.000 ist grob
+    /// geschätzt (deutlich mehr als eine normale lokale Stadt-Route je berühren sollte, aber
+    /// klein genug, um im ungünstigen Fall in wenigen Sekunden statt Minuten abzubrechen) - noch
+    /// nicht gegen echte Grenzfälle kalibriert.
+    private static let maxVisitedNodes = 300_000
 
     private let repository: WayGraphRepository
 
@@ -116,7 +131,7 @@ final class BikeRoutingEngine {
         var cameFromOffsetSide: [Int: Int] = [:]
         // Straßenname der Kante, über die ein Knoten erreicht wurde - für die Schritt-Erzeugung
         // (`buildSteps`), analog zu `cameFromOffsetSide`.
-        var cameFromNameIndex: [Int: Int] = [:]
+        var cameFromNameIndex: [Int: UInt32] = [:]
         var visited: Set<Int> = []
         var queue = AStarQueue()
         queue.push(priority: heuristic(startNode), node: startNode)
@@ -125,19 +140,21 @@ final class BikeRoutingEngine {
             guard !visited.contains(current.node) else { continue }
             visited.insert(current.node)
             if current.node == endNode { break }
+            guard visited.count < Self.maxVisitedNodes else { return nil }
 
-            for edge in repository.adjacency[current.node] {
-                guard !visited.contains(edge.toNode),
-                      !excludedEdges.contains(EdgeKey(from: current.node, to: edge.toNode))
+            for edge in repository.edges(from: current.node) {
+                let toNode = Int(edge.toNode)
+                guard !visited.contains(toNode),
+                      !excludedEdges.contains(EdgeKey(from: current.node, to: toNode))
                 else { continue }
-                let tentativeG = (gScore[current.node] ?? .greatestFiniteMagnitude) + edge.weight
-                if tentativeG < (gScore[edge.toNode] ?? .greatestFiniteMagnitude) {
-                    gScore[edge.toNode] = tentativeG
-                    realDistance[edge.toNode] = (realDistance[current.node] ?? 0) + edge.distanceMeters
-                    cameFrom[edge.toNode] = current.node
-                    cameFromOffsetSide[edge.toNode] = edge.offsetSide
-                    cameFromNameIndex[edge.toNode] = edge.nameIndex
-                    queue.push(priority: tentativeG + heuristic(edge.toNode), node: edge.toNode)
+                let tentativeG = (gScore[current.node] ?? .greatestFiniteMagnitude) + Double(edge.weight)
+                if tentativeG < (gScore[toNode] ?? .greatestFiniteMagnitude) {
+                    gScore[toNode] = tentativeG
+                    realDistance[toNode] = (realDistance[current.node] ?? 0) + Double(edge.distanceMeters)
+                    cameFrom[toNode] = current.node
+                    cameFromOffsetSide[toNode] = Int(edge.offsetSide)
+                    cameFromNameIndex[toNode] = edge.nameIndex
+                    queue.push(priority: tentativeG + heuristic(toNode), node: toNode)
                 }
             }
         }
@@ -167,7 +184,7 @@ final class BikeRoutingEngine {
     /// ohne die Kreuzungs-/Namensänderungs-Heuristiken echter Navigations-Engines, kann also bei
     /// sanften Straßenschwenks gelegentlich daneben liegen (Live-Test/Kalibrierung nötig).
     private static func buildSteps(
-        path: [Int], nameIndex: [Int: Int], repository: WayGraphRepository
+        path: [Int], nameIndex: [Int: UInt32], repository: WayGraphRepository
     ) -> [Result.Step] {
         guard path.count >= 2 else { return [] }
 
@@ -291,7 +308,7 @@ final class BikeRoutingEngine {
 
 /// Binärer Min-Heap für A*, geordnet nach Priorität (f-Score). Analog `DijkstraQueue` in
 /// `RouteMatcher.swift`.
-private struct AStarQueue {
+private nonisolated struct AStarQueue {
     private var elements: [(priority: Double, node: Int)] = []
 
     mutating func push(priority: Double, node: Int) {

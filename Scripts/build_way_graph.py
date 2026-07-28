@@ -74,27 +74,28 @@ NO_NAME = 0xFFFFFFFF
 
 def offset_side(tags):
     """Seite des Radwegs relativ zur digitalisierten Richtung des Ways (erster -> letzter
-    Knoten in `way.nodes`). `cycleway:right`/`cycleway:left` sind eindeutig; bei `cycleway:both`
-    oder unqualifiziertem `cycleway=track/lane` ist die Seite in OSM nicht angebbar - dort wird
-    vereinfachend eine Seite angenommen (s. u.).
+    Knoten in `way.nodes`). Nur bei eindeutigem `cycleway:right`/`cycleway:left` wird versetzt
+    dargestellt (tag-treu). Bei `cycleway:both` oder unqualifiziertem `cycleway=track/lane` gibt
+    OSM die Seite schlicht nicht her - dort **kein Versatz** (Linie bleibt auf der
+    Straßen-Mittellinie), statt eine Seite zu raten.
 
-    ⚠️ Rückgabewerte bewusst gegenüber der OSM-Tag-Bedeutung vertauscht (`cycleway:right` ->
-    `OFFSET_LEFT` statt `OFFSET_RIGHT` usw.): Die erste Version folgte der OSM-Konvention direkt
-    und zeigte die Linie live an drei realen Stellen in Bremen (Findorffstraße, Crüsemannallee,
-    Richtweg) konsequent auf der falschen (linken statt rechten) Seite - an allen drei gleich,
-    was für einen systematischen Fehler irgendwo in der Verarbeitungskette spricht statt für
-    OSM-Dateneigenheiten. Mit vertauschten Rückgabewerten an allen drei Stellen per Live-Test
-    bestätigt korrekt. Die genaue Ursache der Vertauschung (Python hier vs. `offsetPoint` in
-    `BikeRoutingEngine.swift`) ist nicht abschließend geklärt - falls hier oder an der Kanten-
-    Richtungslogik (`forward`/`backward` weiter unten) künftig etwas geändert wird, unbedingt
-    wieder gegen echte Fahrten testen, nicht nur gegen die OSM-Tag-Definition."""
+    ⚠️ Historie: Frühere Versionen versuchten hier zu raten - erst "immer links" (nach einem
+    Live-Test an Findorffstraße/Crüsemannallee/Richtweg, die damals mit tag-treuer Logik links
+    statt rechts zeigten), dann "immer rechts" (nach gängiger deutscher OSM-Konvention, plus
+    Overpass-Beleg bei "Außer der Schleifmühle" mit eindeutigem `cycleway:right`-Tag, das durch
+    die "immer links"-Regel falsch herum landete). Beide Rate-Regeln wurden live widerlegt: Der
+    Nutzer verifizierte 2026-07-26 nach der "immer rechts"-Umstellung erneut vor Ort, dass
+    Richtweg und Findorffstraße (beide größtenteils unqualifiziertes `cycleway=track`, keine
+    separat kartierte Radweg-Geometrie in der Nähe laut Overpass) wieder falsch herum zeigten -
+    diesmal weil der reale Weg dort links liegt. Fazit: Bei fehlender Seitenangabe im Tag gibt es
+    keine zuverlässige Standardseite, jeder feste Rateversuch ist auf einem Teil der Straßen
+    falsch. Deshalb jetzt bewusst kein Versatz mehr bei mehrdeutigen Tags - lieber ungenau
+    (Linie auf der Straße, keine Seite behauptet) als aktiv falsch. Falls hier oder an der
+    Kanten-Richtungslogik (`forward`/`backward` weiter unten) künftig etwas geändert wird,
+    unbedingt gegen echte Fahrten testen, nicht nur gegen die OSM-Tag-Definition."""
     if tags.get("cycleway:right") in CYCLE_INFRA_VALUES:
-        return OFFSET_LEFT
-    if tags.get("cycleway:left") in CYCLE_INFRA_VALUES:
         return OFFSET_RIGHT
-    if tags.get("cycleway:both") in CYCLE_INFRA_VALUES:
-        return OFFSET_LEFT
-    if tags.get("cycleway") in CYCLE_INFRA_VALUES:
+    if tags.get("cycleway:left") in CYCLE_INFRA_VALUES:
         return OFFSET_LEFT
     return OFFSET_NONE
 

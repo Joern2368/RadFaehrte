@@ -20,7 +20,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "magnifyingglass",
             title: "Route suchen",
-            text: "Start und Ziel eingeben - RadFährte zeigt dir sowohl offizielle, beschilderte Radrouten in der Nähe als auch eine direkte Fahrrad-Route. Durch die Treffer wischt du einfach durch."
+            text: "Start und Ziel eingeben - RadFährte zeigt dir sowohl offizielle, beschilderte Radrouten in der Nähe als auch eine direkte Fahrrad-Route. Durch die Treffer wischt du einfach durch. Die Adressvorschläge sind auf deine Nähe eingegrenzt - suchst du z. B. von unterwegs eine Adresse in einer weit entfernten Stadt (etwa zu Hause), wird sie manchmal nicht vorgeschlagen. Ergänze in dem Fall den Ort in der Sucheingabe (z. B. \"Bückeburger Straße, Bremen\")."
         ),
         Topic(
             icon: "location.north.line.fill",
@@ -30,12 +30,12 @@ struct HowItWorksView: View {
         Topic(
             icon: "square.grid.3x2",
             title: "Statistik-Leiste anpassen",
-            text: "Die Zeile unter der Anweisung während der Navigation zeigt 3 oder 6 frei wählbare Werte - z. B. aktuelles oder maximales Tempo, zurückgelegte Strecke, Entfernung zum Ziel, aktuelle Höhe, Höhenmeter berg­auf/-ab, Durchschnittstempo, Fahrtzeit, reine Fahrzeit ohne Stopps, geschätzte Ankunftszeit oder Restzeit bis zum Ziel. In den Einstellungen unter \"Anzeige während der Navigation\" stellst du Anzahl und Belegung jedes einzelnen Feldes ein."
+            text: "Die Zeile unter der Anweisung während der Navigation zeigt 3 oder 6 frei wählbare Werte - z. B. aktuelles oder maximales Tempo, zurückgelegte Strecke, Entfernung zum Ziel, aktuelle Höhe, Höhenmeter berg­auf/-ab, Durchschnittstempo, Fahrtzeit, reine Fahrzeit ohne Stopps, geschätzte Ankunftszeit oder Restzeit bis zum Ziel. In den Einstellungen unter \"Navigation\" > \"Statistik-Leiste\" stellst du Anzahl und Belegung jedes einzelnen Feldes ein."
         ),
         Topic(
             icon: "hand.tap",
             title: "Steuerung während der Fahrt",
-            text: "Oben rechts: Navigation beenden (✕), zwischen 2D- und 3D-Ansicht wechseln, sowie zwischen \"Gehrichtung oben\" und \"Norden oben\" umschalten. Verschiebst oder zoomst du die Karte selbst, pausiert die automatische Verfolgung - ein \"Zentrieren\"-Banner unten bringt dich mit einem Tipp zurück zu deiner Position. Wie viele Meter du in der 2D-Ansicht vorausschauen kannst (z. B. wie früh eine Abbiegung sichtbar wird), stellst du in den Einstellungen unter \"Sichtweite beim Navigieren\" ein."
+            text: "Oben links: Navigation beenden (Pause-Symbol, mit Sicherheitsabfrage). Oben rechts: zwischen 2D- und 3D-Ansicht wechseln, zwischen \"Gehrichtung oben\" und \"Norden oben\" umschalten, sowie über das Zahnrad-Symbol die wichtigsten Einstellungen (Tempo, Sichtweite, Statistik-Leiste) direkt während der Fahrt ändern, ohne die Navigation zu verlassen. Den Anweisungs-Banner samt Statistik-Leiste blendest du per Wisch nach oben aus - dann geht die Karte bis an den Bildschirmrand; ein kleiner Griff oben holt ihn per Tipp oder Wisch nach unten zurück. Verschiebst oder zoomst du die Karte selbst, pausiert die automatische Verfolgung - ein \"Zentrieren\"-Banner unten bringt dich mit einem Tipp zurück zu deiner Position."
         ),
         Topic(
             icon: "location.fill.viewfinder",
@@ -55,7 +55,17 @@ struct HowItWorksView: View {
         Topic(
             icon: "arrow.down.circle",
             title: "Offline-Karten",
-            text: "Für die \"Direkte Fahrrad-Route\" lassen sich in den Einstellungen Bundesländer herunterladen. Ist eins verfügbar, bevorzugt die App automatisch ruhige Wege und Radwege statt nur der kürzesten Verbindung - auch ganz ohne Internetverbindung. Verläuft neben der Straße ein baulich getrennter Radweg, wird die Linie dafür leicht seitlich versetzt dargestellt statt auf der Straßenmitte. Die Navigations-Kopfzeile zeigt dabei echte Anweisungen mit Straßennamen und geschätzter Abbiege-Richtung, keine reine \"Route folgen\"-Anzeige mehr."
+            text: "Für die \"Direkte Fahrrad-Route\" lassen sich in den Einstellungen unter \"Offline-Karten Deutschland\" Bundesländer und unter \"Offline-Karten Europa\" weitere Länder (bisher Niederlande und Polen) herunterladen. Ist eine Region verfügbar, bevorzugt die App dort automatisch ruhige Wege und Radwege statt nur der kürzesten Verbindung - auch ganz ohne Internetverbindung. Verläuft neben der Straße ein baulich getrennter Radweg, wird die Linie dafür leicht seitlich versetzt dargestellt statt auf der Straßenmitte. Die Navigations-Kopfzeile zeigt dabei echte Anweisungen mit Straßennamen und geschätzter Abbiege-Richtung, keine reine \"Route folgen\"-Anzeige mehr. Das funktioniert innerhalb einer heruntergeladenen Region - führt die Fahrt darüber hinaus (z. B. über eine Landes- oder Staatsgrenze), berechnet die App die Route ab dort online, wofür dann eine Internetverbindung nötig ist. Bei großen Ländern kann vor allem die erste Berechnung nach dem Öffnen der App spürbar länger dauern als bei einem kleinen Bundesland (die Straßendaten werden einmal geladen) - kein Fehler, einfach kurz warten. Danach ist es in derselben Sitzung wieder schnell, da die geladenen Daten zwischengespeichert werden."
+        ),
+        Topic(
+            icon: "circle.lefthalf.filled",
+            title: "Erscheinungsbild",
+            text: "In den Einstellungen stellst du zwischen \"System\", \"Hell\" und \"Dunkel\" um. \"System\" folgt automatisch der Geräteeinstellung (z. B. abends automatisch dunkel), die anderen beiden erzwingen unabhängig davon immer dieselbe Darstellung."
+        ),
+        Topic(
+            icon: "map",
+            title: "Kartenansicht anpassen",
+            text: "In den Einstellungen unter \"Karte\" wählst du den Kartenstil (Standard, Satellit oder Hybrid) sowie die Ausrichtung, mit der eine neue Navigation startet (Fahrtrichtung oben oder Norden oben) - während der Fahrt bleibt der Umschalt-Button dafür wie gewohnt verfügbar."
         )
     ]
 
