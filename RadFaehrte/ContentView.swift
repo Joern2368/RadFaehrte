@@ -125,6 +125,9 @@ struct ContentView: View {
     @State private var tourTrackPoints: [CLLocationCoordinate2D] = []
     @State private var tourSummary: TourSummary?
     @State private var currentDirectRouteStepIndex = 0
+    /// Zuletzt für ein Haptik-Signal an die Apple Watch genutzter Schritt-Index (s.
+    /// `checkWatchHapticTrigger`) - verhindert wiederholtes Auslösen für denselben Abbiege-Schritt.
+    @State private var lastWatchHapticStepIndex: Int?
 
     /// Karte geht bis an den Bildschirmrand (kein Rand, keine abgerundeten Ecken), solange
     /// navigiert wird und der Nutzer den Banner per Button ausgeblendet hat. Ist er eingeblendet,
@@ -364,6 +367,8 @@ struct ContentView: View {
         isUserLocationSnapped = false
         snappedUserLocationCoordinate = locationManager.currentLocation?.coordinate
         currentDirectRouteStepIndex = 0
+        lastWatchHapticStepIndex = nil
+        updateWatchNavigationState()
         if let location = locationManager.currentLocation {
             // Bewusst `animated: false` (sofortiges Setzen ohne Animation), nicht
             // `recenterAnimation: true`: Live-Test mit einer sehr langen Strecke (Rotterdam→
@@ -390,6 +395,7 @@ struct ContentView: View {
         UIApplication.shared.isIdleTimerDisabled = false
         isNavigating = false
         lastRerouteAt = nil
+        WatchSessionManager.shared.send(.idle)
         if let tourStartTime {
             let duration = Date().timeIntervalSince(tourStartTime)
             let distanceKm = tourDistanceMeters / 1000
@@ -469,6 +475,8 @@ struct ContentView: View {
                 advanceDirectRouteStepIfNeeded(location)
                 checkDirectRouteDeviation(location)
                 updateDisplayedUserLocation(location)
+                updateWatchNavigationState()
+                checkWatchHapticTrigger(location)
             }
             updateNavigationCamera()
         } else if isResolvingCurrentLocationForStart, let location = locationManager.currentLocation {
@@ -737,6 +745,47 @@ struct ContentView: View {
     /// um den Schwellenwert herum schwankt, nicht wiederholt Netzwerk-/Rechenlast auslöst.
     private static let directRouteRerouteCooldown: TimeInterval = 15
 
+    /// Spiegelt die aktuelle Navigations-Kopfzeile (Anweisung + Live-Entfernung, s.
+    /// `navigationInstructionTitle`/`currentStepDistanceText`) an eine gekoppelte Apple Watch -
+    /// nutzt bewusst dieselben berechneten Werte wie die iPhone-Anzeige, damit beide nie
+    /// auseinanderlaufen können.
+    private func updateWatchNavigationState() {
+        let direction: WatchNavState.Direction
+        switch previewedStep?.direction ?? .straight {
+        case .straight: direction = .straight
+        case .left: direction = .left
+        case .right: direction = .right
+        }
+        let state = WatchNavState(
+            isNavigating: true,
+            instructionText: navigationInstructionTitle,
+            distanceText: currentStepDistanceText ?? navigationInstructionSubtitle,
+            direction: direction,
+            routeName: isDirectRouteMode ? nil : selectedMatch?.route.name
+        )
+        WatchSessionManager.shared.send(state)
+    }
+
+    /// Löst ein kurzes Haptik-Signal auf der Apple Watch aus, kurz bevor eine Abbiegung der
+    /// "Direkten Fahrrad-Route" ansteht (< 50 m, wie der 30-m-Radius von
+    /// `advanceDirectRouteStepIfNeeded`, aber etwas großzügiger, damit die Vibration spürbar vor
+    /// der eigentlichen Abbiegung ankommt). Nur bei echten Abbiegungen (`.left`/`.right`) - bei
+    /// `.straight` (bzw. kuratierten Radrouten ohne Schritt-Daten) gibt es nichts anzukündigen.
+    /// `lastWatchHapticStepIndex` verhindert wiederholtes Auslösen für denselben Schritt.
+    private func checkWatchHapticTrigger(_ location: CLLocation) {
+        guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex),
+              let previewedStep, previewedStep.direction != .straight,
+              lastWatchHapticStepIndex != currentDirectRouteStepIndex
+        else { return }
+        let steps = directRoutes[selectedDirectRouteIndex].steps
+        guard steps.indices.contains(currentDirectRouteStepIndex) else { return }
+        let stepEnd = steps[currentDirectRouteStepIndex].endCoordinate
+        let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
+        guard location.distance(from: stepEndLocation) < 50 else { return }
+        lastWatchHapticStepIndex = currentDirectRouteStepIndex
+        WatchSessionManager.shared.sendHapticTurnEvent()
+    }
+
     private func checkDirectRouteDeviation(_ location: CLLocation) {
         guard isDirectRouteMode, !isRerouting, zielPlace != nil,
               directRoutes.indices.contains(selectedDirectRouteIndex) else { return }
@@ -771,6 +820,7 @@ struct ContentView: View {
             directRoutes = newRoutes
             selectedDirectRouteIndex = 0
             currentDirectRouteStepIndex = 0
+            lastWatchHapticStepIndex = nil
         }
     }
 

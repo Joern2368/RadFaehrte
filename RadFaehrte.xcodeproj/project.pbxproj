@@ -6,7 +6,25 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0AC8671102DD4020CCBCD558 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 74203D39670D2F01DEDE5D2A /* Foundation.framework */; };
+		204E6C73D4A466401881C3E1 /* WatchNavState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A06B3DE0117F68D2DBE75584 /* WatchNavState.swift */; };
+		3D184419E75E692C6E48FE21 /* RadFaehrteWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950B194F43878E754C2170B0 /* RadFaehrteWatchApp.swift */; };
+		41EFAC853B1D19D65B96FA0E /* WatchContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268CD28DEF5C686EA215D2FE /* WatchContentView.swift */; };
+		724BEDB676164A49B66C4034 /* WatchNavState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A06B3DE0117F68D2DBE75584 /* WatchNavState.swift */; };
+		D1DBBAEA8278262048B84277 /* WatchSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E7EE77802AE0B8C52C30E5 /* WatchSessionManager.swift */; };
+		F7A87BD9F7CE12D63C2C5006 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3DED7B1BEFE46BE12311D7A5 /* Assets.xcassets */; };
+		F90A9052034ED0F9C3AEA340 /* RadFaehrte Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = C2375F41AB536759EFA0F0E9 /* RadFaehrte Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		0A9E87AECC7C7AFBA69B37D4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 80314EA4300A52A100FF6910 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CD4F0F91E323DF77E34478B3;
+			remoteInfo = "RadFaehrte Watch App";
+		};
 		80314EBA300A52A300FF6910 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 80314EA4300A52A100FF6910 /* Project object */;
@@ -23,10 +41,31 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		AA25F77F523C3A3060C15694 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				F90A9052034ED0F9C3AEA340 /* RadFaehrte Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		22E7EE77802AE0B8C52C30E5 /* WatchSessionManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchSessionManager.swift; sourceTree = "<group>"; };
+		268CD28DEF5C686EA215D2FE /* WatchContentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchContentView.swift; sourceTree = "<group>"; };
+		3DED7B1BEFE46BE12311D7A5 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		74203D39670D2F01DEDE5D2A /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		80314EAC300A52A100FF6910 /* RadFaehrte.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RadFaehrte.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		80314EB9300A52A300FF6910 /* RadFaehrteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RadFaehrteTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		80314EC3300A52A300FF6910 /* RadFaehrteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RadFaehrteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		950B194F43878E754C2170B0 /* RadFaehrteWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RadFaehrteWatchApp.swift; sourceTree = "<group>"; };
+		A06B3DE0117F68D2DBE75584 /* WatchNavState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchNavState.swift; sourceTree = "<group>"; };
+		C2375F41AB536759EFA0F0E9 /* RadFaehrte Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "RadFaehrte Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -50,11 +89,15 @@
 		};
 		80314EBC300A52A300FF6910 /* RadFaehrteTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = RadFaehrteTests;
 			sourceTree = "<group>";
 		};
 		80314EC6300A52A300FF6910 /* RadFaehrteUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = RadFaehrteUITests;
 			sourceTree = "<group>";
 		};
@@ -82,9 +125,38 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		900C16F78C3D3577EBB687DE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0AC8671102DD4020CCBCD558 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		1B9A9CD2F93E8A891B203EE9 /* RadFaehrteShared */ = {
+			isa = PBXGroup;
+			children = (
+				A06B3DE0117F68D2DBE75584 /* WatchNavState.swift */,
+			);
+			name = RadFaehrteShared;
+			path = RadFaehrteShared;
+			sourceTree = "<group>";
+		};
+		684145F640AC5A69217E9A78 /* RadFaehrte Watch App */ = {
+			isa = PBXGroup;
+			children = (
+				950B194F43878E754C2170B0 /* RadFaehrteWatchApp.swift */,
+				268CD28DEF5C686EA215D2FE /* WatchContentView.swift */,
+				22E7EE77802AE0B8C52C30E5 /* WatchSessionManager.swift */,
+				3DED7B1BEFE46BE12311D7A5 /* Assets.xcassets */,
+			);
+			name = "RadFaehrte Watch App";
+			path = "RadFaehrte Watch App";
+			sourceTree = "<group>";
+		};
 		80314EA3300A52A100FF6910 = {
 			isa = PBXGroup;
 			children = (
@@ -92,6 +164,9 @@
 				80314EBC300A52A300FF6910 /* RadFaehrteTests */,
 				80314EC6300A52A300FF6910 /* RadFaehrteUITests */,
 				80314EAD300A52A100FF6910 /* Products */,
+				1B9A9CD2F93E8A891B203EE9 /* RadFaehrteShared */,
+				9582431BF213264FEB9BAA5B /* Frameworks */,
+				684145F640AC5A69217E9A78 /* RadFaehrte Watch App */,
 			);
 			sourceTree = "<group>";
 		};
@@ -101,8 +176,25 @@
 				80314EAC300A52A100FF6910 /* RadFaehrte.app */,
 				80314EB9300A52A300FF6910 /* RadFaehrteTests.xctest */,
 				80314EC3300A52A300FF6910 /* RadFaehrteUITests.xctest */,
+				C2375F41AB536759EFA0F0E9 /* RadFaehrte Watch App.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		9582431BF213264FEB9BAA5B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A77628F0E34B487BAB6F3153 /* watchOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		A77628F0E34B487BAB6F3153 /* watchOS */ = {
+			isa = PBXGroup;
+			children = (
+				74203D39670D2F01DEDE5D2A /* Foundation.framework */,
+			);
+			name = watchOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -115,17 +207,17 @@
 				80314EA8300A52A100FF6910 /* Sources */,
 				80314EA9300A52A100FF6910 /* Frameworks */,
 				80314EAA300A52A100FF6910 /* Resources */,
+				AA25F77F523C3A3060C15694 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				29A6B8F95D9EE95CB6B6C67F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				80314EAE300A52A100FF6910 /* RadFaehrte */,
 			);
 			name = RadFaehrte;
-			packageProductDependencies = (
-			);
 			productName = RadFaehrte;
 			productReference = 80314EAC300A52A100FF6910 /* RadFaehrte.app */;
 			productType = "com.apple.product-type.application";
@@ -147,8 +239,6 @@
 				80314EBC300A52A300FF6910 /* RadFaehrteTests */,
 			);
 			name = RadFaehrteTests;
-			packageProductDependencies = (
-			);
 			productName = RadFaehrteTests;
 			productReference = 80314EB9300A52A300FF6910 /* RadFaehrteTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -170,11 +260,26 @@
 				80314EC6300A52A300FF6910 /* RadFaehrteUITests */,
 			);
 			name = RadFaehrteUITests;
-			packageProductDependencies = (
-			);
 			productName = RadFaehrteUITests;
 			productReference = 80314EC3300A52A300FF6910 /* RadFaehrteUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		CD4F0F91E323DF77E34478B3 /* RadFaehrte Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AD8D9028C32428206CC0F9AF /* Build configuration list for PBXNativeTarget "RadFaehrte Watch App" */;
+			buildPhases = (
+				523C47F09FE3D67A7D722AEE /* Sources */,
+				900C16F78C3D3577EBB687DE /* Frameworks */,
+				569A83E9D72F3982C5D0DBCD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "RadFaehrte Watch App";
+			productName = "RadFaehrte Watch App";
+			productReference = C2375F41AB536759EFA0F0E9 /* RadFaehrte Watch App.app */;
+			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
@@ -197,6 +302,9 @@
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = 80314EAB300A52A100FF6910;
 					};
+					CD4F0F91E323DF77E34478B3 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = 80314EA7300A52A100FF6910 /* Build configuration list for PBXProject "RadFaehrte" */;
@@ -216,11 +324,20 @@
 				80314EAB300A52A100FF6910 /* RadFaehrte */,
 				80314EB8300A52A300FF6910 /* RadFaehrteTests */,
 				80314EC2300A52A300FF6910 /* RadFaehrteUITests */,
+				CD4F0F91E323DF77E34478B3 /* RadFaehrte Watch App */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		569A83E9D72F3982C5D0DBCD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F7A87BD9F7CE12D63C2C5006 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		80314EAA300A52A100FF6910 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -245,10 +362,22 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		523C47F09FE3D67A7D722AEE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3D184419E75E692C6E48FE21 /* RadFaehrteWatchApp.swift in Sources */,
+				41EFAC853B1D19D65B96FA0E /* WatchContentView.swift in Sources */,
+				D1DBBAEA8278262048B84277 /* WatchSessionManager.swift in Sources */,
+				724BEDB676164A49B66C4034 /* WatchNavState.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		80314EA8300A52A100FF6910 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				204E6C73D4A466401881C3E1 /* WatchNavState.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -269,6 +398,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		29A6B8F95D9EE95CB6B6C67F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "RadFaehrte Watch App";
+			target = CD4F0F91E323DF77E34478B3 /* RadFaehrte Watch App */;
+			targetProxy = 0A9E87AECC7C7AFBA69B37D4 /* PBXContainerItemProxy */;
+		};
 		80314EBB300A52A300FF6910 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 80314EAB300A52A100FF6910 /* RadFaehrte */;
@@ -557,6 +692,61 @@
 			};
 			name = Release;
 		};
+		D2DDE0D919BCE07F1B08D871 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.frankenfeld.RadFaehrte;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrte.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Release;
+		};
+		ED58DDEAD585527F64D1F2F3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.frankenfeld.RadFaehrte;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrte.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -592,6 +782,15 @@
 			buildConfigurations = (
 				80314ED4300A52A300FF6910 /* Debug */,
 				80314ED5300A52A300FF6910 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AD8D9028C32428206CC0F9AF /* Build configuration list for PBXNativeTarget "RadFaehrte Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D2DDE0D919BCE07F1B08D871 /* Release */,
+				ED58DDEAD585527F64D1F2F3 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

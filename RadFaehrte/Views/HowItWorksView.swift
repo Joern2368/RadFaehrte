@@ -38,6 +38,11 @@ struct HowItWorksView: View {
             text: "Oben links: Navigation beenden (Pause-Symbol, mit Sicherheitsabfrage). Oben rechts: zwischen 2D- und 3D-Ansicht wechseln, zwischen \"Gehrichtung oben\" und \"Norden oben\" umschalten, sowie über das Zahnrad-Symbol die wichtigsten Einstellungen (Tempo, Sichtweite, Statistik-Leiste) direkt während der Fahrt ändern, ohne die Navigation zu verlassen. Den Anweisungs-Banner samt Statistik-Leiste blendest du per Wisch nach oben aus - dann geht die Karte bis an den Bildschirmrand; ein kleiner Griff oben holt ihn per Tipp oder Wisch nach unten zurück. Verschiebst oder zoomst du die Karte selbst, pausiert die automatische Verfolgung - ein \"Zentrieren\"-Banner unten bringt dich mit einem Tipp zurück zu deiner Position."
         ),
         Topic(
+            icon: "applewatch",
+            title: "Apple Watch",
+            text: "Ist eine Apple Watch mit installierter RadFährte-Watch-App gekoppelt, zeigt sie während der Navigation automatisch die aktuelle Anweisung samt Entfernung am Handgelenk an - bei der \"Direkten Fahrrad-Route\" kurz vor einer Abbiegung zusätzlich mit einer kurzen Vibration. Bei kuratierten Radrouten ohne Schritt-für-Schritt-Anweisungen zeigt die Watch stattdessen den Routennamen."
+        ),
+        Topic(
             icon: "location.fill.viewfinder",
             title: "Bildschirm & Hintergrund",
             text: "Während der Navigation bleibt der Bildschirm an, statt sich automatisch zu sperren. Wechselst du in eine andere App oder sperrst das iPhone manuell, läuft die Standortverfolgung im Hintergrund weiter - ein blaues Symbol oben in der Statusleiste zeigt das an, ein Tipp darauf bringt dich zurück zu RadFährte."

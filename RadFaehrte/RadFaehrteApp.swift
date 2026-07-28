@@ -11,6 +11,10 @@ import SwiftUI
 struct RadFaehrteApp: App {
     @AppStorage(AppSettingsKey.appearanceMode) private var appearanceModeRaw = AppSettingsDefaults.appearanceMode
 
+    init() {
+        WatchSessionManager.shared.activate()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootTabView()
