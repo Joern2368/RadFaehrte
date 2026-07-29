@@ -131,6 +131,108 @@ struct RadFaehrteTests {
         }
     }
 
+    @Test func routeSegmentDistancesMatchesSingleTargetVersion() async throws {
+        // routeSegmentDistances(along:from:to:) baut denselben Streckengraphen wie
+        // routeSegmentDistance(along:from:to:), löst aber mehrere Ziele in einem Dijkstra-
+        // Durchlauf statt einem separaten Aufruf pro Ziel. Für ein einzelnes Ziel muss beides
+        // exakt dieselbe Distanz liefern - das ist der Vertrauensanker für die neue,
+        // ungetestete Mehrfachziel-Funktion, bevor sie in die Kombinationssuche einfließt.
+        let repository = RouteRepository()
+        let routes = repository.routesOverlapping(minLon: 8.6, minLat: 52.9, maxLon: 8.95, maxLat: 53.2)
+        let route = try #require(routes.first { $0.name == "Weser-Radweg" })
+
+        let bremen = CLLocationCoordinate2D(latitude: 53.0793, longitude: 8.8017)
+        let achim = CLLocationCoordinate2D(latitude: 53.0158, longitude: 8.9525)
+
+        let single = try #require(RouteMatcher.routeSegmentDistance(along: route.lines, from: bremen, to: achim))
+        let multi = RouteMatcher.routeSegmentDistances(along: route.lines, from: bremen, to: [achim])
+
+        #expect(multi.count == 1)
+        let multiDistance = try #require(multi.first ?? nil)
+        #expect(abs(multiDistance - single.distanceKm) < 0.001)
+
+        // Zwei völlig unverbundene Liniensegmente (keine gemeinsamen Endpunkte) simulieren eine
+        // echte Netzlücke - das Ziel auf dem zweiten Segment darf dann nicht erreichbar sein.
+        let disconnectedLines: [[CLLocationCoordinate2D]] = [
+            [
+                CLLocationCoordinate2D(latitude: 53.0, longitude: 8.8),
+                CLLocationCoordinate2D(latitude: 53.01, longitude: 8.81),
+            ],
+            [
+                CLLocationCoordinate2D(latitude: 54.0, longitude: 9.8),
+                CLLocationCoordinate2D(latitude: 54.01, longitude: 9.81),
+            ],
+        ]
+        let fromOnFirstSegment = CLLocationCoordinate2D(latitude: 53.0, longitude: 8.8)
+        let targetOnSecondSegment = CLLocationCoordinate2D(latitude: 54.0, longitude: 9.8)
+        let withGap = RouteMatcher.routeSegmentDistances(
+            along: disconnectedLines, from: fromOnFirstSegment, to: [targetOnSecondSegment]
+        )
+        #expect(withGap.count == 1)
+        #expect(withGap[0] == nil)
+    }
+
+    @Test func junctionSidecarConnectsWeserAllerLeineHeide() async throws {
+        // Schützt vor stillem Veralten von route_junctions.sqlite (manuell zu regenerierendes
+        // Derivat, s. Scripts/find_route_junctions.py) - pinnt das bereits real gefahrene, per
+        // Analyse bestätigte Nutzerbeispiel: Weser-Radweg <-> Aller-Radweg bei Verden,
+        // Aller-Radweg <-> Leine-Heide-Radweg bei Hannover.
+        let repository = RouteRepository()
+        let weserRoutes = repository.routesOverlapping(minLon: 8.6, minLat: 52.9, maxLon: 8.95, maxLat: 53.2)
+        let weserRadweg = try #require(weserRoutes.first { $0.name == "Weser-Radweg" })
+
+        let allerRoutes = repository.routesOverlapping(minLon: 9.0, minLat: 52.8, maxLon: 9.3, maxLat: 53.0)
+        let allerRadweg = try #require(allerRoutes.first { $0.name == "Aller-Radweg" })
+
+        let leineRoutes = repository.routesOverlapping(minLon: 9.4, minLat: 52.6, maxLon: 9.9, maxLat: 52.9)
+        let leineHeideRadweg = try #require(leineRoutes.first { $0.name == "Leine-Heide-Radweg" })
+
+        let weserJunctions = repository.junctions(forRouteId: weserRadweg.id)
+        #expect(weserJunctions.contains { $0.partnerRouteId == allerRadweg.id })
+
+        let allerJunctions = repository.junctions(forRouteId: allerRadweg.id)
+        #expect(allerJunctions.contains { $0.partnerRouteId == leineHeideRadweg.id })
+    }
+
+    @Test func combinedMatchBremenToHannoverFindsRouteChain() async throws {
+        let repository = RouteRepository()
+        let matcher = RouteMatcher(repository: repository)
+        let bremen = CLLocationCoordinate2D(latitude: 53.0793, longitude: 8.8017)
+        let hannover = CLLocationCoordinate2D(latitude: 52.3759, longitude: 9.7320)
+
+        // Vorbedingung: keine einzelne Route deckt Bremen->Hannover direkt ab - genau der Fall,
+        // in dem ContentView.runMatching() auf die Kombinationssuche zurückfällt.
+        #expect(matcher.findMatches(start: bremen, end: hannover).isEmpty)
+
+        let combined = try #require(matcher.findCombinedMatches(start: bremen, end: hannover))
+        #expect(combined.legs.count >= 2)
+
+        // Reale Rad-Distanz Bremen-Hannover über diese Fernwege liegt bei ca. 120-130 km -
+        // großzügiger Plausibilitätsrahmen statt exaktem Wert (Routenwahl/OSM-Daten können sich
+        // ändern), analog zu den bestehenden routeSegmentDistance-Tests.
+        #expect(combined.totalDistanceKm > 80)
+        #expect(combined.totalDistanceKm < 250)
+
+        let names = combined.routeNames.joined(separator: " -> ")
+        let containsExpectedRoute = combined.routeNames.contains {
+            $0.localizedCaseInsensitiveContains("weser")
+                || $0.localizedCaseInsensitiveContains("aller")
+                || $0.localizedCaseInsensitiveContains("leine")
+        }
+        #expect(containsExpectedRoute, "Erwartete Weser/Aller/Leine-Radweg-Kette, bekam: \(names)")
+    }
+
+    @Test func findCombinedMatchesTerminatesWithoutImplausibleConnection() async throws {
+        // Zwei Punkte ohne jede kombinierbare Route in der Nähe (mitten im offenen Meer) müssen
+        // zuverlässig (und schnell, dank maxVisitedRoutes-Sicherheitsgrenze) nil liefern statt
+        // endlos zu suchen oder abzustürzen.
+        let repository = RouteRepository()
+        let matcher = RouteMatcher(repository: repository)
+        let northSea1 = CLLocationCoordinate2D(latitude: 55.5, longitude: 4.0)
+        let northSea2 = CLLocationCoordinate2D(latitude: 56.0, longitude: 3.0)
+        #expect(matcher.findCombinedMatches(start: northSea1, end: northSea2) == nil)
+    }
+
     @Test func gpxParserExtractsNameAndTrackPoints() async throws {
         let gpx = """
         <?xml version="1.0" encoding="UTF-8"?>

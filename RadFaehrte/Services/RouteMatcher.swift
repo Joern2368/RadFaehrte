@@ -37,6 +37,61 @@ final class RouteMatcher {
         let alternateDistanceKm: Double?
     }
 
+    /// Baut aus den (üblicherweise unsortierten, aus einzelnen OSM-Way-Fragmenten bestehenden)
+    /// Liniensegmenten einer Route ein Netz für Dijkstra-Suchen auf. Punkte werden per gerundeter
+    /// Koordinate (`snapKey`) auf denselben Knoten dedupliziert; `attach` splict einen beliebigen
+    /// Punkt (z. B. den nächstgelegenen Punkt zu Start/Ziel) in die Kante, auf der er projiziert
+    /// liegt, statt einen exakten Knotentreffer vorauszusetzen.
+    private struct RouteGraph {
+        private(set) var nodeIndex: [Int64: Int] = [:]
+        private(set) var adjacency: [[(to: Int, weightMeters: Double)]] = []
+
+        init(lines: [[CLLocationCoordinate2D]]) {
+            for line in lines {
+                guard line.count >= 2 else { continue }
+                var previousNode = node(for: line[0])
+                for i in 1..<line.count {
+                    let currentNode = node(for: line[i])
+                    addEdge(previousNode, currentNode, meters: Self.meters(line[i - 1], line[i]))
+                    previousNode = currentNode
+                }
+            }
+        }
+
+        private static func meters(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+            CLLocation(latitude: a.latitude, longitude: a.longitude)
+                .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
+        }
+
+        private static func snapKey(_ c: CLLocationCoordinate2D) -> Int64 {
+            let lat = Int64((c.latitude * 100_000).rounded())
+            let lon = Int64((c.longitude * 100_000).rounded())
+            return lat &* 10_000_000 &+ lon
+        }
+
+        mutating func node(for c: CLLocationCoordinate2D) -> Int {
+            let key = Self.snapKey(c)
+            if let existing = nodeIndex[key] { return existing }
+            let index = adjacency.count
+            nodeIndex[key] = index
+            adjacency.append([])
+            return index
+        }
+
+        mutating func addEdge(_ a: Int, _ b: Int, meters distance: Double) {
+            guard a != b, distance > 0 else { return }
+            adjacency[a].append((b, distance))
+            adjacency[b].append((a, distance))
+        }
+
+        mutating func attach(_ anchor: (coordinate: CLLocationCoordinate2D, distanceKm: Double, segmentStart: CLLocationCoordinate2D, segmentEnd: CLLocationCoordinate2D)) -> Int {
+            let projectedNode = node(for: anchor.coordinate)
+            addEdge(projectedNode, node(for: anchor.segmentStart), meters: Self.meters(anchor.coordinate, anchor.segmentStart))
+            addEdge(projectedNode, node(for: anchor.segmentEnd), meters: Self.meters(anchor.coordinate, anchor.segmentEnd))
+            return projectedNode
+        }
+    }
+
     /// Kürzeste (und, falls vorhanden, eine spürbar längere alternative) Verbindung entlang der
     /// Routen-Geometrie zwischen zwei Punkten (üblicherweise die jeweils nächstgelegenen Punkte
     /// zu Start und Ziel einer `RouteMatch`). Die Liniensegmente einer Route liegen in der
@@ -50,64 +105,20 @@ final class RouteMatcher {
     ) -> RouteSegmentDistance? {
         guard !lines.isEmpty else { return nil }
 
-        var nodeIndex: [Int64: Int] = [:]
-        var adjacency: [[(to: Int, weightMeters: Double)]] = []
-
-        func snapKey(_ c: CLLocationCoordinate2D) -> Int64 {
-            let lat = Int64((c.latitude * 100_000).rounded())
-            let lon = Int64((c.longitude * 100_000).rounded())
-            return lat &* 10_000_000 &+ lon
-        }
-
-        func node(for c: CLLocationCoordinate2D) -> Int {
-            let key = snapKey(c)
-            if let existing = nodeIndex[key] { return existing }
-            let index = adjacency.count
-            nodeIndex[key] = index
-            adjacency.append([])
-            return index
-        }
-
-        func meters(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
-            CLLocation(latitude: a.latitude, longitude: a.longitude)
-                .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
-        }
-
-        func addEdge(_ a: Int, _ b: Int, meters distance: Double) {
-            guard a != b, distance > 0 else { return }
-            adjacency[a].append((b, distance))
-            adjacency[b].append((a, distance))
-        }
-
-        for line in lines {
-            guard line.count >= 2 else { continue }
-            var previousNode = node(for: line[0])
-            for i in 1..<line.count {
-                let currentNode = node(for: line[i])
-                addEdge(previousNode, currentNode, meters: meters(line[i - 1], line[i]))
-                previousNode = currentNode
-            }
-        }
-
-        func attach(_ anchor: (coordinate: CLLocationCoordinate2D, distanceKm: Double, segmentStart: CLLocationCoordinate2D, segmentEnd: CLLocationCoordinate2D)) -> Int {
-            let projectedNode = node(for: anchor.coordinate)
-            addEdge(projectedNode, node(for: anchor.segmentStart), meters: meters(anchor.coordinate, anchor.segmentStart))
-            addEdge(projectedNode, node(for: anchor.segmentEnd), meters: meters(anchor.coordinate, anchor.segmentEnd))
-            return projectedNode
-        }
+        var graph = RouteGraph(lines: lines)
 
         guard let startAnchor = nearestPoint(from: from, toLines: lines),
               let endAnchor = nearestPoint(from: to, toLines: lines)
         else { return nil }
 
-        let startNode = attach(startAnchor)
-        let endNode = attach(endAnchor)
+        let startNode = graph.attach(startAnchor)
+        let endNode = graph.attach(endAnchor)
 
-        guard let shortest = dijkstra(from: startNode, to: endNode, adjacency: adjacency) else { return nil }
+        guard let shortest = dijkstra(from: startNode, to: endNode, adjacency: graph.adjacency) else { return nil }
 
         // Kanten des kürzesten Pfads entfernen und erneut suchen, um eine davon unabhängige
         // Alternative zu finden (bei einer Rundstrecke: die andere Richtung).
-        var reducedAdjacency = adjacency
+        var reducedAdjacency = graph.adjacency
         for i in 1..<shortest.path.count {
             let a = shortest.path[i - 1], b = shortest.path[i]
             reducedAdjacency[a].removeAll { $0.to == b }
@@ -122,6 +133,35 @@ final class RouteMatcher {
         let meaningfulAlternateKm = alternateKm.flatMap { abs($0 - distanceKm) > 0.3 ? $0 : nil }
 
         return RouteSegmentDistance(distanceKm: distanceKm, alternateDistanceKm: meaningfulAlternateKm)
+    }
+
+    /// Distanzen (Meter) von einem Punkt zu mehreren Zielen entlang derselben Routen-Geometrie -
+    /// baut das Netz nur einmal auf und läuft mit einem einzigen Dijkstra-Durchlauf zu allen
+    /// Zielen gleichzeitig, statt `routeSegmentDistance` pro Ziel einzeln aufzurufen. Genutzt von
+    /// der Kombinationssuche (`findCombinedMatches`), um von einem Einstiegspunkt aus in einem
+    /// Rutsch die Distanzen zu allen Anschlussstellen einer Route zu holen. `nil` je Ziel, wenn
+    /// `from` sich nicht auf die Geometrie projizieren lässt oder das jeweilige Ziel unerreichbar
+    /// ist (z. B. Lücke im Wegenetz).
+    nonisolated static func routeSegmentDistances(
+        along lines: [[CLLocationCoordinate2D]],
+        from: CLLocationCoordinate2D,
+        to targets: [CLLocationCoordinate2D]
+    ) -> [Double?] {
+        guard !lines.isEmpty, let fromAnchor = nearestPoint(from: from, toLines: lines) else {
+            return targets.map { _ in nil }
+        }
+
+        var graph = RouteGraph(lines: lines)
+        let fromNode = graph.attach(fromAnchor)
+        let targetNodes = targets.map { target in
+            nearestPoint(from: target, toLines: lines).map { graph.attach($0) }
+        }
+
+        let distances = dijkstraDistances(from: fromNode, adjacency: graph.adjacency)
+        return targetNodes.map { node in
+            guard let node, distances[node] < .greatestFiniteMagnitude else { return nil }
+            return distances[node] / 1000
+        }
     }
 
     private nonisolated static func dijkstra(
@@ -157,6 +197,34 @@ final class RouteMatcher {
             }
         }
         return nil
+    }
+
+    /// Wie `dijkstra(from:to:adjacency:)`, aber ohne festes Ziel: liefert die Distanz (Meter) zu
+    /// JEDEM erreichbaren Knoten (`.greatestFiniteMagnitude` für unerreichbare), statt bei einem
+    /// einzelnen Ziel früh abzubrechen und einen Pfad zu rekonstruieren. Für einen einzelnen
+    /// Start-Knoten mit vielen Zielen (s. `routeSegmentDistances`) günstiger als `dijkstra` pro
+    /// Ziel einzeln aufzurufen.
+    private nonisolated static func dijkstraDistances(
+        from start: Int, adjacency: [[(to: Int, weightMeters: Double)]]
+    ) -> [Double] {
+        var bestDistance = [Double](repeating: .greatestFiniteMagnitude, count: adjacency.count)
+        var visited = [Bool](repeating: false, count: adjacency.count)
+        bestDistance[start] = 0
+        var queue = DijkstraQueue()
+        queue.push(distance: 0, node: start)
+
+        while let current = queue.popMin() {
+            guard !visited[current.node] else { continue }
+            visited[current.node] = true
+            for edge in adjacency[current.node] where !visited[edge.to] {
+                let candidate = current.distance + edge.weightMeters
+                if candidate < bestDistance[edge.to] {
+                    bestDistance[edge.to] = candidate
+                    queue.push(distance: candidate, node: edge.to)
+                }
+            }
+        }
+        return bestDistance
     }
 
     func findMatches(start: CLLocationCoordinate2D, end: CLLocationCoordinate2D) -> [RouteMatch] {
@@ -264,6 +332,233 @@ final class RouteMatcher {
             ))
         }
         return Array(nearby.sorted { $0.distanceToStartKm < $1.distanceToStartKm }.prefix(limit))
+    }
+
+    /// Eine Etappe einer kombinierten Route - eine einzelne benannte Fernwegs-Route, befahren von
+    /// `entryPoint` (Nutzer-Start oder Anschluss zur vorigen Etappe) bis `exitPoint` (Anschluss
+    /// zur nächsten Etappe oder Nutzer-Ziel).
+    struct CombinedRouteLeg: Identifiable {
+        let route: BikeRoute
+        let entryPoint: CLLocationCoordinate2D
+        let exitPoint: CLLocationCoordinate2D
+        let distanceKm: Double
+        var id: Int64 { route.id }
+    }
+
+    /// Ergebnis von `findCombinedMatches`: mehrere benannte Fernwege, die an Anschlussstellen
+    /// aneinandergereiht Start und Ziel verbinden, weil keine einzelne Route das allein schafft.
+    struct CombinedRouteMatch: Identifiable {
+        let legs: [CombinedRouteLeg]
+        /// Luftlinie vom Nutzer-Start zum Einstiegspunkt der ersten Etappe.
+        let distanceToStartKm: Double
+        /// Luftlinie vom Ausstiegspunkt der letzten Etappe zum Nutzer-Ziel.
+        let distanceToEndKm: Double
+
+        var id: String { legs.map { String($0.id) }.joined(separator: "-") }
+        var totalDistanceKm: Double { legs.reduce(0) { $0 + $1.distanceKm } }
+        var routeNames: [String] { legs.map { $0.route.name ?? "Unbenannte Route" } }
+    }
+
+    /// Nur `rcn`/`ncn`/`icn` (regionale/nationale/internationale Fernwege) kommen für eine
+    /// Kombination infrage - die deutlich zahlreicheren lokalen `lcn`-Knotenpunktnetz-Fragmente
+    /// sind dafür zu kleinteilig/unübersichtlich (s. Machbarkeitsanalyse: 7.018 rcn/ncn/icn-Routen,
+    /// 99% davon mit mind. einer Anschlussstelle).
+    private static let combinableNetworks: Set<String> = ["rcn", "ncn", "icn"]
+
+    /// Viele Regionen taggen ihr lokales Knotenpunkt-Wegenetz (einzelne Abschnitte zwischen
+    /// nummerierten Knoten) mit `network=rcn` statt `lcn` - am `network`-Tag allein nicht von
+    /// einem echten Fernweg zu unterscheiden. Zwei beobachtete Namensmuster (s. auch
+    /// `Scripts/find_route_junctions.py`, das dieselben Muster beim Bau der Anschluss-Tabelle
+    /// ausschließt): rein numerisch ("31-32") und Ort+Knotennummer ("Lohne (76) - Dinklage (78)",
+    /// über die Hälfte aller benannten rcn/ncn/icn-Routen in Deutschland folgt diesem Muster).
+    /// Hier zusätzlich geprüft, damit auch die Start-/Ziel-Kandidatensuche (unabhängig von der
+    /// Anschluss-Tabelle) nicht versehentlich so ein Wegstück auswählt.
+    private static let nodeToNodeNamePatterns: [NSRegularExpression] = [
+        try! NSRegularExpression(pattern: #"^\d+\s*-\s*\d+$"#),
+        try! NSRegularExpression(pattern: #".*\(\d+\).*-.*\(\d+\).*"#),
+    ]
+
+    private static func isNodeToNodeSegment(name: String) -> Bool {
+        let range = NSRange(name.startIndex..<name.endIndex, in: name)
+        return nodeToNodeNamePatterns.contains { $0.firstMatch(in: name, range: range) != nil }
+    }
+
+    private struct CombinableRouteCandidate {
+        let route: BikeRoute
+        let nearestPoint: CLLocationCoordinate2D
+    }
+
+    private nonisolated func combinableRoutes(
+        near point: CLLocationCoordinate2D, searchRadiusKm: Double
+    ) -> [CombinableRouteCandidate] {
+        let latPad = searchRadiusKm / 111.32
+        let lonPad = searchRadiusKm / (111.32 * max(cos(point.latitude * .pi / 180), 0.1))
+
+        let candidates = repository.routesOverlapping(
+            minLon: point.longitude - lonPad, minLat: point.latitude - latPad,
+            maxLon: point.longitude + lonPad, maxLat: point.latitude + latPad
+        )
+
+        var results: [CombinableRouteCandidate] = []
+        for route in candidates {
+            guard let name = route.name, !name.isEmpty, !Self.isNodeToNodeSegment(name: name) else { continue }
+            guard let network = route.network, Self.combinableNetworks.contains(network) else { continue }
+            guard let nearest = Self.nearestPoint(from: point, toLines: route.lines),
+                  nearest.distanceKm <= searchRadiusKm else { continue }
+            results.append(CombinableRouteCandidate(route: route, nearestPoint: nearest.coordinate))
+        }
+        return results
+    }
+
+    private struct CombinedSearchEntry {
+        let routeId: Int64
+        let entryPoint: CLLocationCoordinate2D
+        let cumulativeKm: Double
+        let legs: [CombinedRouteLeg]
+    }
+
+    /// Einfache Array-basierte Min-Heap-Warteschlange für `findCombinedMatches`, analog zu
+    /// `DijkstraQueue`, aber mit dem größeren `CombinedSearchEntry`-Payload statt nur einer Node-ID.
+    private struct CombinedSearchQueue {
+        private var heap: [CombinedSearchEntry] = []
+
+        mutating func push(_ entry: CombinedSearchEntry) {
+            heap.append(entry)
+            var i = heap.count - 1
+            while i > 0 {
+                let parent = (i - 1) / 2
+                guard heap[i].cumulativeKm < heap[parent].cumulativeKm else { break }
+                heap.swapAt(i, parent)
+                i = parent
+            }
+        }
+
+        mutating func popMin() -> CombinedSearchEntry? {
+            guard !heap.isEmpty else { return nil }
+            heap.swapAt(0, heap.count - 1)
+            let result = heap.removeLast()
+            var i = 0
+            while true {
+                let left = 2 * i + 1, right = 2 * i + 2
+                var smallest = i
+                if left < heap.count, heap[left].cumulativeKm < heap[smallest].cumulativeKm { smallest = left }
+                if right < heap.count, heap[right].cumulativeKm < heap[smallest].cumulativeKm { smallest = right }
+                guard smallest != i else { break }
+                heap.swapAt(i, smallest)
+                i = smallest
+            }
+            return result
+        }
+    }
+
+    /// Sucht eine Kette aus mehreren benannten Fernwegen, die zusammen Start und Ziel verbinden -
+    /// gedacht als Fallback, wenn `findMatches` keine einzelne passende Route findet (z. B.
+    /// Bremen -> Hannover über Weser-Radweg -> Aller-Radweg -> Leine-Heide-Radweg). Läuft als
+    /// gewichteter Dijkstra über einen impliziten Graphen: Knoten sind (Route, Einstiegspunkt),
+    /// Kanten die reale Streckenlänge zu den Anschlusspunkten dieser Route (aus der per
+    /// `Scripts/find_route_junctions.py` vorberechneten Sidecar-DB), lazy pro besuchter Route
+    /// berechnet über `routeSegmentDistances`. Bewusst ohne feste Obergrenze an Etappen (eine
+    /// längere Strecke wie Bremen -> Leipzig braucht plausibel mehr als 2-3 Etappen) - stattdessen
+    /// zwei Sicherheitsgrenzen gegen ausufernde Suchen: maximal `maxVisitedRoutes` besuchte Routen,
+    /// und ein Abbruch für Pfade, die bereits das `maxDistanceMultiplier`-fache der Luftlinie
+    /// Start-Ziel überschreiten (eine so uneffiziente Kette wäre ohnehin kein sinnvoller Vorschlag).
+    /// `nil`, wenn keine Kette gefunden wird oder Start/Ziel keine kombinierbare Route in der Nähe
+    /// haben. Rein lesende SQLite-Abfragen + mehrere Pro-Route-Dijkstras - bewusst `nonisolated`,
+    /// damit der Aufrufer das abseits des Main-Threads laufen lassen kann (s. `ContentView`).
+    nonisolated func findCombinedMatches(
+        start: CLLocationCoordinate2D, end: CLLocationCoordinate2D,
+        maxVisitedRoutes: Int = 500, maxDistanceMultiplier: Double = 3
+    ) -> CombinedRouteMatch? {
+        let startCandidates = combinableRoutes(near: start, searchRadiusKm: thresholdKm)
+        let endCandidates = combinableRoutes(near: end, searchRadiusKm: thresholdKm)
+        guard !startCandidates.isEmpty, !endCandidates.isEmpty else { return nil }
+
+        var endAnchorByRouteId: [Int64: CLLocationCoordinate2D] = [:]
+        for candidate in endCandidates {
+            endAnchorByRouteId[candidate.route.id] = candidate.nearestPoint
+        }
+
+        let straightLineKm = Self.kilometers(start, end)
+        let maxAllowedKm = max(straightLineKm * maxDistanceMultiplier, 30)
+
+        var routeCache: [Int64: BikeRoute] = [:]
+        for candidate in startCandidates { routeCache[candidate.route.id] = candidate.route }
+        for candidate in endCandidates { routeCache[candidate.route.id] = candidate.route }
+
+        func route(withId id: Int64) -> BikeRoute? {
+            if let cached = routeCache[id] { return cached }
+            guard let fetched = repository.route(withId: id) else { return nil }
+            routeCache[id] = fetched
+            return fetched
+        }
+
+        var bestDistanceKm: [Int64: Double] = [:]
+        var finalized: Set<Int64> = []
+        var queue = CombinedSearchQueue()
+
+        for candidate in startCandidates {
+            guard bestDistanceKm[candidate.route.id] == nil else { continue }
+            bestDistanceKm[candidate.route.id] = 0
+            queue.push(CombinedSearchEntry(
+                routeId: candidate.route.id, entryPoint: candidate.nearestPoint, cumulativeKm: 0, legs: []
+            ))
+        }
+
+        var visitedCount = 0
+        while let current = queue.popMin() {
+            guard !finalized.contains(current.routeId) else { continue }
+            finalized.insert(current.routeId)
+
+            visitedCount += 1
+            guard visitedCount <= maxVisitedRoutes else { return nil }
+            guard current.cumulativeKm <= maxAllowedKm else { continue }
+            guard let currentRoute = route(withId: current.routeId) else { continue }
+
+            // Ziel schon erreicht? (Kann bei der allerersten Etappe nicht zutreffen - sonst
+            // hätte `findMatches` diese Route bereits als Direkttreffer gefunden.)
+            if !current.legs.isEmpty, let endAnchor = endAnchorByRouteId[current.routeId],
+               let finishKm = RouteMatcher.routeSegmentDistances(
+                   along: currentRoute.lines, from: current.entryPoint, to: [endAnchor]
+               ).first, let finishKmValue = finishKm {
+                let finalLeg = CombinedRouteLeg(
+                    route: currentRoute, entryPoint: current.entryPoint, exitPoint: endAnchor, distanceKm: finishKmValue
+                )
+                let allLegs = current.legs + [finalLeg]
+                return CombinedRouteMatch(
+                    legs: allLegs,
+                    distanceToStartKm: Self.kilometers(start, allLegs[0].entryPoint),
+                    distanceToEndKm: Self.kilometers(allLegs[allLegs.count - 1].exitPoint, end)
+                )
+            }
+
+            let neighbors = repository.junctions(forRouteId: current.routeId)
+            guard !neighbors.isEmpty else { continue }
+            let neighborCoordinates = neighbors.map { $0.coordinate }
+            let legDistances = RouteMatcher.routeSegmentDistances(
+                along: currentRoute.lines, from: current.entryPoint, to: neighborCoordinates
+            )
+
+            for (index, neighbor) in neighbors.enumerated() {
+                guard !finalized.contains(neighbor.partnerRouteId),
+                      let legDistanceKm = legDistances[index] else { continue }
+                let newCumulativeKm = current.cumulativeKm + legDistanceKm
+                if let known = bestDistanceKm[neighbor.partnerRouteId], known <= newCumulativeKm { continue }
+                bestDistanceKm[neighbor.partnerRouteId] = newCumulativeKm
+                let leg = CombinedRouteLeg(
+                    route: currentRoute, entryPoint: current.entryPoint, exitPoint: neighbor.coordinate, distanceKm: legDistanceKm
+                )
+                queue.push(CombinedSearchEntry(
+                    routeId: neighbor.partnerRouteId, entryPoint: neighbor.coordinate,
+                    cumulativeKm: newCumulativeKm, legs: current.legs + [leg]
+                ))
+            }
+        }
+        return nil
+    }
+
+    private nonisolated static func kilometers(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+        CLLocation(latitude: a.latitude, longitude: a.longitude)
+            .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude)) / 1000
     }
 
     /// Nächstgelegener Punkt auf einer Liniengeometrie zu einem Punkt, mit Distanz in km.

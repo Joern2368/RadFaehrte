@@ -20,7 +20,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "magnifyingglass",
             title: "Route suchen",
-            text: "Start und Ziel eingeben - RadFährte zeigt dir sowohl offizielle, beschilderte Radrouten in der Nähe als auch eine direkte Fahrrad-Route. Durch die Treffer wischt du einfach durch. Die Adressvorschläge sind auf deine Nähe eingegrenzt - suchst du z. B. von unterwegs eine Adresse in einer weit entfernten Stadt (etwa zu Hause), wird sie manchmal nicht vorgeschlagen. Ergänze in dem Fall den Ort in der Sucheingabe (z. B. \"Bückeburger Straße, Bremen\")."
+            text: "Start und Ziel eingeben - RadFährte zeigt dir sowohl offizielle, beschilderte Radrouten in der Nähe als auch eine direkte Fahrrad-Route. Durch die Treffer wischt du einfach durch. Deckt keine einzelne beschilderte Route die ganze Strecke ab, sucht RadFährte automatisch nach einer Kombination mehrerer Fernwege, die an Anschlussstellen ineinander übergehen (z. B. Weser-Radweg → Aller-Radweg → Leine-Heide-Radweg für Bremen → Hannover) - erkennbar an den durch \"→\" getrennten Routennamen in der Ergebniszeile. Die Adressvorschläge sind auf deine Nähe eingegrenzt - suchst du z. B. von unterwegs eine Adresse in einer weit entfernten Stadt (etwa zu Hause), wird sie manchmal nicht vorgeschlagen. Ergänze in dem Fall den Ort in der Sucheingabe (z. B. \"Bückeburger Straße, Bremen\")."
         ),
         Topic(
             icon: "location.north.line.fill",
