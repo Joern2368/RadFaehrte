@@ -750,31 +750,63 @@ struct ContentView: View {
     /// nutzt bewusst dieselben berechneten Werte wie die iPhone-Anzeige, damit beide nie
     /// auseinanderlaufen können.
     private func updateWatchNavigationState() {
-        let direction: WatchNavState.Direction
-        switch previewedStep?.direction ?? .straight {
-        case .straight: direction = .straight
-        case .left: direction = .left
-        case .right: direction = .right
-        }
         let state = WatchNavState(
             isNavigating: true,
             instructionText: navigationInstructionTitle,
             distanceText: currentStepDistanceText ?? navigationInstructionSubtitle,
-            direction: direction,
+            direction: previewedStep.map { watchDirection(for: $0) } ?? .straight,
             routeName: isDirectRouteMode ? nil : selectedMatch?.route.name
         )
+        WatchSessionManager.appendDebugLog(
+            "updateWatchNavigationState: isDirectRouteMode=\(isDirectRouteMode) directRoutes.count=\(directRoutes.count) "
+            + "selectedDirectRouteIndex=\(selectedDirectRouteIndex) currentDirectRouteStepIndex=\(currentDirectRouteStepIndex) "
+            + "steps.count=\(directRoutes.indices.contains(selectedDirectRouteIndex) ? directRoutes[selectedDirectRouteIndex].steps.count : -1) "
+            + "-> title=\(state.instructionText) distance=\(state.distanceText)"
+        )
         WatchSessionManager.shared.send(state)
+    }
+
+    /// Schlüsselwörter, an denen eine Abbiegung im fertig formulierten `instructions`-Text einer
+    /// **Online**-Route (MKDirections) erkennbar ist. Nötig, weil `DirectRoute.Step.direction` bei
+    /// Online-Routen (anders als bei der Offline-Engine) immer `.straight` ist - MKDirections
+    /// liefert online keine strukturierte Richtung, nur den fertigen Text (s.
+    /// `DirectRoute.init(route:)`). Ohne diesen Text-Fallback würde die Haptik bei Online-Routen
+    /// nie auslösen, obwohl der angezeigte Text ("Links abbiegen", "Scharf rechts abbiegen auf
+    /// Willemsbrug" o. Ä.) eindeutig eine Abbiegung ankündigt (per Live-Test 2026-07-28 gefunden).
+    private static let turnKeywords = ["links", "rechts", "abbiegen", "kreisverkehr", "wenden", "ausfahrt"]
+
+    private func isTurnInstruction(_ step: DirectRoute.Step) -> Bool {
+        if step.direction != .straight { return true }
+        let lowered = step.instructions.lowercased()
+        return Self.turnKeywords.contains { lowered.contains($0) }
+    }
+
+    /// Richtung fürs Pfeil-Icon auf der Watch (analog `navigationInstructionIcon` fürs iPhone) -
+    /// bei Online-Routen (strukturiert immer `.straight`, s. `isTurnInstruction`) wird ersatzweise
+    /// im Text nach "links"/"rechts" gesucht, damit der Pfeil nicht bei jeder Abbiegung fälschlich
+    /// geradeaus zeigt.
+    private func watchDirection(for step: DirectRoute.Step) -> WatchNavState.Direction {
+        switch step.direction {
+        case .left: return .left
+        case .right: return .right
+        case .straight:
+            let lowered = step.instructions.lowercased()
+            if lowered.contains("links") { return .left }
+            if lowered.contains("rechts") { return .right }
+            return .straight
+        }
     }
 
     /// Löst ein kurzes Haptik-Signal auf der Apple Watch aus, kurz bevor eine Abbiegung der
     /// "Direkten Fahrrad-Route" ansteht (< 50 m, wie der 30-m-Radius von
     /// `advanceDirectRouteStepIfNeeded`, aber etwas großzügiger, damit die Vibration spürbar vor
-    /// der eigentlichen Abbiegung ankommt). Nur bei echten Abbiegungen (`.left`/`.right`) - bei
-    /// `.straight` (bzw. kuratierten Radrouten ohne Schritt-Daten) gibt es nichts anzukündigen.
-    /// `lastWatchHapticStepIndex` verhindert wiederholtes Auslösen für denselben Schritt.
+    /// der eigentlichen Abbiegung ankommt). Nur bei echten Abbiegungen (`isTurnInstruction`) - bei
+    /// reinem Geradeausfahren (bzw. kuratierten Radrouten ohne Schritt-Daten) gibt es nichts
+    /// anzukündigen. `lastWatchHapticStepIndex` verhindert wiederholtes Auslösen für denselben
+    /// Schritt.
     private func checkWatchHapticTrigger(_ location: CLLocation) {
         guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex),
-              let previewedStep, previewedStep.direction != .straight,
+              let previewedStep, isTurnInstruction(previewedStep),
               lastWatchHapticStepIndex != currentDirectRouteStepIndex
         else { return }
         let steps = directRoutes[selectedDirectRouteIndex].steps

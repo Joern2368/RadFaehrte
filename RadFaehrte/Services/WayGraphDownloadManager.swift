@@ -28,22 +28,22 @@ nonisolated extension Bundesland {
         // v4-Größen (mit Straßennamen-Tabelle) - ca. 20-27 % größer als die alten v2-Werte, s.
         // Doc-Kommentar an `downloadURL`.
         switch self {
-        case .badenWuerttemberg: return 563
-        case .bayern: return 815
-        case .berlin: return 33
-        case .brandenburg: return 165
+        case .badenWuerttemberg: return 515
+        case .bayern: return 747
+        case .berlin: return 31
+        case .brandenburg: return 151
         case .bremen: return 9
-        case .hamburg: return 23
-        case .hessen: return 290
-        case .mecklenburgVorpommern: return 75
-        case .niedersachsen: return 326
-        case .nordrheinWestfalen: return 543
-        case .rheinlandPfalz: return 276
-        case .saarland: return 38
-        case .sachsen: return 200
-        case .sachsenAnhalt: return 132
-        case .schleswigHolstein: return 102
-        case .thueringen: return 154
+        case .hamburg: return 22
+        case .hessen: return 266
+        case .mecklenburgVorpommern: return 69
+        case .niedersachsen: return 298
+        case .nordrheinWestfalen: return 498
+        case .rheinlandPfalz: return 253
+        case .saarland: return 35
+        case .sachsen: return 183
+        case .sachsenAnhalt: return 121
+        case .schleswigHolstein: return 93
+        case .thueringen: return 141
         }
     }
 }
@@ -61,6 +61,7 @@ nonisolated extension EuropaLand {
         switch self {
         case .netherlands: return 428
         case .poland: return 1535
+        case .sweden: return 1060
         }
     }
 }

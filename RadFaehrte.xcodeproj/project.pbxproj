@@ -89,15 +89,11 @@
 		};
 		80314EBC300A52A300FF6910 /* RadFaehrteTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = RadFaehrteTests;
 			sourceTree = "<group>";
 		};
 		80314EC6300A52A300FF6910 /* RadFaehrteUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = RadFaehrteUITests;
 			sourceTree = "<group>";
 		};
@@ -141,7 +137,6 @@
 			children = (
 				A06B3DE0117F68D2DBE75584 /* WatchNavState.swift */,
 			);
-			name = RadFaehrteShared;
 			path = RadFaehrteShared;
 			sourceTree = "<group>";
 		};
@@ -153,7 +148,6 @@
 				22E7EE77802AE0B8C52C30E5 /* WatchSessionManager.swift */,
 				3DED7B1BEFE46BE12311D7A5 /* Assets.xcassets */,
 			);
-			name = "RadFaehrte Watch App";
 			path = "RadFaehrte Watch App";
 			sourceTree = "<group>";
 		};
@@ -716,7 +710,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
-				WATCHOS_DEPLOYMENT_TARGET = 26.5;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Release;
 		};
@@ -743,7 +737,7 @@
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 26.5;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Debug;
 		};

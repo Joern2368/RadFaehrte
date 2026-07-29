@@ -35,10 +35,44 @@ final class WatchSessionManager: NSObject, WCSessionDelegate {
     }
 
     func send(_ state: WatchNavState) {
-        guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
-        guard state != lastSentState else { return }
+        guard WCSession.isSupported() else {
+            Self.appendDebugLog("send: WCSession not supported")
+            return
+        }
+        guard WCSession.default.activationState == .activated else {
+            Self.appendDebugLog("send: not activated (state=\(WCSession.default.activationState.rawValue))")
+            return
+        }
+        guard state != lastSentState else {
+            Self.appendDebugLog("send: unchanged, skip (\(state.instructionText) / \(state.distanceText))")
+            return
+        }
         lastSentState = state
-        try? WCSession.default.updateApplicationContext(state.dictionaryRepresentation)
+        do {
+            try WCSession.default.updateApplicationContext(state.dictionaryRepresentation)
+            Self.appendDebugLog("send: OK isPaired=\(WCSession.default.isPaired) watchAppInstalled=\(WCSession.default.isWatchAppInstalled) reachable=\(WCSession.default.isReachable) -> \(state.instructionText) / \(state.distanceText)")
+        } catch {
+            Self.appendDebugLog("send: FAILED \(error)")
+        }
+    }
+
+    /// TEMP-DEBUG (Apple-Watch-Anbindung, Live-Test 2026-07-28): Datei-Logging statt Konsole, da
+    /// `print()` beim Piping über `devicectl --console` bekanntermaßen gepuffert wird (s.
+    /// ROADMAP.md) - wieder entfernen, sobald der Watch-Anzeige-Bug gefunden ist.
+    private static let debugLogURL: URL? = FileManager.default
+        .urls(for: .documentDirectory, in: .userDomainMask).first?
+        .appendingPathComponent("watch_debug.log")
+
+    static func appendDebugLog(_ line: String) {
+        guard let debugLogURL else { return }
+        guard let data = ("\(Date()) \(line)\n").data(using: .utf8) else { return }
+        if FileManager.default.fileExists(atPath: debugLogURL.path), let handle = try? FileHandle(forWritingTo: debugLogURL) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: debugLogURL)
+        }
     }
 
     func sendHapticTurnEvent() {
@@ -47,7 +81,9 @@ final class WatchSessionManager: NSObject, WCSessionDelegate {
         WCSession.default.sendMessage([WatchMessageKey.hapticTurnEvent: true], replyHandler: nil, errorHandler: nil)
     }
 
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {}
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        Self.appendDebugLog("activationDidCompleteWith: state=\(activationState.rawValue) error=\(String(describing: error)) isPaired=\(session.isPaired) isWatchAppInstalled=\(session.isWatchAppInstalled)")
+    }
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) {
         WCSession.default.activate()

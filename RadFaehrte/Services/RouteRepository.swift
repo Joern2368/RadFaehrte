@@ -13,7 +13,7 @@ import SQLite3
 /// global eindeutig (planetweiter Namensraum), daher keine Kollisionsgefahr zwischen Ländern.
 final class RouteRepository {
 
-    private static let bundledResourceNames = ["routes", "netherlands", "poland"]
+    private static let bundledResourceNames = ["routes", "netherlands", "poland", "sweden"]
 
     private var databases: [OpaquePointer] = []
 

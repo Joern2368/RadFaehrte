@@ -19,7 +19,7 @@ enum AppSettingsKey {
 
 enum AppSettingsDefaults {
     static let averageSpeedKmh: Double = 15
-    static let averageSpeedRange: ClosedRange<Double> = 8...30
+    static let averageSpeedRange: ClosedRange<Double> = 3...50
 
     /// Entspricht der bisher fest verdrahteten Kamera-Distanz von 300 (s.
     /// `ContentView.navigationCameraDistance`), damit sich für Nutzer, die den neuen Regler nicht

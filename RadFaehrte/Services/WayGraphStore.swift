@@ -77,17 +77,18 @@ nonisolated enum Bundesland: String, CaseIterable, Identifiable, DownloadableReg
 }
 
 /// Weitere europäische Länder außerhalb Deutschlands, für die ein Wege-Graph heruntergeladen werden
-/// kann - bisher Niederlande (Anlass: Rotterdam-Reise 2026-07-27) und Polen (s. ROADMAP.md). Eigener
-/// Typ statt eines Falls in `Bundesland`, weil es Länder statt Bundesländer sind (andere Ebene) und
-/// die Einstellungen sie in einer eigenen Liste ("Offline-Karten Europa") getrennt von den
-/// deutschen Bundesländern anzeigen. Fallnamen bewusst auf Englisch (wie bei Geofabrik/den
-/// Release-Asset-Dateinamen, z. B. `netherlands_ways.sqlite`) statt Deutsch wie bei `Bundesland` -
-/// dort passt der deutsche Fallname zufällig zum Geofabrik-Bezeichner
+/// kann - bisher Niederlande (Anlass: Rotterdam-Reise 2026-07-27), Polen und Schweden (s.
+/// ROADMAP.md). Eigener Typ statt eines Falls in `Bundesland`, weil es Länder statt Bundesländer
+/// sind (andere Ebene) und die Einstellungen sie in einer eigenen Liste ("Offline-Karten Europa")
+/// getrennt von den deutschen Bundesländern anzeigen. Fallnamen bewusst auf Englisch (wie bei
+/// Geofabrik/den Release-Asset-Dateinamen, z. B. `netherlands_ways.sqlite`) statt Deutsch wie bei
+/// `Bundesland` - dort passt der deutsche Fallname zufällig zum Geofabrik-Bezeichner
 /// (download.geofabrik.de/europe/germany/<bundesland>), hier nicht (download.geofabrik.de/europe/
 /// <land-englisch>). `displayName` liefert trotzdem die deutsche UI-Bezeichnung.
 nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableRegion {
     case netherlands
     case poland
+    case sweden
 
     var id: String { rawValue }
 
@@ -95,6 +96,7 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
         switch self {
         case .netherlands: return "Niederlande"
         case .poland: return "Polen"
+        case .sweden: return "Schweden"
         }
     }
 }
