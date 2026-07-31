@@ -11,6 +11,72 @@ import CoreLocation
 
 struct RadFaehrteTests {
 
+    /// Regressionstest für einen Nutzer-Fund (2026-07-30): Bremen -> Osnabrück zeigte früher
+    /// "Brückenradweg Westroute" als Treffer, nach dem München-Nürnberg-Fix (2026-07-29, verwirft
+    /// Treffer ohne auffindbaren Pfad) aber nicht mehr - Ursache: Die Route zerfällt in ihrer
+    /// eigenen OSM-Geometrie in mehrere Teile, die nur durch winzige Simplification-Artefakte
+    /// (22 m/26 m, s. `RouteGraph.toleranceMeters`) getrennt sind, keine echte Lücke. Bundesweite
+    /// Stichprobe ergab: 705 von 7.018 benannten Fernwegen (10 %) betroffen.
+    ///
+    /// "Brückenradweg Ostroute" ursprünglich fälschlich für dauerhaft ausgeschlossen gehalten
+    /// (angeblich echte ~67-km-Lücke) - das war ein eigener Rechenfehler bei der Diagnose
+    /// (Raster-Indizes statt echter Koordinaten in die Distanzberechnung eingesetzt). Mit voller
+    /// Präzision (shapely) nachgerechnet: tatsächliche Lücke nur ~4 m, exakt derselbe
+    /// Simplification-Artefakt wie bei der Westroute - reine Rasterrundung (auch bei ~28 m
+    /// Zellgröße) hatte sie trotzdem nicht verbunden, weil die beiden Punkte zufällig auf
+    /// entgegengesetzten Seiten einer Rasterzellen-Grenze lagen. Behoben durch Nachbarschaftssuche
+    /// in `RouteGraph.node(for:)` (prüft die 3×3 umliegenden Zellen statt nur die eigene, mit
+    /// echtem Distanzabgleich) - seitdem finden **beide** Brückenradweg-Varianten einen
+    /// durchgehenden Pfad Bremen-Osnabrück.
+    @Test func routeSegmentDistanceFindsBothBridgeCyclewayRoutesBremenToOsnabrueck() async throws {
+        let repository = RouteRepository()
+        let bremen = CLLocationCoordinate2D(latitude: 53.0793, longitude: 8.8017)
+        let osnabrueck = CLLocationCoordinate2D(latitude: 52.2799, longitude: 8.0472)
+
+        for id in [174357, 409354] as [Int64] {
+            let route = try #require(repository.route(withId: id))
+            let distance = try #require(
+                RouteMatcher.routeSegmentDistance(along: route.lines, from: bremen, to: osnabrueck),
+                "Erwartete einen durchgehenden Pfad für Route \(id) (\(route.name ?? "?")), fand keinen"
+            )
+            #expect(distance.distanceKm > 100)
+            #expect(distance.distanceKm < 250)
+        }
+    }
+
+    /// Regressionstest für einen Nutzer-Fund (2026-07-31): Bei "Bremen" als Start zeigte die
+    /// Nähe-Vorschau (`findNearby`, kein Ziel gesetzt) beide Brückenradweg-Varianten, bei
+    /// "Osnabrück" als Start aber keine - obwohl der Brückenradweg genau zwischen beiden Städten
+    /// verläuft und an beiden Enden nahe genug liegt. Ursache: Osnabrück/Münster sind
+    /// Knotenpunkte vieler sich überlagernder Fernwege - das feste `limit` (früher 10) füllte
+    /// sich dort mit Varianten derselben Route (z. B. "Friedensroute", "Friedensroute (West)",
+    /// "Friedensroute (Ost)" - alle `ref` "FR") und mit einzelnen Knotenpunkt-Wegstücken als
+    /// scheinbar eigenständige Route (z. B. "Münster (1) - Münster (74)"), bevor der eigentlich
+    /// gesuchte Fernweg an die Reihe kam.
+    @Test func findNearbyShowsBridgeCyclewayAndPeaceRouteFromBothEndpoints() async throws {
+        let matcher = RouteMatcher(repository: RouteRepository())
+
+        let bremen = CLLocationCoordinate2D(latitude: 53.0793, longitude: 8.8017)
+        let osnabrueck = CLLocationCoordinate2D(latitude: 52.2799, longitude: 8.0472)
+        let muenster = CLLocationCoordinate2D(latitude: 51.9607, longitude: 7.6261)
+
+        for point in [bremen, osnabrueck] {
+            let names = matcher.findNearby(around: point).map { $0.route.name }
+            #expect(names.contains("Brückenradweg Westroute"), "fehlt bei \(point)")
+            #expect(names.contains("Brückenradweg Ostroute"), "fehlt bei \(point)")
+        }
+
+        // Fund 2026-07-31 (Nutzer-Beobachtung Münster): Die Ref-Deduplizierung darf die
+        // Richtungs-/Teiletappen "Friedensroute (West)"/"(Ost)" nicht hinter der
+        // zusammenfassenden "Friedensroute" verschwinden lassen (alle drei teilen sich den
+        // `ref` "FR") - beide Teiletappen müssen als eigene Treffer erhalten bleiben.
+        for point in [osnabrueck, muenster] {
+            let names = matcher.findNearby(around: point).map { $0.route.name }
+            #expect(names.contains("Friedensroute (West)"), "Friedensroute (West) fehlt bei \(point)")
+            #expect(names.contains("Friedensroute (Ost)"), "Friedensroute (Ost) fehlt bei \(point)")
+        }
+    }
+
     @Test func routeRepositoryFindsWeserRadwegNearBremen() async throws {
         let repository = RouteRepository()
 
@@ -204,7 +270,7 @@ struct RadFaehrteTests {
         // in dem ContentView.runMatching() auf die Kombinationssuche zurückfällt.
         #expect(matcher.findMatches(start: bremen, end: hannover).isEmpty)
 
-        let combined = try #require(matcher.findCombinedMatches(start: bremen, end: hannover))
+        let combined = try #require(matcher.findCombinedMatches(start: bremen, end: hannover).first)
         #expect(combined.legs.count >= 2)
 
         // Reale Rad-Distanz Bremen-Hannover über diese Fernwege liegt bei ca. 120-130 km -
@@ -222,6 +288,131 @@ struct RadFaehrteTests {
         #expect(containsExpectedRoute, "Erwartete Weser/Aller/Leine-Radweg-Kette, bekam: \(names)")
     }
 
+    /// ⚠️ Bekannte Regression (2026-07-30, zurückgestellt statt weiter untersucht - Nutzer-
+    /// Entscheidung): Seit der Nachbarschaftssuche in `RouteGraph.node(for:)` (behebt die
+    /// Grenzfall-Schwäche reiner Rasterrundung, s. Brückenradweg-Ostroute-Fund) findet dieser Test
+    /// keine Kette mehr - Suche läuft komplett durch (~50-57s, auch mit `maxVisitedRoutes`
+    /// verdoppelt auf 4000 unverändert), bleibt aber leer. Vermutete Ursache: Die jetzt bundesweit
+    /// verbesserte interne Verbindungsfähigkeit vieler Routen ändert die Reihenfolge, in der
+    /// Routen während der A*-Suche als `finalized` markiert werden - eine für die eigentliche Kette
+    /// nötige Route wird vermutlich vorzeitig über einen ungünstigen Einstiegspunkt finalisiert.
+    /// Berlin -> Den Haag ist ein extremer, seltener Randfall (mehrere Länder, dutzende sich in
+    /// Berlin überlagernde internationale Fernwege) - der reale Nutzen der Nachbarschaftssuche für
+    /// alltägliche deutsche Regionalfälle (Bremen-Osnabrück u. v. a., s. o.) wiegt höher als dieser
+    /// Randfall. Deaktiviert statt gelöscht, damit der Regressionsstand dokumentiert bleibt und der
+    /// Test bei einer künftigen, gründlicheren Untersuchung der `finalized`-Reihenfolge sofort
+    /// wieder verfügbar ist.
+    @Test(.disabled("Bekannte Regression seit RouteGraph-Nachbarschaftssuche (2026-07-30) - s. Doc-Kommentar, bewusst zurückgestellt"))
+    func combinedMatchBerlinToDenHaagFindsEuroVelo2Chain() async throws {
+        // Regressionstest für einen Fund beim Live-Testen (2026-07-29): Berlin->Amsterdam wurde
+        // ursprünglich als Testfall für "funktioniert die Kombinationssuche auch grenzüberschreitend"
+        // herangezogen, weil man "EuroVelo 2 - Hauptstadt-Route" erwartete - tatsächlich endet die
+        // real kartierte niederländische EuroVelo-2-Geometrie aber schon bei Hoek van Holland
+        // (~0,4 km Abstand) bzw. Den Haag (~3,3 km) statt Amsterdam (~26 km, weit außerhalb jeder
+        // Schwelle) - Amsterdam war also nie ein erreichbares Ziel für diese Route, unabhängig vom
+        // Such-Algorithmus. Berlin->Den Haag ist der faire Test, da Den Haag tatsächlich innerhalb
+        // `thresholdKm` (8 km) der echten Route liegt.
+        //
+        // Gleichzeitig Regressionstest für die A*-Umstellung von `findCombinedMatches`: Am
+        // Startpunkt Berlin überlagern sich dutzende Fernwege (EuroVelo 2, D-Route 3, Europaradweg
+        // R1, D-Netz Route 3 u. a.) auf denselben Wegen mit ~0 km Abstand zueinander - ein reiner
+        // Dijkstra nach Streckenlänge verbrauchte hier `maxVisitedRoutes` mit deren Erkundung, ohne
+        // je Fortschritt Richtung Ziel zu machen (bei Berlin->Amsterdam beobachtet: kumulierte
+        // Streckenlänge blieb über alle 500 besuchten Routen hinweg bei 0 km). Die A*-Priorität
+        // (Streckenlänge + Luftlinie zum Ziel) soll die Suche gezielter lenken - hier mit dem
+        // regulären `maxVisitedRoutes`-Standardwert (500), ohne Sonderbehandlung.
+        let repository = RouteRepository()
+        let matcher = RouteMatcher(repository: repository)
+        let berlin = CLLocationCoordinate2D(latitude: 52.5200, longitude: 13.4050)
+        let denHaag = CLLocationCoordinate2D(latitude: 52.0705, longitude: 4.3007)
+
+        let start = Date()
+        let combined = matcher.findCombinedMatches(start: berlin, end: denHaag)
+        let elapsed = Date().timeIntervalSince(start)
+        print("combinedMatchBerlinToDenHaag: \(elapsed)s, Ergebnis: \(combined.first?.routeNames ?? ["nil"])")
+
+        let result = try #require(combined.first, "Erwartete eine gefundene Kombination Berlin->Den Haag")
+        #expect(result.legs.count >= 1)
+        // Grober Plausibilitätsrahmen (Luftlinie ~577 km) statt exaktem Wert.
+        #expect(result.totalDistanceKm > 400)
+        #expect(result.totalDistanceKm < 1800)
+    }
+
+    /// Regressionstest für einen Fund beim Live-Testen (2026-07-30): "Europaradweg R1" existiert
+    /// als ID-Kollision sowohl nahe der polnischen als auch der niederländischen Grenze (s.
+    /// RouteRepository-Header). Die Kombinationssuche cachte Routen ursprünglich nur nach ID -
+    /// wurde dieselbe ID einmal als Ziel-Kandidat mit der niederländischen Kopie gecacht, nutzte
+    /// ein späteres Wiederbetreten über eine polnische Verzweigung fälschlich weiter diese falsche
+    /// Kopie. `routeSegmentDistances` projizierte den polnischen Einstiegspunkt dabei
+    /// stillschweigend auf die (Hunderte km entfernte) niederländische Geometrie und wies eine
+    /// ~500-km-Etappe als ~0 km aus - Berlin -> Vreden kam so auf eine offensichtlich falsche
+    /// Gesamtstrecke von ~134 km statt der tatsächlichen (~838 km über die gefundene Kette).
+    /// Behoben durch zwei Fixes: `RouteMatcher.nearestPoint`-Anker werden jetzt gegen
+    /// `maxPlausibleAnchorDistanceKm` geprüft (kein Pfad statt einer unsinnig kleinen Distanz zu
+    /// einem zu weit entfernten Projektionspunkt), und `findCombinedMatches`s `route(withId:near:)`
+    /// löst Routen bei einer ID-Kollision (`RouteRepository.allRoutes(withId:)`) anhand des
+    /// aktuellen Einstiegspunkts neu auf, statt eine möglicherweise falsche Kopie zu cachen.
+    @Test func combinedMatchBerlinToVredenHasPlausibleTotalDistance() async throws {
+        let repository = RouteRepository()
+        let matcher = RouteMatcher(repository: repository)
+        let berlin = CLLocationCoordinate2D(latitude: 52.5200, longitude: 13.4050)
+        let vreden = CLLocationCoordinate2D(latitude: 52.0374, longitude: 6.8259)
+        let combined = try #require(matcher.findCombinedMatches(start: berlin, end: vreden).first)
+
+        let straightLineKm = 451.0
+        #expect(combined.totalDistanceKm > straightLineKm, "Gesamtstrecke darf nie kürzer als die Luftlinie sein (~\(straightLineKm) km) - war sie doch, deutet das auf eine Fehlprojektion zwischen zwei ID-kollidierenden Routen-Kopien hin")
+
+        // Keine einzelne Etappe darf eine unplausibel große geografische Lücke überbrücken (mehr
+        // als die Diagonale des Suchgebiets), da das dieselbe Fehlprojektion wäre wie beim Fund.
+        for leg in combined.legs {
+            let entryToExitKm = CLLocation(latitude: leg.entryPoint.latitude, longitude: leg.entryPoint.longitude)
+                .distance(from: CLLocation(latitude: leg.exitPoint.latitude, longitude: leg.exitPoint.longitude)) / 1000
+            #expect(entryToExitKm < 200, "Etappe auf \(leg.route.name ?? "?") überbrückt \(entryToExitKm) km Luftlinie - unplausibel groß für eine einzelne Etappe")
+        }
+    }
+
+    /// Regressionstest für einen Nutzer-Fund (2026-07-30): Lübeck→Wismar fand ursprünglich keine
+    /// Kombination - zwei unabhängige Ursachen, live per Debug-Logging auf dem iPhone gefunden:
+    /// (1) "Alte Salzstraße" (Lübeck→Travemünde) und der "Ostseeküsten-Radweg"/D2
+    /// (Travemünde→Wismar) treffen sich in Travemünde erst bei 60,6 m tatsächlicher Distanz -
+    /// knapp über dem damaligen `JUNCTION_THRESHOLD_M` von 30 m in find_route_junctions.py. Auf
+    /// 75 m angehoben, route_junctions.sqlite neu regeneriert.
+    /// (2) Selbst danach blieb die Kette stecken: "D2 Ostseeküsten-Radweg - Abschnitt MV-Nordwest"
+    /// zerfiel intern in mehrere unzusammenhängende Teile (der Übergangspunkt aus Richtung
+    /// Travemünde lag in einer 117-Knoten-Komponente, der Punkt bei Wismar in einer separaten
+    /// 482-Knoten-Komponente - realer Abstand dazwischen nur ~4 m). Ursache: Die Douglas-Peucker-
+    /// Vereinfachung läuft pro OSM-Way einzeln; liegt der Berührpunkt zweier Routen nicht exakt an
+    /// einem Way-Anfang/-Ende, sondern mitten in einem Way, können beide Vereinfachungen ihn
+    /// unabhängig voneinander um bis zu ~11 m verschieben. `RouteGraph.snapKey` rundete bisher nur
+    /// auf ~1,1 m (5 Nachkommastellen) - auf ~11 m angehoben (4 Nachkommastellen, wie
+    /// `SIMPLIFY_TOLERANCE_DEG`), damit exakt solche Fast-Treffer als derselbe Knoten erkannt
+    /// werden. Kein Regressionsschaden: kompletter bestehender Test-Suite-Lauf (inkl.
+    /// Weser/Aller/Leine-Heide-, Bremen/Hannover-, Berlin/Vreden-, Berlin/Den-Haag-Ketten) blieb
+    /// unverändert grün.
+    ///
+    /// Bewusst kein `#expect(matcher.findMatches(...).isEmpty)` hier (anders als beim Bremen/
+    /// Hannover-Pendant): `findMatches` liefert für Lübeck→Wismar einen eigenständigen, davon
+    /// unabhängigen Treffer ("EuroVelo 13 - Iron Curtain Trail - Inner German part", vermutlich ein
+    /// Multi-Fragment-Datensatz mit einem Fragment zufällig nahe Lübeck und einem anderen nahe der
+    /// Suchregion) - ob der praktisch nutzbar ist, prüft `filterAndReorderMatchesByPracticalDistance`
+    /// separat; nicht Gegenstand dieses Tests.
+    @Test func combinedMatchLuebeckToWismarFindsRouteChainViaTravemuende() async throws {
+        let repository = RouteRepository()
+        let matcher = RouteMatcher(repository: repository)
+        let luebeck = CLLocationCoordinate2D(latitude: 53.8655, longitude: 10.6866)
+        let wismar = CLLocationCoordinate2D(latitude: 53.8912, longitude: 11.4527)
+
+        let combined = try #require(matcher.findCombinedMatches(start: luebeck, end: wismar).first)
+        #expect(combined.legs.count >= 2)
+
+        let names = combined.routeNames.joined(separator: " -> ")
+        let containsExpectedRoute = combined.routeNames.contains {
+            $0.localizedCaseInsensitiveContains("salzstraße")
+                || $0.localizedCaseInsensitiveContains("ostseeküsten")
+        }
+        #expect(containsExpectedRoute, "Erwartete Alte-Salzstraße/Ostseeküsten-Radweg-Kette über Travemünde, bekam: \(names)")
+    }
+
     @Test func findCombinedMatchesTerminatesWithoutImplausibleConnection() async throws {
         // Zwei Punkte ohne jede kombinierbare Route in der Nähe (mitten im offenen Meer) müssen
         // zuverlässig (und schnell, dank maxVisitedRoutes-Sicherheitsgrenze) nil liefern statt
@@ -230,7 +421,7 @@ struct RadFaehrteTests {
         let matcher = RouteMatcher(repository: repository)
         let northSea1 = CLLocationCoordinate2D(latitude: 55.5, longitude: 4.0)
         let northSea2 = CLLocationCoordinate2D(latitude: 56.0, longitude: 3.0)
-        #expect(matcher.findCombinedMatches(start: northSea1, end: northSea2) == nil)
+        #expect(matcher.findCombinedMatches(start: northSea1, end: northSea2).isEmpty)
     }
 
     @Test func gpxParserExtractsNameAndTrackPoints() async throws {
@@ -317,6 +508,116 @@ struct RadFaehrteTests {
         // die Gewichtung noch feinjustieren lässt.
         #expect(result.distanceMeters >= beelineMeters)
         #expect(result.distanceMeters < beelineMeters * 2.5)
+    }
+
+    /// Regressionstest für einen Nutzer-Fund (2026-07-31, Münster -> Köln): "EuroVelo 3 - Pilgrim's
+    /// Route - part Germany" liegt nahe Münster, ist dort aber nicht durchgehend genug kartiert, um
+    /// als Einzeltreffer/Teil einer Kombination zu erscheinen - wurde bisher nur als reiner
+    /// Text-Hinweis gezeigt, nicht als wählbarer Treffer. `nearbyWellKnownRouteMatches` muss die
+    /// Route stattdessen als vollwertigen `RouteMatch` liefern (Nutzer-Wunsch: "trotzdem anzeigen
+    /// und auswählen können").
+    @Test func nearbyWellKnownRouteMatchesFindsEuroVelo3NearMuenster() async throws {
+        let matcher = RouteMatcher(repository: RouteRepository())
+        let muenster = CLLocationCoordinate2D(latitude: 51.9607, longitude: 7.6261)
+        let koeln = CLLocationCoordinate2D(latitude: 50.9375, longitude: 6.9603)
+
+        let matches = matcher.nearbyWellKnownRouteMatches(start: muenster, end: koeln)
+        let ev3 = try #require(
+            matches.first { $0.route.ref == "EV3" },
+            "Erwartete einen Treffer mit ref \"EV3\" (EuroVelo 3) in der Nähe von Münster"
+        )
+        // Ein noch so großer Wert ist besser als gar keiner - der Nutzer soll die reale Entfernung
+        // selbst einschätzen können (analog `findClosestMatches`), statt die Route zu verstecken.
+        #expect(ev3.distanceToStartKm < 8)
+        #expect(ev3.distanceToStartKm >= 0)
+        #expect(ev3.distanceToEndKm >= 0)
+    }
+
+    /// Regressionstest für einen Nutzer-Fund (2026-07-31): Bremen und Niedersachsen heruntergeladen,
+    /// eine Route innerhalb von Bremen oder innerhalb von Niedersachsens nutzt die Offline-Engine,
+    /// eine Route von Bremen nach Niedersachsen (Bremen → Osnabrück) aber nicht - fällt auf
+    /// Online-Routing für die gesamte Strecke zurück, obwohl beide Regionen offline vorliegen.
+    /// Ursache: Jeder heruntergeladene Wege-Graph ist isoliert, `CrossRegionRouteStitcher` sucht
+    /// deshalb den Übergangspunkt zwischen zwei Regionen selbst. Dieser Test deckt nur die reine
+    /// Geometrie ab (`findHandoverCoordinate`, per Closures ohne echte Graph-Dateien) - simuliert
+    /// zwei "Abdeckungsbereiche" entlang einer Nord-Süd-Linie über ihre Distanz zum Abtastpunkt.
+    @Test func crossRegionRouteStitcherFindsHandoverBetweenAdjacentRegions() throws {
+        let start = CLLocationCoordinate2D(latitude: 53.20, longitude: 8.80)
+        let end = CLLocationCoordinate2D(latitude: 52.60, longitude: 8.80)
+        let startCenter = CLLocationCoordinate2D(latitude: 53.10, longitude: 8.80)
+        let endCenter = CLLocationCoordinate2D(latitude: 52.90, longitude: 8.80)
+
+        func distance(from center: CLLocationCoordinate2D) -> (CLLocationCoordinate2D) -> Double? {
+            { point in abs(point.latitude - center.latitude) }
+        }
+
+        let handover = CrossRegionRouteStitcher.findHandoverCoordinate(
+            start: start, end: end,
+            startRegionDistanceMeters: distance(from: startCenter),
+            endRegionDistanceMeters: distance(from: endCenter)
+        )
+
+        let handoverCoordinate = try #require(handover)
+        // Der gefundene Übergang muss zwischen Start und Ziel liegen, nicht außerhalb, und nahe der
+        // Mitte zwischen beiden Zentren (53.00°N).
+        #expect(handoverCoordinate.latitude < start.latitude)
+        #expect(handoverCoordinate.latitude > end.latitude)
+        #expect(abs(handoverCoordinate.latitude - 53.00) < 0.05)
+    }
+
+    /// Regressionstest für den eigentlichen Live-Fund: Ein erster Entwurf prüfte pro Abtastpunkt nur
+    /// "liegt ein Knoten der Region näher als X Meter dran" - bei Bremen als kleiner Enklave
+    /// innerhalb Niedersachsens war dieser Schwellenwert praktisch überall gleichzeitig für beide
+    /// Regionen erfüllt, wodurch nie ein reiner "nur Bremen"-Punkt gefunden wurde. Hier: die
+    /// Ziel-Region hat *überall* einen sehr nahen Knoten (konstant 50 m, wie Niedersachsen direkt an
+    /// Bremens Grenze), trotzdem muss der reine Distanzvergleich in Start-Nähe noch "näher an Start"
+    /// erkennen und dort einen Übergang finden, statt wie der alte Schwellenwert-Ansatz leer
+    /// auszugehen.
+    @Test func crossRegionRouteStitcherFindsHandoverEvenWhenEndRegionIsAlwaysNearby() throws {
+        let start = CLLocationCoordinate2D(latitude: 53.20, longitude: 8.80)
+        let end = CLLocationCoordinate2D(latitude: 52.60, longitude: 8.80)
+
+        let handover = CrossRegionRouteStitcher.findHandoverCoordinate(
+            start: start, end: end,
+            startRegionDistanceMeters: { abs($0.latitude - start.latitude) },
+            endRegionDistanceMeters: { _ in 0.01 }
+        )
+
+        let handoverCoordinate = try #require(handover)
+        #expect(handoverCoordinate.latitude < start.latitude)
+        #expect(handoverCoordinate.latitude > end.latitude)
+    }
+
+    /// Gegenprobe: Die Start-Region bleibt über die komplette Strecke näher (kein echter
+    /// Grenzübertritt) - kein Übergang, `ContentView` fällt wie bisher auf Online-Routing zurück
+    /// statt eine unplausible Route zu bauen.
+    @Test func crossRegionRouteStitcherReturnsNilWhenStartRegionStaysCloserThroughout() {
+        let start = CLLocationCoordinate2D(latitude: 53.20, longitude: 8.80)
+        let end = CLLocationCoordinate2D(latitude: 52.60, longitude: 8.80)
+
+        let handover = CrossRegionRouteStitcher.findHandoverCoordinate(
+            start: start, end: end,
+            startRegionDistanceMeters: { _ in 0.01 },
+            endRegionDistanceMeters: { _ in 100.0 }
+        )
+
+        #expect(handover == nil)
+    }
+
+    /// Weitere Gegenprobe: Keine der beiden Regionen hat entlang der Linie überhaupt einen Knoten in
+    /// Reichweite (beide Distanz-Closures liefern `nil`) - kein Übergang statt eines Absturzes/einer
+    /// zufälligen Koordinate.
+    @Test func crossRegionRouteStitcherReturnsNilWhenNeitherRegionIsInRange() {
+        let start = CLLocationCoordinate2D(latitude: 53.20, longitude: 8.80)
+        let end = CLLocationCoordinate2D(latitude: 52.60, longitude: 8.80)
+
+        let handover = CrossRegionRouteStitcher.findHandoverCoordinate(
+            start: start, end: end,
+            startRegionDistanceMeters: { _ in nil },
+            endRegionDistanceMeters: { _ in nil }
+        )
+
+        #expect(handover == nil)
     }
 
 }

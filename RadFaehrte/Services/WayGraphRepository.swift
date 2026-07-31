@@ -83,6 +83,20 @@ nonisolated final class WayGraphRepository {
     /// Straßennamen in Index-Reihenfolge - siehe `Edge.nameIndex`/`wayName(forIndex:)`.
     private(set) var wayNames: [String] = []
 
+    /// Grobes Raster über `nodeLocations` (Zellgröße `gridCellSizeDegrees`, ~1,1 km), einmalig beim
+    /// Laden aufgebaut - beschleunigt `nearestNode` von einem linearen Scan über alle Knoten (bei
+    /// großen Bundesländern/Ländern mehrere Millionen) auf eine Suche in den wenigen Zellen rund um
+    /// die Zielkoordinate. Für eine einzelne Route (2 Aufrufe) kaum spürbar, aber
+    /// `CrossRegionRouteStitcher` ruft `nearestNode` beim Abtasten der Luftlinie über hundert Mal
+    /// auf - ohne Raster live auf dem Gerät als Hänger von >40 s beobachtet (Nutzer-Fund,
+    /// 2026-07-31), da jeder Aufruf für sich den kompletten Knoten-Array linear durchsuchte.
+    private struct GridKey: Hashable {
+        let lat: Int32
+        let lon: Int32
+    }
+    private static let gridCellSizeDegrees = 0.01
+    private var spatialGrid: [GridKey: [Int32]] = [:]
+
     init?(path: String) {
         guard let fileHandle = FileHandle(forReadingAtPath: path) else { return nil }
         let magic = fileHandle.readData(ofLength: 4)
@@ -92,6 +106,21 @@ nonisolated final class WayGraphRepository {
             guard parseV2(path: path) else { return nil }
         } else {
             guard parseLegacy(path: path) else { return nil }
+        }
+        buildSpatialGrid()
+    }
+
+    private static func gridCell(for coordinate: CLLocationCoordinate2D) -> GridKey {
+        GridKey(
+            lat: Int32(floor(coordinate.latitude / gridCellSizeDegrees)),
+            lon: Int32(floor(coordinate.longitude / gridCellSizeDegrees))
+        )
+    }
+
+    private func buildSpatialGrid() {
+        spatialGrid.reserveCapacity(nodeLocations.count / 4)
+        for (index, location) in nodeLocations.enumerated() {
+            spatialGrid[Self.gridCell(for: location), default: []].append(Int32(index))
         }
     }
 
@@ -292,24 +321,38 @@ nonisolated final class WayGraphRepository {
     /// Nächstgelegener Graph-Knoten (als dichter Index, siehe oben) zu einer Koordinate, oder
     /// `nil`, wenn keiner innerhalb von `maxDistanceMeters` liegt. Rechnet lokal in einer ebenen
     /// Näherung um `coordinate` (analog `RouteMatcher.nearestPoint`) statt mit
-    /// `CLLocation.distance(from:)` - bei Ländern mit mehreren Millionen Knoten erzeugte die
-    /// vorherige Version pro Knoten ein neues `CLLocation` und eine volle geodätische
-    /// Distanzberechnung. Vergleicht außerdem nur quadrierte Distanzen (kein `sqrt` pro Knoten
-    /// nötig, da nur die Reihenfolge zählt).
+    /// `CLLocation.distance(from:)`. Durchsucht dank `spatialGrid` nur die Zellen, die
+    /// `maxDistanceMeters` überhaupt abdecken können, statt aller Knoten - vergleicht außerdem nur
+    /// quadrierte Distanzen (kein `sqrt` pro Knoten nötig, da nur die Reihenfolge zählt).
     func nearestNode(
         to coordinate: CLLocationCoordinate2D, maxDistanceMeters: Double = 2000
     ) -> Int? {
         let metersPerDegreeLat = 111_320.0
         let metersPerDegreeLon = metersPerDegreeLat * max(cos(coordinate.latitude * .pi / 180), 0.1)
+
+        let latCellMeters = Self.gridCellSizeDegrees * metersPerDegreeLat
+        let lonCellMeters = Self.gridCellSizeDegrees * metersPerDegreeLon
+        let latRadius = Int32(ceil(maxDistanceMeters / latCellMeters)) + 1
+        let lonRadius = Int32(ceil(maxDistanceMeters / lonCellMeters)) + 1
+
+        let center = Self.gridCell(for: coordinate)
         var bestIndex: Int?
         var bestDistanceSquared = maxDistanceMeters * maxDistanceMeters
-        for (index, location) in nodeLocations.enumerated() {
-            let dy = (location.latitude - coordinate.latitude) * metersPerDegreeLat
-            let dx = (location.longitude - coordinate.longitude) * metersPerDegreeLon
-            let distanceSquared = dx * dx + dy * dy
-            if distanceSquared < bestDistanceSquared {
-                bestDistanceSquared = distanceSquared
-                bestIndex = index
+
+        for latOffset in -latRadius...latRadius {
+            for lonOffset in -lonRadius...lonRadius {
+                let key = GridKey(lat: center.lat + latOffset, lon: center.lon + lonOffset)
+                guard let candidates = spatialGrid[key] else { continue }
+                for candidate in candidates {
+                    let location = nodeLocations[Int(candidate)]
+                    let dy = (location.latitude - coordinate.latitude) * metersPerDegreeLat
+                    let dx = (location.longitude - coordinate.longitude) * metersPerDegreeLon
+                    let distanceSquared = dx * dx + dy * dy
+                    if distanceSquared < bestDistanceSquared {
+                        bestDistanceSquared = distanceSquared
+                        bestIndex = Int(candidate)
+                    }
+                }
             }
         }
         return bestIndex

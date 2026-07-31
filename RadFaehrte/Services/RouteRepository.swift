@@ -9,8 +9,12 @@ import SQLite3
 /// Liest die im App-Bundle mitgelieferten Radrouten-Datenbanken (read-only). Deutschland
 /// (`routes.sqlite`) ist Pflicht, weitere Länder (z. B. `netherlands.sqlite`) werden nur
 /// eingebunden, wenn die jeweilige Datei tatsächlich im Bundle liegt - alle Datenbanken teilen
-/// sich dasselbe Schema, Ergebnisse werden einfach zusammengeführt. OSM-Relations-IDs sind
-/// global eindeutig (planetweiter Namensraum), daher keine Kollisionsgefahr zwischen Ländern.
+/// sich dasselbe Schema, Ergebnisse werden einfach zusammengeführt. OSM-Relations-IDs sind zwar
+/// planetweit eindeutig, grenzüberschreitende Relations tauchen aber in den Geofabrik-Extrakten
+/// mehrerer Länder auf (mit dort jeweils unterschiedlich zugeschnittener Geometrie) - `id` ist
+/// daher über die vier Datenbanken hinweg **nicht** kollisionsfrei. `routesOverlapping(...)`
+/// dedupliziert deshalb per ID, erster Treffer gewinnt (dieselbe Reihenfolge/Priorität wie
+/// `route(withId:)`).
 nonisolated final class RouteRepository {
 
     private static let bundledResourceNames = ["routes", "netherlands", "poland", "sweden"]
@@ -62,9 +66,16 @@ nonisolated final class RouteRepository {
     func routesOverlapping(
         minLon: Double, minLat: Double, maxLon: Double, maxLat: Double
     ) -> [BikeRoute] {
-        databases.flatMap {
-            routesOverlapping(in: $0, minLon: minLon, minLat: minLat, maxLon: maxLon, maxLat: maxLat)
+        var seenIds: Set<Int64> = []
+        var results: [BikeRoute] = []
+        for db in databases {
+            for route in routesOverlapping(in: db, minLon: minLon, minLat: minLat, maxLon: maxLon, maxLat: maxLat) {
+                if seenIds.insert(route.id).inserted {
+                    results.append(route)
+                }
+            }
         }
+        return results
     }
 
     private func routesOverlapping(
@@ -100,7 +111,10 @@ nonisolated final class RouteRepository {
 
     /// Eine einzelne Route anhand ihrer OSM-Relations-ID (z. B. für die Kombinationssuche, die
     /// per Junction-Tabelle nur IDs kennt und die volle Geometrie nachladen muss). Fragt die
-    /// Datenbanken der Reihe nach ab, bis eine einen Treffer liefert.
+    /// Datenbanken der Reihe nach ab, bis eine einen Treffer liefert. Bei einer ID-Kollision über
+    /// mehrere Datenbanken hinweg (s. Klassen-Header) also bewusst "erster Treffer gewinnt" -
+    /// für Aufrufer, die selbst anhand eines geografischen Kontexts die passende Kopie auswählen
+    /// müssen, stattdessen `allRoutes(withId:)` verwenden (s. `RouteMatcher.findCombinedMatches`).
     func route(withId id: Int64) -> BikeRoute? {
         for db in databases {
             if let route = route(withId: id, in: db) {
@@ -108,6 +122,16 @@ nonisolated final class RouteRepository {
             }
         }
         return nil
+    }
+
+    /// Alle Kopien einer Route über alle vier Datenbanken hinweg - im Regelfall nur eine, bei
+    /// einer ID-Kollision an einer Ländergrenze (s. Klassen-Header) aber mehrere mit
+    /// unterschiedlicher Geometrie. Für Aufrufer, die (anders als `route(withId:)`s blindes
+    /// "erster Treffer gewinnt") selbst die geografisch passende Kopie auswählen müssen - z. B.
+    /// die Kombinationssuche, die dieselbe ID aus unterschiedlichen Richtungen/Ländern erreichen
+    /// kann und je nach Einstiegspunkt eine andere Kopie braucht.
+    func allRoutes(withId id: Int64) -> [BikeRoute] {
+        databases.compactMap { route(withId: id, in: $0) }
     }
 
     private func route(withId id: Int64, in db: OpaquePointer) -> BikeRoute? {
@@ -129,6 +153,29 @@ nonisolated final class RouteRepository {
 
         guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
         return decodeRoute(from: statement)
+    }
+
+    /// Nur das `ref`-Tag einer Route (z. B. "EV2", "D3") anhand ihrer ID, ohne die Geometrie zu
+    /// dekodieren - für die Kombinationssuche, die beim Erweitern der Warteschlange (potenziell
+    /// viele Nachbar-Kandidaten pro besuchter Route) nur wissen muss, ob zwei Routen zum selben
+    /// Fernweg gehören, aber nicht sofort deren volle (u. U. tausende Punkte lange) Geometrie
+    /// braucht - die wird ohnehin erst bei tatsächlichem Besuch über `route(withId:)` geladen und
+    /// gecacht. `nil`, wenn die ID in keiner Datenbank existiert oder kein `ref`-Tag gesetzt ist.
+    func ref(forRouteId id: Int64) -> String? {
+        for db in databases {
+            let sql = "SELECT ref FROM routes WHERE id = ?"
+            var statement: OpaquePointer?
+            defer { sqlite3_finalize(statement) }
+
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+                assertionFailure("SQL prepare fehlgeschlagen: \(String(cString: sqlite3_errmsg(db)))")
+                continue
+            }
+            sqlite3_bind_int64(statement, 1, id)
+            guard sqlite3_step(statement) == SQLITE_ROW else { continue }
+            return textColumn(statement, 0)
+        }
+        return nil
     }
 
     /// Alle Anschlussstellen einer Route zu anderen benannten Fernwegen (aus der per

@@ -60,6 +60,17 @@ struct ContentView: View {
     /// berechnet, aber kein zusammenhängender Pfad gefunden (z. B. Lücke in den Kartendaten).
     @State private var routeSegmentDistances: [Int64: RouteMatcher.RouteSegmentDistance?] = [:]
     @State private var matchingGeneration = 0
+    /// Alle aktuell laufenden Hintergrund-Suchvorgänge der laufenden `runMatching()`-Runde
+    /// (Kombinationssuche, Streckenlängen-Berechnung, EuroVelo-/D-Routen-Suche). Bisher verwarf
+    /// `runMatching()` bei einer neuen Suche nur das *Ergebnis* alter Suchen über den
+    /// `matchingGeneration`-Zähler, brach die eigentliche (teils mehrere Sekunden dauernde)
+    /// Hintergrundberechnung selbst aber nicht ab - sie lief einfach ungenutzt weiter und
+    /// verbrauchte dabei CPU-Zeit, die sich eine schnell danach gestartete neue Suche mit ihr
+    /// teilen musste (Nutzer-Beobachtung 2026-07-31: schnell hintereinander ausgeführte Suchen
+    /// wurden spürbar langsamer als eine einzelne). `cancelActiveSearchTasks()` bricht diese Tasks
+    /// jetzt beim Start einer neuen Suche wirklich ab (s. `RouteMatcher.findCombinedMatches`s
+    /// `Task.isCancelled`-Prüfung in der Hauptsuchschleife).
+    @State private var activeSearchTasks: [Task<Void, Never>] = []
     /// Gefundene Verkettung mehrerer benannter Fernwege (z. B. Weser-Radweg -> Aller-Radweg ->
     /// Leine-Heide-Radweg), falls `findMatches` keine einzelne passende Route findet - Fallback
     /// noch vor `findClosestMatches` (s. `runMatching`), da eine passende Kombination nützlicher
@@ -67,6 +78,19 @@ struct ContentView: View {
     /// `selectedMatch`/`isDirectRouteMode`, nicht in ein gemeinsames Enum zusammengeführt (folgt
     /// dem bestehenden Muster dieser Datei).
     @State private var combinedMatch: RouteMatcher.CombinedRouteMatch?
+    /// Alle von `findCombinedMatches` gefundenen Alternativen (`combinedMatch` ist die aktuell
+    /// ausgewählte/angezeigte davon, analog zu `matches`/`selectedMatch`) - Nutzer-Wunsch
+    /// (2026-07-30): swipebare Alternativen wie beim Wisch-Pager für einzelne Treffer
+    /// (`matchesPager`), da nicht immer die von der Suche bevorzugte Kette die subjektiv
+    /// gewünschte ist (z. B. eine bekannte EuroVelo-Route als Alternative zu einer technisch
+    /// kürzeren, aber unbekannteren Kombination).
+    @State private var combinedMatches: [RouteMatcher.CombinedRouteMatch] = []
+    @State private var pagedCombinedMatchIndex = 0
+    /// Zeigt bei Antippen des Info-Buttons in `combinedRouteRow` ein Sheet mit allen Etappen der
+    /// gewählten Kombination (Nutzer-Wunsch 2026-07-30: der Titel-Text `routeNames.joined(...)`
+    /// schneidet lange Ketten in der schmalen Ergebniszeile sichtbar ab, z. B. bei München ->
+    /// Nürnberg mit 8 Etappen).
+    @State private var combinedRouteDetail: RouteMatcher.CombinedRouteMatch?
     /// `true`, während die Kombinationssuche (+ ggf. anschließender `findClosestMatches`-Fallback)
     /// im Hintergrund läuft - kann je nach Region/Hardware mehrere Sekunden dauern. Ohne diesen
     /// Hinweis zeigte `resultsSection` in der Zwischenzeit fälschlich schon die Leermeldung
@@ -141,6 +165,11 @@ struct ContentView: View {
     /// Zuletzt für ein Haptik-Signal an die Apple Watch genutzter Schritt-Index (s.
     /// `checkWatchHapticTrigger`) - verhindert wiederholtes Auslösen für denselben Abbiege-Schritt.
     @State private var lastWatchHapticStepIndex: Int?
+    /// Hochzählender Zähler, der bei jeder ausgelösten Watch-Haptik erhöht und mit
+    /// `updateWatchNavigationState` an `WatchNavState.hapticTrigger` übergeben wird - bewusst nie
+    /// zurückgesetzt (auch nicht zwischen zwei Navigationen), damit die Watch eine Änderung immer
+    /// zuverlässig erkennt (s. `WatchNavState.hapticTrigger`).
+    @State private var watchHapticTriggerCounter = 0
 
     /// Karte geht bis an den Bildschirmrand (kein Rand, keine abgerundeten Ecken), solange
     /// navigiert wird und der Nutzer den Banner per Button ausgeblendet hat. Ist er eingeblendet,
@@ -317,7 +346,15 @@ struct ContentView: View {
                 isDirectRouteMode = false
                 directRoutes = []
             }
-            selectedRouteLines = newValue.map { $0.legs.flatMap { Self.mergedLines($0.route.lines) } } ?? []
+            // Pro Etappe nur das tatsächlich genutzte Teilstück zeichnen (`pathCoordinates`),
+            // nicht die komplette Geometrie der jeweiligen Route (`route.lines`) - die enthält bei
+            // benannten Fernwegen oft ungenutzte Zweige/Nebenäste, was bei mehreren gestapelten
+            // Etappen zu einem unübersichtlichen Liniengewirr führte (Nutzer-Beobachtung
+            // 2026-07-30, Bremen -> Hannover). Fällt auf die komplette Geometrie zurück, falls
+            // `routeSegmentPath` ausnahmsweise keinen Pfad fand (leeres `pathCoordinates`).
+            selectedRouteLines = newValue.map {
+                $0.legs.flatMap { $0.pathCoordinates.isEmpty ? Self.mergedLines($0.route.lines) : [$0.pathCoordinates] }
+            } ?? []
             loadCombinedConnectorRoute(to: newValue)
         }
         .onChange(of: routeToStart) { _, newValue in
@@ -354,6 +391,9 @@ struct ContentView: View {
         }
         .sheet(item: $tourSummary) { summary in
             tourSummarySheet(summary)
+        }
+        .sheet(item: $combinedRouteDetail) { match in
+            combinedRouteDetailSheet(match)
         }
         .sheet(isPresented: $showQuickSettings) {
             NavigationQuickSettingsView()
@@ -495,11 +535,16 @@ struct ContentView: View {
         if isNavigating {
             if let location = locationManager.currentLocation {
                 accumulateTourDistance(location)
+                // Haptik-Prüfung bewusst VOR `advanceDirectRouteStepIfNeeded`: die Schritt-
+                // Weiterschaltung passiert schon ab 30 m vor der Abbiegung - liefe die Haptik-
+                // Prüfung danach, könnte ein Schritt bei schneller Fahrt/seltenen GPS-Updates
+                // bereits weitergeschaltet sein, bevor die Haptik für ihn je ausgelöst wurde
+                // (Nutzer-Beobachtung 2026-07-28: Vibration blieb komplett aus).
+                checkWatchHapticTrigger(location)
                 advanceDirectRouteStepIfNeeded(location)
                 checkDirectRouteDeviation(location)
                 updateDisplayedUserLocation(location)
                 updateWatchNavigationState()
-                checkWatchHapticTrigger(location)
             }
             updateNavigationCamera()
         } else if isResolvingCurrentLocationForStart, let location = locationManager.currentLocation {
@@ -778,7 +823,8 @@ struct ContentView: View {
             instructionText: navigationInstructionTitle,
             distanceText: currentStepDistanceText ?? navigationInstructionSubtitle,
             direction: previewedStep.map { watchDirection(for: $0) } ?? .straight,
-            routeName: isDirectRouteMode ? nil : (combinedMatch?.routeNames.joined(separator: " → ") ?? selectedMatch?.route.name)
+            routeName: isDirectRouteMode ? nil : (combinedMatch?.routeNames.joined(separator: " → ") ?? selectedMatch?.route.name),
+            hapticTrigger: watchHapticTriggerCounter
         )
         WatchSessionManager.appendDebugLog(
             "updateWatchNavigationState: isDirectRouteMode=\(isDirectRouteMode) directRoutes.count=\(directRoutes.count) "
@@ -820,25 +866,44 @@ struct ContentView: View {
         }
     }
 
+    /// Vorlauf-Distanz fürs Haptik-Signal auf der Apple Watch - ursprünglich 50 m, nach
+    /// Nutzer-Feedback ("kommt zu spät") auf 100 m erhöht (bei 20 km/h ca. 18 statt nur 9
+    /// Sekunden Vorlauf).
+    private static let watchHapticLeadDistanceMeters: Double = 100
+
     /// Löst ein kurzes Haptik-Signal auf der Apple Watch aus, kurz bevor eine Abbiegung der
-    /// "Direkten Fahrrad-Route" ansteht (< 50 m, wie der 30-m-Radius von
-    /// `advanceDirectRouteStepIfNeeded`, aber etwas großzügiger, damit die Vibration spürbar vor
+    /// "Direkten Fahrrad-Route" ansteht (< `watchHapticLeadDistanceMeters`, deutlich großzügiger
+    /// als der 30-m-Radius von `advanceDirectRouteStepIfNeeded`, damit die Vibration spürbar vor
     /// der eigentlichen Abbiegung ankommt). Nur bei echten Abbiegungen (`isTurnInstruction`) - bei
     /// reinem Geradeausfahren (bzw. kuratierten Radrouten ohne Schritt-Daten) gibt es nichts
     /// anzukündigen. `lastWatchHapticStepIndex` verhindert wiederholtes Auslösen für denselben
     /// Schritt.
     private func checkWatchHapticTrigger(_ location: CLLocation) {
-        guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex),
-              let previewedStep, isTurnInstruction(previewedStep),
-              lastWatchHapticStepIndex != currentDirectRouteStepIndex
-        else { return }
+        guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) else { return }
+        guard let previewedStep else {
+            WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: kein previewedStep (currentDirectRouteStepIndex=\(currentDirectRouteStepIndex), steps.count=\(directRoutes[selectedDirectRouteIndex].steps.count))")
+            return
+        }
+        let turn = isTurnInstruction(previewedStep)
+        guard turn else {
+            WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: keine Abbiegung ('\(previewedStep.instructions)', direction=\(previewedStep.direction))")
+            return
+        }
+        guard lastWatchHapticStepIndex != currentDirectRouteStepIndex else {
+            return
+        }
         let steps = directRoutes[selectedDirectRouteIndex].steps
         guard steps.indices.contains(currentDirectRouteStepIndex) else { return }
         let stepEnd = steps[currentDirectRouteStepIndex].endCoordinate
         let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
-        guard location.distance(from: stepEndLocation) < 50 else { return }
+        let distance = location.distance(from: stepEndLocation)
+        guard distance < Self.watchHapticLeadDistanceMeters else {
+            WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: noch zu weit (\(Int(distance)) m, Schwelle \(Int(Self.watchHapticLeadDistanceMeters)) m) für '\(previewedStep.instructions)'")
+            return
+        }
+        WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: AUSLÖSEN bei \(Int(distance)) m für '\(previewedStep.instructions)'")
         lastWatchHapticStepIndex = currentDirectRouteStepIndex
-        WatchSessionManager.shared.sendHapticTurnEvent()
+        watchHapticTriggerCounter += 1
     }
 
     private func checkDirectRouteDeviation(_ location: CLLocation) {
@@ -866,6 +931,11 @@ struct ContentView: View {
             for path in candidatePaths {
                 newRoutes = await Self.offlineDirectRoutes(path: path, from: location, to: ziel)
                 if !newRoutes.isEmpty { break }
+            }
+            if newRoutes.isEmpty, let combined = await Self.crossRegionOfflineDirectRoute(
+                candidatePaths: candidatePaths, from: location, to: ziel
+            ) {
+                newRoutes = [combined]
             }
             if newRoutes.isEmpty {
                 newRoutes = await Self.directions(from: location, to: ziel, alternates: true)
@@ -1621,10 +1691,58 @@ struct ContentView: View {
                     return
                 }
             }
+            if let combined = await Self.crossRegionOfflineDirectRoute(candidatePaths: candidatePaths, from: start, to: ziel) {
+                isLoadingDirectRoute = false
+                if isDirectRouteMode { directRoutes = [combined] }
+                return
+            }
             let routes = await Self.directions(from: start, to: ziel, alternates: true)
             isLoadingDirectRoute = false
             if isDirectRouteMode { directRoutes = routes.map(DirectRoute.init(route:)) }
         }
+    }
+
+    /// Fängt den Fall ab, dass `start`/`ziel` zwar je in einer heruntergeladenen Region liegen, aber
+    /// in unterschiedlichen (z. B. Bremen → Osnabrück mit Bremen + Niedersachsen heruntergeladen) -
+    /// ohne diesen Schritt findet keiner der einzelnen Graphen in `candidatePaths` (jeder deckt nur
+    /// eine Region ab) einen Pfad, und `loadDirectRoute`/`rerouteDirectRoute` würden komplett auf
+    /// Online-Routing zurückfallen, obwohl beide Regionen offline vorliegen. Siehe
+    /// `CrossRegionRouteStitcher` für das eigentliche Vorgehen (Übergangspunkt an der Luftlinie
+    /// suchen, in beiden Graphen unabhängig snappen, zwei Teilrouten aneinanderreihen).
+    private static func crossRegionOfflineDirectRoute(
+        candidatePaths: [String], from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D
+    ) async -> DirectRoute? {
+        await Task.detached(priority: .userInitiated) { () -> DirectRoute? in
+            let repositories: [(path: String, repository: WayGraphRepository)] = candidatePaths.compactMap { path in
+                guard let repository = WayGraphCache.shared.repository(for: path) else { return nil }
+                return (path, repository)
+            }
+            let startCandidates = repositories.filter { $0.repository.nearestNode(to: start) != nil }
+            let endCandidates = repositories.filter { $0.repository.nearestNode(to: end) != nil }
+
+            for startCandidate in startCandidates {
+                for endCandidate in endCandidates where endCandidate.path != startCandidate.path {
+                    if let result = CrossRegionRouteStitcher.combinedRoute(
+                        start: start, end: end,
+                        startRepository: startCandidate.repository, endRepository: endCandidate.repository,
+                        endRegionDisplayName: Self.regionDisplayName(forPath: endCandidate.path)
+                    ) {
+                        return DirectRoute(offlineResult: result)
+                    }
+                }
+            }
+            return nil
+        }.value
+    }
+
+    /// Bundesland/Land-Anzeigename aus dem Dateinamen eines Wege-Graphen (`<rawValue>.sqlite`, s.
+    /// `WayGraphStore.fileURL(for:)`) - für den "Weiter in ..."-Übergangsschritt in
+    /// `CrossRegionRouteStitcher`.
+    private static func regionDisplayName(forPath path: String) -> String {
+        let fileName = (path as NSString).lastPathComponent.replacingOccurrences(of: ".sqlite", with: "")
+        if let bundesland = Bundesland(rawValue: fileName) { return bundesland.displayName }
+        if let land = EuropaLand(rawValue: fileName) { return land.displayName }
+        return "der Nachbarregion"
     }
 
     /// Berechnet die Route(n) über die heruntergeladene Offline-Engine (siehe
@@ -1829,35 +1947,13 @@ struct ContentView: View {
             } else {
                 directRouteSection
 
-                if isSearchingCombinedMatch {
-                    // Suche nach einer Routen-Kombination läuft noch (kann je nach Region einige
-                    // Sekunden dauern) - ohne diesen Hinweis wirkte die Suche in der Zwischenzeit
-                    // wie ein Fehlschlag (Live-Test München -> Nürnberg).
-                    Divider()
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Suche nach Routen-Kombination …")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 4)
-                } else if let combinedMatch {
-                    // Kein einzelner Treffer, aber eine Verkettung mehrerer Fernwege gefunden
-                    // (s. `runMatching`/`findCombinedMatches`) - `matches` bleibt dabei leer,
-                    // beide Zweige schließen sich also gegenseitig aus.
-                    Divider()
-                    combinedRouteRow(combinedMatch)
-                } else if matches.isEmpty {
-                    Divider()
-                    Text("Keine passende Radroute in der Nähe gefunden")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 4)
-                } else {
+                // Einzeltreffer (falls vorhanden) - unabhängig davon, ob zusätzlich (s. u.) noch
+                // eine kombinierte Route gefunden wird. Nutzer-Wunsch (2026-07-30): mehr Auswahl,
+                // auch wenn schon ein durchgehend beschilderter Einzeltreffer existiert (z. B.
+                // Brückenradweg + Friedensroute als Alternative zu EuroVelo 3/D7 Pilgerroute bei
+                // Bremen -> Münster) - anders als früher schließen sich Einzeltreffer und
+                // Kombination jetzt nicht mehr gegenseitig aus.
+                if !matches.isEmpty {
                     Divider()
                     if isFallbackMatches {
                         Text("Keine Radroute in der Nähe – nächstgelegene Vorschläge:")
@@ -1869,12 +1965,43 @@ struct ContentView: View {
                     }
                     matchesPager(matches, subtitle: subtitle(for:))
                 }
+
+                if isSearchingCombinedMatch {
+                    // Suche nach einer Routen-Kombination läuft noch (kann je nach Region einige
+                    // Sekunden dauern) - ohne diesen Hinweis wirkte die Suche in der Zwischenzeit
+                    // wie ein Fehlschlag (Live-Test München -> Nürnberg). Läuft jetzt auch neben
+                    // bereits vorhandenen Einzeltreffern, blockiert deren Anzeige aber nicht.
+                    Divider()
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Suche nach Routen-Kombination …")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 4)
+                } else if !combinedMatches.isEmpty {
+                    Divider()
+                    combinedMatchesPager(combinedMatches)
+                }
+
+                if matches.isEmpty && combinedMatches.isEmpty && !isSearchingCombinedMatch {
+                    Divider()
+                    Text("Keine passende Radroute in der Nähe gefunden")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 4)
+                }
             }
         }
         .background(.background)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .onChange(of: matches) { pagedMatchIndex = 0 }
         .onChange(of: nearbyMatches) { pagedMatchIndex = 0 }
+        .onChange(of: combinedMatches) { pagedCombinedMatchIndex = 0 }
     }
 
     /// Einzelne Zeile für die direkte Fahrrad-Route. Bei mehreren Alternativen können diese
@@ -1965,35 +2092,89 @@ struct ContentView: View {
         .contentShape(Rectangle())
     }
 
-    /// Zeigt die per `findCombinedMatches` gefundene Verkettung mehrerer Fernwege als einzelne
-    /// Zeile (kein Wisch-Pager nötig, da die Suche nur das eine beste Ergebnis liefert - anders
-    /// als `matches`/`matchesPager`). Antippen aktiviert sie erneut, falls der Nutzer
-    /// zwischenzeitlich zur "Direkten Fahrrad-Route" gewechselt hatte.
+    /// Zeigt eine per `findCombinedMatches` gefundene Verkettung mehrerer Fernwege als einzelne
+    /// Zeile - mehrere Alternativen werden per Wisch-Pager angezeigt (s. `combinedMatchesPager`),
+    /// analog zu `matches`/`matchesPager`.
     private func combinedRouteRow(_ match: RouteMatcher.CombinedRouteMatch) -> some View {
-        Button {
-            selectedMatch = nil
-            isDirectRouteMode = false
-            directRoutes = []
-        } label: {
-            HStack {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(match.routeNames.joined(separator: " → "))
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(2)
+                Text(combinedMatchSubtitle(for: match))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button {
+                combinedRouteDetail = match
+            } label: {
+                Image(systemName: "list.bullet")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            if match.id == combinedMatch?.id {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.blue)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+    }
+
+    /// Sheet mit allen Etappen einer kombinierten Route (Name + Streckenlänge je Etappe) - Antwort
+    /// auf den abgeschnittenen Titel-Text in `combinedRouteRow` bei langen Ketten.
+    private func combinedRouteDetailSheet(_ match: RouteMatcher.CombinedRouteMatch) -> some View {
+        NavigationStack {
+            List(match.legs) { leg in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(match.routeNames.joined(separator: " → "))
-                        .font(.subheadline.weight(.medium))
-                    Text(combinedMatchSubtitle(for: match))
+                    Text(leg.route.name ?? "Unbenannte Route")
+                        .font(.body.weight(.medium))
+                    Text("~\(String(format: "%.1f", leg.distanceKm)) km")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Spacer()
-                if selectedMatch == nil, !isDirectRouteMode {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.blue)
+            }
+            .navigationTitle("Etappen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fertig") { combinedRouteDetail = nil }
                 }
             }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 4)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .presentationDetents([.medium, .large])
+    }
+
+    /// Wisch-Pager für mehrere von `findCombinedMatches` gefundene Alternativen (Nutzer-Wunsch
+    /// 2026-07-30, s. `combinedMatches`) - analog zu `matchesPager` für einzelne Treffer. Wischen
+    /// wählt die angezeigte Seite sofort aus (zeigt sie direkt auf der Karte), nicht erst nach
+    /// Antippen.
+    private func combinedMatchesPager(_ items: [RouteMatcher.CombinedRouteMatch]) -> some View {
+        TabView(selection: $pagedCombinedMatchIndex) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, match in
+                Button {
+                    selectedMatch = nil
+                    isDirectRouteMode = false
+                    directRoutes = []
+                    combinedMatch = match
+                } label: {
+                    combinedRouteRow(match)
+                        .padding(.bottom, 26)
+                }
+                .buttonStyle(.plain)
+                .tag(index)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .automatic : .never))
+        .indexViewStyle(.page(backgroundDisplayMode: .always))
+        .frame(height: 102)
+        .onChange(of: pagedCombinedMatchIndex) {
+            if items.indices.contains(pagedCombinedMatchIndex) {
+                combinedMatch = items[pagedCombinedMatchIndex]
+            }
+        }
     }
 
     private func combinedMatchSubtitle(for match: RouteMatcher.CombinedRouteMatch) -> String {
@@ -2051,11 +2232,21 @@ struct ContentView: View {
         return "ca. \(minutes) Min."
     }
 
+    /// Bricht alle noch laufenden Hintergrund-Suchvorgänge der vorigen `runMatching()`-Runde ab
+    /// (s. `activeSearchTasks`), statt sie nur ihr inzwischen wertloses Ergebnis verwerfen zu
+    /// lassen - sie liefen sonst einfach weiter und stahlen der neuen Suche CPU-Zeit.
+    private func cancelActiveSearchTasks() {
+        for task in activeSearchTasks { task.cancel() }
+        activeSearchTasks.removeAll()
+    }
+
     private func runMatching() {
         guard !isImportedRouteMode else { return }
+        cancelActiveSearchTasks()
         matchingGeneration += 1
         routeSegmentDistances = [:]
         combinedMatch = nil
+        combinedMatches = []
         isSearchingCombinedMatch = false
         guard let start = startPlace?.coordinate, let end = zielPlace?.coordinate else {
             matches = []
@@ -2074,6 +2265,7 @@ struct ContentView: View {
             matches = strictMatches
             isFallbackMatches = false
             loadRouteSegmentDistances(for: matches, generation: matchingGeneration)
+            attemptCombinedSearchAsAdditionalOption(start: start, end: end, generation: matchingGeneration)
         }
         // Vorauswahl: "Direkte Fahrrad-Route" statt automatisch der ersten kuratierten Radroute
         // (Nutzer-Entscheidung) - die kuratierten Treffer bleiben im Wisch-Pager weiterhin wählbar.
@@ -2089,30 +2281,102 @@ struct ContentView: View {
     ///
     /// Zwei Aufrufer: (1) `runMatching()`, wenn `findMatches` von vornherein leer bleibt, und (2)
     /// `filterAndReorderMatchesByPracticalDistance()`, wenn ein zunächst gefundener Einzeltreffer
-    /// sich nachträglich als unbrauchbar herausstellt (Kartenlücke zwischen den Anschlusspunkten,
-    /// z. B. beim sehr langen "Radweg D11: Ostsee <> Oberbayern" zwischen München und Nürnberg
-    /// beobachtet) - ohne diesen zweiten Aufrufer verschwand der Nutzer sonst ohne jeden Vorschlag,
-    /// weil `runMatching()`s Fallback-Entscheidung schon getroffen war, bevor die Lücke überhaupt
-    /// bekannt wurde.
+    /// sich nachträglich als zu kurz herausstellt (z. B. beim sehr langen "Radweg D11: Ostsee <>
+    /// Oberbayern" zwischen München und Nürnberg beobachtet) - ohne diesen zweiten Aufrufer
+    /// verschwand der Nutzer sonst ohne jeden Vorschlag, weil `runMatching()`s Fallback-Entscheidung
+    /// schon getroffen war, bevor das zu kurze Segment überhaupt bekannt wurde. Ein Treffer mit
+    /// echter Kartenlücke (kein Pfad zwischen den Anschlusspunkten) landet dagegen seit 2026-07-31
+    /// nicht mehr hier, sondern bleibt selbst sichtbar (s. `filterAndReorderMatchesByPracticalDistance`).
     private func attemptCombinedThenClosestFallback(
         start: CLLocationCoordinate2D, end: CLLocationCoordinate2D, generation: Int
     ) {
         isSearchingCombinedMatch = true
         let searchMatcher = matcher
-        Task.detached(priority: .userInitiated) {
+        let task = Task.detached(priority: .userInitiated) {
             let combined = searchMatcher.findCombinedMatches(start: start, end: end)
+            // Unabhängig vom Ergebnis zusätzlich prüfen, ob eine bekannte EuroVelo-/D-Route in der
+            // Nähe von Start oder Ziel liegt - wird unten per `appendNearbyWellKnownMatches` als
+            // ganz normal wählbarer Treffer ergänzt, falls sie nicht schon Teil des Ergebnisses ist.
+            let nearbyWellKnown = searchMatcher.nearbyWellKnownRouteMatches(start: start, end: end)
+            guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard matchingGeneration == generation else { return }
                 isSearchingCombinedMatch = false
-                if let combined {
-                    combinedMatch = combined
+                var usedRefs: Set<String> = []
+                if !combined.isEmpty {
+                    combinedMatches = combined
+                    combinedMatch = combined.first
+                    pagedCombinedMatchIndex = 0
+                    usedRefs = Set(combined.flatMap { $0.legs.compactMap(\.route.ref) })
                 } else {
                     matches = searchMatcher.findClosestMatches(start: start, end: end)
                     isFallbackMatches = !matches.isEmpty
                     loadRouteSegmentDistances(for: matches, generation: generation)
+                    usedRefs = Set(matches.compactMap { $0.route.ref })
                 }
+                appendNearbyWellKnownMatches(nearbyWellKnown, usedRefs: usedRefs, generation: generation)
             }
         }
+        activeSearchTasks.append(task)
+    }
+
+    /// Sucht zusätzlich zu bereits gefundenen Einzeltreffern (`matches`) im Hintergrund nach einer
+    /// kombinierten Route (Nutzer-Wunsch 2026-07-30: "eine größere Auswahl an Möglichkeiten hat
+    /// was" - z. B. Brückenradweg + Friedensroute als Alternative zu EuroVelo 3/D7 Pilgerroute bei
+    /// Bremen -> Münster). Anders als `attemptCombinedThenClosestFallback`: blockiert nicht die
+    /// bereits vorhandenen Einzeltreffer (die bleiben unverändert sichtbar) und läuft keinen
+    /// `findClosestMatches`-Fallback, falls nichts gefunden wird (unpassend, es liegen ja schon
+    /// echte Treffer vor). Setzt bewusst nur `combinedMatches` (die Liste für den Wisch-Pager),
+    /// nicht `combinedMatch` selbst - sonst würde `onChange(of: combinedMatch)` die gerade aktive
+    /// Auswahl (Direkte Fahrrad-Route/Einzeltreffer) stillschweigend auf die Kombination
+    /// umschalten. Der Nutzer wählt die Kombination bewusst selbst per Antippen aus, genau wie
+    /// einen Einzeltreffer. Prüft ebenfalls auf nahe, noch ungenutzte bekannte Fernwege (s.
+    /// `appendNearbyWellKnownMatches`) - auch wenn schon Einzeltreffer vorliegen, kann z. B. ein
+    /// EuroVelo-Abschnitt nahe nur eines der beiden Punkte fehlen.
+    private func attemptCombinedSearchAsAdditionalOption(
+        start: CLLocationCoordinate2D, end: CLLocationCoordinate2D, generation: Int
+    ) {
+        isSearchingCombinedMatch = true
+        let searchMatcher = matcher
+        let task = Task.detached(priority: .userInitiated) {
+            let combined = searchMatcher.findCombinedMatches(start: start, end: end)
+            let nearbyWellKnown = searchMatcher.nearbyWellKnownRouteMatches(start: start, end: end)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard matchingGeneration == generation else { return }
+                isSearchingCombinedMatch = false
+                var usedRefs = Set(matches.compactMap { $0.route.ref })
+                if !combined.isEmpty {
+                    combinedMatches = combined
+                    usedRefs.formUnion(combined.flatMap { $0.legs.compactMap(\.route.ref) })
+                }
+                appendNearbyWellKnownMatches(nearbyWellKnown, usedRefs: usedRefs, generation: generation)
+            }
+        }
+        activeSearchTasks.append(task)
+    }
+
+    /// Ergänzt `matches` um bekannte, in der Nähe liegende EuroVelo-/D-Routen (s.
+    /// `RouteMatcher.nearbyWellKnownRouteMatches`), die noch nicht Teil von `usedRefs` (bereits
+    /// verwendete Routen-Refs aus Einzeltreffern/Kombinationen) sind, und stößt für die neu
+    /// ergänzten Treffer die Streckenlängen-Berechnung an. Ersetzt den früheren reinen Text-Hinweis
+    /// ("... verläuft hier in der Nähe, ist aber nicht durchgehend kartiert") - Nutzer-Wunsch
+    /// (2026-07-31): die Route soll trotzdem angezeigt und auswählbar sein, nicht nur erwähnt.
+    /// Eine echte Kartenlücke zwischen den Anschlusspunkten zeigt sich dann ganz normal über den
+    /// bestehenden "Kartendaten hier lückenhaft"-Hinweis (s. `subtitle(for:)`,
+    /// `filterAndReorderMatchesByPracticalDistance`), verhindert aber nicht mehr die Anzeige.
+    private func appendNearbyWellKnownMatches(
+        _ wellKnown: [RouteMatch], usedRefs: Set<String>, generation: Int
+    ) {
+        let existingIds = Set(matches.map(\.id))
+        let additional = wellKnown.filter { match in
+            guard !existingIds.contains(match.id) else { return false }
+            guard let ref = match.route.ref else { return true }
+            return !usedRefs.contains(ref)
+        }
+        guard !additional.isEmpty else { return }
+        matches.append(contentsOf: additional)
+        loadRouteSegmentDistances(for: additional, generation: generation)
     }
 
     /// Radrouten rund um den gewählten Start, solange noch kein Ziel eingegeben ist - Vorschau
@@ -2149,8 +2413,9 @@ struct ContentView: View {
             let lines = match.route.lines
             let start = match.nearestPointToStart
             let end = match.nearestPointToEnd
-            Task.detached(priority: .userInitiated) {
+            let task = Task.detached(priority: .userInitiated) {
                 let result = RouteMatcher.routeSegmentDistance(along: lines, from: start, to: end)
+                guard !Task.isCancelled else { return }
                 await MainActor.run {
                     guard matchingGeneration == generation else { return }
                     routeSegmentDistances[routeId] = result
@@ -2162,22 +2427,30 @@ struct ContentView: View {
                     }
                 }
             }
+            activeSearchTasks.append(task)
         }
     }
 
     /// Entfernt Treffer, deren Streckenabschnitt "auf der Route" zu kurz ist, um als eigenständige
-    /// Routenempfehlung sinnvoll zu sein (`minimumRouteSegmentKm`), oder bei denen sich mangels
-    /// zusammenhängendem Pfad (Lücke in den Kartendaten) gar keine Länge ermitteln ließ - für
-    /// Letzteres lässt sich ja nicht prüfen, ob der Abschnitt lang genug wäre. Sortiert die
-    /// verbleibenden Treffer danach nach der Gesamtstrecke, die man real fahren würde (Anfahrt
-    /// zum Streckenanfang + Strecke auf der Route + Anfahrt vom Streckenende zum Ziel) statt nur
-    /// nach der Anfahrtsdistanz. So landet ein Fernweg, der nur zufällig nah an Start und Ziel
-    /// vorbeikommt, dazwischen aber einen großen Umweg macht, weiter unten als eine Route, die
-    /// beide Punkte tatsächlich direkt verbindet. Zeigte die entfernte Auswahl selbst gerade auf
-    /// einen jetzt aussortierten Treffer, fällt die Auswahl zurück auf die "Direkte Fahrrad-Route".
+    /// Routenempfehlung sinnvoll zu sein (`minimumRouteSegmentKm`). Treffer, bei denen sich mangels
+    /// zusammenhängendem Pfad (Lücke in den Kartendaten) gar keine Länge ermitteln ließ, werden
+    /// NICHT entfernt (Nutzer-Wunsch 2026-07-31: "ich möchte trotzdem die Route angezeigt bekommen
+    /// und auswählen können", ausdrücklich nicht nur für den einen Beispielfall, sondern allgemein,
+    /// da sowas häufig vorkommt) - sie bleiben sicht- und wählbar, zeigen aber statt einer km-Angabe
+    /// den bestehenden "Kartendaten hier lückenhaft"-Hinweis (s. `subtitle(for:)`). Sortiert die
+    /// Treffer danach nach der Gesamtstrecke, die man real fahren würde (Anfahrt zum
+    /// Streckenanfang + Strecke auf der Route + Anfahrt vom Streckenende zum Ziel) statt nur nach
+    /// der Anfahrtsdistanz - ein Fernweg, der nur zufällig nah an Start und Ziel vorbeikommt,
+    /// dazwischen aber einen großen Umweg macht, landet dadurch weiter unten als eine Route, die
+    /// beide Punkte tatsächlich direkt verbindet; Treffer ohne ermittelbare Länge (Kartenlücke)
+    /// landen automatisch ganz am Ende (s. `practicalDistanceKm`). Zeigte die entfernte Auswahl
+    /// selbst gerade auf einen jetzt aussortierten (zu kurzen) Treffer, fällt die Auswahl zurück
+    /// auf die "Direkte Fahrrad-Route".
     private func filterAndReorderMatchesByPracticalDistance() {
         matches.removeAll { match in
-            guard let segment = routeSegmentDistances[match.id], let segment else { return true }
+            guard let segmentState = routeSegmentDistances[match.id], let segment = segmentState else {
+                return false
+            }
             return segment.distanceKm < Self.minimumRouteSegmentKm
         }
         matches.sort { practicalDistanceKm(for: $0) < practicalDistanceKm(for: $1) }
@@ -2188,11 +2461,10 @@ struct ContentView: View {
         }
 
         // Alle zunächst gefundenen Einzeltreffer haben sich nachträglich als unbrauchbar
-        // herausgestellt (Kartenlücke/zu kurzes Segment) - `!isFallbackMatches` verhindert eine
-        // Endlosschleife, falls sogar die "nächstgelegene Vorschläge" aus dem Fallback selbst
-        // noch einmal komplett aussortiert werden (dann bleibt es bei der Leermeldung, statt
-        // erneut zu kombinieren).
-        if matches.isEmpty, !isFallbackMatches, combinedMatch == nil,
+        // herausgestellt (zu kurzes Segment) - `!isFallbackMatches` verhindert eine Endlosschleife,
+        // falls sogar die "nächstgelegene Vorschläge" aus dem Fallback selbst noch einmal komplett
+        // aussortiert werden (dann bleibt es bei der Leermeldung, statt erneut zu kombinieren).
+        if matches.isEmpty, !isFallbackMatches, combinedMatches.isEmpty,
            let start = startPlace?.coordinate, let end = zielPlace?.coordinate {
             attemptCombinedThenClosestFallback(start: start, end: end, generation: matchingGeneration)
         }

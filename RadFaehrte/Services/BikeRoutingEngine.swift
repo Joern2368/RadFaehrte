@@ -74,9 +74,12 @@ nonisolated final class BikeRoutingEngine {
     }
 
     /// Einzelne "ruhigste" Route zwischen zwei Punkten - Kurzform von
-    /// `routes(from:to:maxAlternatives:)` ohne Alternativen.
-    func route(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) -> Result? {
-        routes(from: start, to: end, maxAlternatives: 0).first
+    /// `routes(from:to:maxAlternatives:)` ohne Alternativen. `maxVisitedNodes` s. dort.
+    func route(
+        from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D,
+        maxVisitedNodes: Int = BikeRoutingEngine.maxVisitedNodes
+    ) -> Result? {
+        routes(from: start, to: end, maxAlternatives: 0, maxVisitedNodes: maxVisitedNodes).first
     }
 
     /// Berechnet die "ruhigste" Route sowie bis zu `maxAlternatives` weitere, spürbar andere
@@ -85,8 +88,16 @@ nonisolated final class BikeRoutingEngine {
     /// `maxAlternatives + 1` Ergebnisse, sobald sich keine trennbare Alternative mehr finden
     /// lässt; leeres Array, wenn kein Knoten in der Nähe von `start`/`end` liegt (außerhalb des
     /// heruntergeladenen Bundeslands) oder gar kein Pfad existiert.
+    ///
+    /// `maxVisitedNodes` überschreibt `Self.maxVisitedNodes` (s. dort) für diesen Aufruf -
+    /// `CrossRegionRouteStitcher` braucht für seine Teilstrecken ein höheres Limit, da eine Etappe
+    /// quer durch ein großes Bundesland (z. B. Bremen → Osnabrück: ~97 km allein im
+    /// Niedersachsen-Abschnitt) mehr Knoten berührt als die für lokale Städte-Routen kalibrierten
+    /// 300.000 (Live-Fund 2026-07-31: `leg2` schlug mit dem Standardwert fehl, obwohl ein Pfad
+    /// existierte).
     func routes(
-        from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D, maxAlternatives: Int = 2
+        from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D, maxAlternatives: Int = 2,
+        maxVisitedNodes: Int = BikeRoutingEngine.maxVisitedNodes
     ) -> [Result] {
         guard let startNode = repository.nearestNode(to: start),
               let endNode = repository.nearestNode(to: end)
@@ -96,7 +107,7 @@ nonisolated final class BikeRoutingEngine {
         var excludedEdges: Set<EdgeKey> = []
 
         for _ in 0...maxAlternatives {
-            guard let (result, path) = search(from: startNode, to: endNode, excluding: excludedEdges)
+            guard let (result, path) = search(from: startNode, to: endNode, excluding: excludedEdges, maxVisitedNodes: maxVisitedNodes)
             else { break }
             results.append(result)
             for i in 1..<path.count {
@@ -111,7 +122,7 @@ nonisolated final class BikeRoutingEngine {
     /// einen kleinen, lokalen Ausschnitt - Arrays in Graphgröße vorzuallozieren wäre für jede
     /// einzelne Suche unnötig speicherhungrig.
     private func search(
-        from startNode: Int, to endNode: Int, excluding excludedEdges: Set<EdgeKey>
+        from startNode: Int, to endNode: Int, excluding excludedEdges: Set<EdgeKey>, maxVisitedNodes: Int
     ) -> (Result, [Int])? {
         guard endNode < repository.nodeLocations.count else { return nil }
         let endLocation = repository.nodeLocations[endNode]
@@ -140,7 +151,7 @@ nonisolated final class BikeRoutingEngine {
             guard !visited.contains(current.node) else { continue }
             visited.insert(current.node)
             if current.node == endNode { break }
-            guard visited.count < Self.maxVisitedNodes else { return nil }
+            guard visited.count < maxVisitedNodes else { return nil }
 
             for edge in repository.edges(from: current.node) {
                 let toNode = Int(edge.toNode)

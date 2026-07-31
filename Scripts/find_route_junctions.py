@@ -12,6 +12,16 @@ zahlreicheren lokalen lcn-Knotenpunktnetz-Fragmente sind dafür zu kleinteilig/u
 (Analyse vom 2026-07-29: 7.018 benannte rcn/ncn/icn-Routen, davon 99% mit mind. einer
 Anschlussstelle, ⌀ 12,4 Partner pro Route - siehe Referenzwerte im Sanity-Check unten).
 
+Schwellenwert 2026-07-30 von 30 auf 75 m angehoben: Nutzer-Beispiel Lübeck→Wismar fand keine
+Kombination, obwohl "Alte Salzstraße" (Lübeck→Travemünde) und der "Ostseeküsten-Radweg"/D2
+(Travemünde→Wismar) sich in Travemünde erkennbar treffen - tatsächliche Distanz per Analyse-Skript
+gemessen: 60,6 m (vermutlich unterschiedliche Straßenseiten/Hafen-/Fähranleger-Bereich). Mit 75 m
+wächst der Anschluss-Graph nur moderat (24.067 → 24.314 ungerichtete Kanten, +8 zusätzlich vernetzte
+Routen von 3.517 auf 3.525) - Stichprobe der neu hinzugekommenen Kanten zeigte ausschließlich
+plausible, geografisch benachbarte Fernweg-Paare (u. a. Fluss-Zusammenflüsse wie Unstrutradweg/
+Saaleradweg), keine erkennbaren Fehlverbindungen. Bestehende Sanity-Check-Referenzbeispiele
+(Weser/Aller/Leine-Heide) weiterhin unverändert gefunden.
+
 ⚠️ WICHTIG: Diese Datei ist ein manuell zu regenerierendes Derivat der vier Quell-DBs
 (routes.sqlite + netherlands/poland/sweden.sqlite). Ändert sich eine dieser Dateien (neue
 Relationen, Resimplifizierung, ein weiteres Land kommt dazu), muss dieses Skript erneut laufen und
@@ -46,7 +56,7 @@ from shapely.geometry import LineString, MultiLineString
 from shapely.ops import nearest_points
 from shapely.strtree import STRtree
 
-JUNCTION_THRESHOLD_M = 30.0
+JUNCTION_THRESHOLD_M = 75.0
 NETWORKS = ("rcn", "ncn", "icn")
 
 # Viele Regionen taggen ihr lokales Knotenpunkt-Wegenetz (einzelne Wegabschnitte zwischen
@@ -58,13 +68,39 @@ NETWORKS = ("rcn", "ncn", "icn")
 # Dinklage (78)", 3.586 von 7.018 Treffern - über die Hälfte aller benannten rcn/ncn/icn-Routen!).
 # Keine bekannte echte Fernweg-Route (Weser-Radweg, Aller-Radweg, Leine-Heide-Radweg, ...) matcht
 # eines der beiden Muster - ausgeschlossen, damit der Anschluss-Graph nur "echte" Fernwege verbindet.
+#
+# Zwei weitere Muster gefunden beim Live-Test Berlin->Den Haag (2026-07-29): Die App verkettete
+# u. a. "Knotenpunktwegweisung Oberhavel", "Knotenpunktnetz Landkreis Ostprignitz-Ruppin" (beides
+# eindeutig lokale Knotenpunkt-Netze, am Namen als solche erkennbar, aber keins der beiden obigen
+# Muster) sowie "71 - Rübehorst (72)" (Mischform aus rein-numerischem und Ort+Nummer-Muster, von
+# keinem der beiden bisherigen Patterns erfasst) in eine "kombinierte Route" ein. Ergänzt:
+# Namen mit "Knotenpunkt" (deutschsprachiger Fachbegriff, keine bekannte echte Fernweg-Route
+# verwendet ihn im Namen) sowie die Mischform "Zahl - Text (Zahl)"/"Text (Zahl) - Zahl".
+#
+# Zwei weitere Muster gefunden bei der Untersuchung eines größeren JUNCTION_THRESHOLD_M (2026-07-30,
+# Nutzer-Beispiel Brückenradweg/Friedensroute Bremen-Osnabrück-Münster): Bei testweise 300 m
+# (nicht übernommen, s. u.) wären u. a. "OSL 37-46"/"OSL36-58" (Landkreis-Präfix + Knotenpunkt-
+# Zahlen) und die nackte Zahl "37" fälschlich mit echten Fernwegen verkettet worden - beide
+# gegen die komplette Datenbank geprüft (40 bzw. 1 Treffer), keiner davon sieht wie eine echte
+# Fernweg-Route aus. Ein drittes, breiteres Muster ("beliebiger Name, endet auf '(Zahl)'", 21
+# Treffer) bewusst NICHT ergänzt - darunter "Fünf-Flüsse-Radweg (07)", eine Route, die bereits
+# nachweislich Teil einer echten Kombination war (München->Nürnberg-Beispiel) - ob das "(07)" eine
+# Etappennummer oder ein Knotenpunkt-Verweis ist, ließ sich ohne die zugrundeliegenden OSM-Tags
+# nicht sicher klären, das Risiko eines Fehlausschlusses war hier höher als bei den beiden engen
+# Mustern unten.
 NODE_TO_NODE_NAME_PATTERNS = [
     re.compile(r"^\d+\s*-\s*\d+$"),
     re.compile(r".*\(\d+\).*-.*\(\d+\).*"),
+    re.compile(r"^\d+\s*-\s*.+\(\d+\)\s*$"),
+    re.compile(r"^.+\(\d+\)\s*-\s*\d+$"),
+    re.compile(r"^\d+$"),
+    re.compile(r"^[A-Za-zÄÖÜäöüß]{1,6}\s*\d+\s*-\s*\d+$"),
 ]
 
 
 def is_node_to_node_segment(name):
+    if "knotenpunkt" in name.lower():
+        return True
     return any(pattern.match(name) for pattern in NODE_TO_NODE_NAME_PATTERNS)
 
 # Grobe mittlere Breite für Deutschland/Mitteleuropa, reicht für eine lokale Meter-Näherung bei
