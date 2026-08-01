@@ -585,6 +585,40 @@ struct RadFaehrteTests {
         #expect(reconstructedMeters < reference.distanceMeters * 1.1)
     }
 
+    /// Wie `curatedRouteStepMatcherReconstructsStepsAlongKnownGraphPath`, aber mit echter
+    /// kuratierter Routen-Geometrie statt einer graph-generierten Referenzstrecke: Bremen
+    /// Hauptbahnhof -> Weserwehr/Werdersee entlang des tatsächlichen "Weser-Radweg" (aus
+    /// `routes.sqlite`, Douglas-Peucker-vereinfacht, unsortierte Way-Fragmente - genau die
+    /// Eingabe, die `CuratedRouteStepMatcher` in der App später bekäme). Live-Diagnose (2026-08-01)
+    /// ergab plausible, echte Bremer Straßennamen ohne Lücken (u. a. Bredenstraße, Schlachte,
+    /// Wilhelm-Kaisen-Brücke, Werderstraße) - hier nur lose auf Struktur statt exakten Namen
+    /// geprüft, damit der Test nicht bei jeder kleinen Kartendaten-Änderung bricht.
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: RadFaehrteTests.bremenWayGraphPath)))
+    func curatedRouteStepMatcherHandlesRealWeserRadwegGeometry() async throws {
+        let repository = RouteRepository()
+        let routes = repository.routesOverlapping(minLon: 8.6, minLat: 52.9, maxLon: 8.95, maxLat: 53.2)
+        let weserRadweg = try #require(routes.first { $0.name == "Weser-Radweg" })
+        let wayGraphRepo = try #require(WayGraphRepository(path: Self.bremenWayGraphPath))
+
+        let hauptbahnhof = CLLocationCoordinate2D(latitude: 53.0836, longitude: 8.8138)
+        let weserwehr = CLLocationCoordinate2D(latitude: 53.0530, longitude: 8.8280)
+
+        let path = try #require(
+            RouteMatcher.routeSegmentPath(along: weserRadweg.lines, from: hauptbahnhof, to: weserwehr)
+        )
+        let steps = try #require(
+            CuratedRouteStepMatcher.steps(along: path, using: wayGraphRepo),
+            "Erwartete gematchte Schritte entlang der echten Weser-Radweg-Geometrie Bremen Hauptbahnhof -> Weserwehr"
+        )
+
+        #expect(steps.count > 5)
+        #expect(steps.allSatisfy { !$0.instructions.isEmpty })
+        // Mindestens ein paar echte Straßennamen sollten dabei sein, nicht nur unbenannte
+        // "Rechts/Links abbiegen" ohne "auf ..." - sonst wäre das Ergebnis für Nutzer nutzlos.
+        let namedSteps = steps.filter { $0.instructions.contains(" auf ") }
+        #expect(namedSteps.count >= 3)
+    }
+
     /// Regressionstest für einen Nutzer-Fund (2026-07-31, Münster -> Köln): "EuroVelo 3 - Pilgrim's
     /// Route - part Germany" liegt nahe Münster, ist dort aber nicht durchgehend genug kartiert, um
     /// als Einzeltreffer/Teil einer Kombination zu erscheinen - wurde bisher nur als reiner

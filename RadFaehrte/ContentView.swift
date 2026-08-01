@@ -104,6 +104,26 @@ struct ContentView: View {
     /// München -> Nürnberg wirkte dadurch wie ein Fehlschlag, obwohl die Suche nur noch lief).
     @State private var isSearchingCombinedMatch = false
 
+    /// Map-Matching-Versuch (s. ROADMAP.md, `CuratedRouteStepMatcher`): Zeigt bei Antippen des
+    /// Info-Buttons in `matchRow` ein Sheet mit Straßennamen/Abbiege-Hinweisen für den gewählten
+    /// Einzeltreffer, analog zu `combinedRouteDetail`. Bewusst als eigener, einfacher Info-Button
+    /// statt in die Live-Navigation integriert (die zeigt Turn-by-Turn bisher nur für die
+    /// "Direkte Fahrrad-Route", s. `isDirectRouteMode`/`previewedStep`) - kleinerer, risikoärmerer
+    /// erster Schritt, der die bestehende Navigations-State-Machine nicht anfasst.
+    @State private var curatedRouteStepsDetail: RouteMatch?
+    /// `nil` = noch nicht geladen, `[]` explizit leer (Wege-Graph hat keine Namen), s.
+    /// `curatedRouteStepsDetailSheet`.
+    @State private var curatedRouteSteps: [BikeRoutingEngine.Result.Step]?
+    @State private var isLoadingCuratedRouteSteps = false
+    /// Straßennamen/Abbiege-Hinweise für den aktuell **ausgewählten** Einzeltreffer (`selectedMatch`),
+    /// als vollwertige `DirectRoute` (Koordinaten + Schritte) - anders als `curatedRouteSteps` (nur
+    /// für die On-Demand-Vorschau eines beliebigen, noch nicht zwingend ausgewählten Treffers) wird
+    /// das hier für die tatsächlich laufende Turn-by-Turn-Navigation gebraucht (s. `activeStepRoute`).
+    /// Wird proaktiv bei jeder Auswahl geladen (`.onChange(of: selectedMatch)`), nicht erst beim
+    /// Start der Navigation, damit die Anzeige nicht erst nach "Los" nachzieht.
+    @State private var curatedRoute: DirectRoute?
+    @State private var currentCuratedStepIndex = 0
+
     @State private var locationManager = LocationManager()
     @State private var isNavigating = false
     @State private var showLocationDeniedAlert = false
@@ -409,6 +429,12 @@ struct ContentView: View {
             selectedRouteLines = newValue.map { Self.mergedLines($0.route.lines) } ?? []
             routeSelectionToken += 1
             loadConnectorRoute(to: newValue)
+            if let newValue {
+                loadCuratedRouteForNavigation(newValue)
+            } else {
+                curatedRoute = nil
+                currentCuratedStepIndex = 0
+            }
         }
         .onChange(of: combinedMatch) { _, newValue in
             if newValue != nil {
@@ -466,6 +492,9 @@ struct ContentView: View {
         .sheet(item: $combinedRouteDetail) { match in
             combinedRouteDetailSheet(match)
         }
+        .sheet(item: $curatedRouteStepsDetail) { match in
+            curatedRouteStepsDetailSheet(match)
+        }
         .sheet(isPresented: $showQuickSettings) {
             NavigationQuickSettingsView()
         }
@@ -504,6 +533,7 @@ struct ContentView: View {
         isUserLocationSnapped = false
         snappedUserLocationCoordinate = locationManager.currentLocation?.coordinate
         currentDirectRouteStepIndex = 0
+        currentCuratedStepIndex = 0
         lastWatchHapticStepIndex = nil
         updateWatchNavigationState()
         sendActiveRouteToWatch()
@@ -902,16 +932,43 @@ struct ContentView: View {
     /// nur eins), erkennt `nearestSegmentIndex` das am Vergleich der Segment-Indizes und
     /// überspringt alle bereits passierten Schritte auf einmal, statt für immer auf dem
     /// 30-m-Radius um den ersten (längst passierten) Schritt hängen zu bleiben.
-    private func advanceDirectRouteStepIfNeeded(_ location: CLLocation) {
-        guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) else { return }
-        let route = directRoutes[selectedDirectRouteIndex]
-        let steps = route.steps
-        guard currentDirectRouteStepIndex < steps.count - 1 else { return }
+    /// Vereinheitlicht den Zugriff auf "die aktuell navigierte Route mit Turn-by-Turn-Schritten" -
+    /// entweder die "Direkte Fahrrad-Route" (`directRoutes`) oder ein per Map-Matching
+    /// (`CuratedRouteStepMatcher`) mit Straßennamen angereicherter kuratierter Einzeltreffer
+    /// (`curatedRoute`, s. dort). Bewusst zwei getrennte Schritt-Index-Zustände
+    /// (`currentDirectRouteStepIndex`/`currentCuratedStepIndex`) statt eines gemeinsamen Feldes -
+    /// beide werden unabhängig voneinander befüllt/zurückgesetzt (Suche vs. Kartentipp-Auswahl),
+    /// eine Vereinheitlichung hätte `isDirectRouteMode`s viele andere Verwendungsstellen (Reroute,
+    /// GPX-Export, Alternativrouten-UI) mit betroffen - genau das Risiko, das dieser kleinere,
+    /// additive Schritt vermeiden soll. Nur eine der beiden Quellen ist je aktiv, `setStepIndex`
+    /// schreibt entsprechend in die richtige.
+    private var activeStepRoute: (route: DirectRoute, stepIndex: Int)? {
+        if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
+            return (directRoutes[selectedDirectRouteIndex], currentDirectRouteStepIndex)
+        }
+        if selectedMatch != nil, let curatedRoute, !curatedRoute.steps.isEmpty {
+            return (curatedRoute, currentCuratedStepIndex)
+        }
+        return nil
+    }
 
-        let stepEnd = steps[currentDirectRouteStepIndex].endCoordinate
+    private func setActiveStepIndex(_ index: Int) {
+        if isDirectRouteMode {
+            currentDirectRouteStepIndex = index
+        } else {
+            currentCuratedStepIndex = index
+        }
+    }
+
+    private func advanceDirectRouteStepIfNeeded(_ location: CLLocation) {
+        guard let (route, currentIndex) = activeStepRoute else { return }
+        let steps = route.steps
+        guard currentIndex < steps.count - 1 else { return }
+
+        let stepEnd = steps[currentIndex].endCoordinate
         let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
         if location.distance(from: stepEndLocation) < 30 {
-            currentDirectRouteStepIndex += 1
+            setActiveStepIndex(currentIndex + 1)
             return
         }
 
@@ -921,14 +978,14 @@ struct ContentView: View {
         guard location.horizontalAccuracy >= 0, location.horizontalAccuracy < 30,
               let locationSegmentIndex = Self.nearestSegmentIndex(of: location.coordinate, in: route.coordinates)
         else { return }
-        var advanced = currentDirectRouteStepIndex
+        var advanced = currentIndex
         while advanced < steps.count - 1,
               let endSegmentIndex = Self.nearestSegmentIndex(of: steps[advanced].endCoordinate, in: route.coordinates),
               locationSegmentIndex > endSegmentIndex {
             advanced += 1
         }
-        if advanced != currentDirectRouteStepIndex {
-            currentDirectRouteStepIndex = advanced
+        if advanced != currentIndex {
+            setActiveStepIndex(advanced)
         }
     }
 
@@ -1054,9 +1111,9 @@ struct ContentView: View {
     /// anzukündigen. `lastWatchHapticStepIndex` verhindert wiederholtes Auslösen für denselben
     /// Schritt.
     private func checkWatchHapticTrigger(_ location: CLLocation) {
-        guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) else { return }
+        guard let (route, currentIndex) = activeStepRoute else { return }
         guard let previewedStep else {
-            WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: kein previewedStep (currentDirectRouteStepIndex=\(currentDirectRouteStepIndex), steps.count=\(directRoutes[selectedDirectRouteIndex].steps.count))")
+            WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: kein previewedStep (currentIndex=\(currentIndex), steps.count=\(route.steps.count))")
             return
         }
         let turn = isTurnInstruction(previewedStep)
@@ -1064,12 +1121,12 @@ struct ContentView: View {
             WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: keine Abbiegung ('\(previewedStep.instructions)', direction=\(previewedStep.direction))")
             return
         }
-        guard lastWatchHapticStepIndex != currentDirectRouteStepIndex else {
+        guard lastWatchHapticStepIndex != currentIndex else {
             return
         }
-        let steps = directRoutes[selectedDirectRouteIndex].steps
-        guard steps.indices.contains(currentDirectRouteStepIndex) else { return }
-        let stepEnd = steps[currentDirectRouteStepIndex].endCoordinate
+        let steps = route.steps
+        guard steps.indices.contains(currentIndex) else { return }
+        let stepEnd = steps[currentIndex].endCoordinate
         let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
         let distance = location.distance(from: stepEndLocation)
         guard distance < Self.watchHapticLeadDistanceMeters else {
@@ -1077,7 +1134,7 @@ struct ContentView: View {
             return
         }
         WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: AUSLÖSEN bei \(Int(distance)) m für '\(previewedStep.instructions)'")
-        lastWatchHapticStepIndex = currentDirectRouteStepIndex
+        lastWatchHapticStepIndex = currentIndex
         watchHapticTriggerCounter += 1
     }
 
@@ -1606,13 +1663,12 @@ struct ContentView: View {
     /// letzten Schritt (kein nächster mehr vorhanden) bleibt es bei dessen eigener Anweisung, da
     /// es nichts mehr anzukündigen gibt.
     private var previewedStep: DirectRoute.Step? {
-        guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) else { return nil }
-        let steps = directRoutes[selectedDirectRouteIndex].steps
-        guard steps.indices.contains(currentDirectRouteStepIndex) else { return nil }
-        if steps.indices.contains(currentDirectRouteStepIndex + 1) {
-            return steps[currentDirectRouteStepIndex + 1]
+        guard let (route, currentIndex) = activeStepRoute, route.steps.indices.contains(currentIndex) else { return nil }
+        let steps = route.steps
+        if steps.indices.contains(currentIndex + 1) {
+            return steps[currentIndex + 1]
         }
-        return steps[currentDirectRouteStepIndex]
+        return steps[currentIndex]
     }
 
     private var navigationInstructionTitle: String {
@@ -1637,12 +1693,11 @@ struct ContentView: View {
     /// Schritt-Daten (kuratierte/importierte Routen ohne Straßennamen), dann zeigt die
     /// Kopfzeile stattdessen wie bisher den Routennamen.
     private var currentStepDistanceText: String? {
-        guard isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex),
-              let location = locationManager.currentLocation
+        guard let (route, currentIndex) = activeStepRoute, let location = locationManager.currentLocation
         else { return nil }
-        let steps = directRoutes[selectedDirectRouteIndex].steps
-        guard steps.indices.contains(currentDirectRouteStepIndex) else { return nil }
-        let end = steps[currentDirectRouteStepIndex].endCoordinate
+        let steps = route.steps
+        guard steps.indices.contains(currentIndex) else { return nil }
+        let end = steps[currentIndex].endCoordinate
         let distanceMeters = location.distance(from: CLLocation(latitude: end.latitude, longitude: end.longitude))
         // Je näher die Abbiegung, desto feiner die Rundung - aus 10-m-Schritten über die ganze
         // Strecke wurde beim Radfahren als zu unruhig empfunden (Nutzer-Feedback); 10 m sind nur
@@ -2356,6 +2411,13 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button {
+                curatedRouteStepsDetail = match
+            } label: {
+                Image(systemName: "list.bullet")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
             if match.id == selectedMatch?.id {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.blue)
@@ -2419,6 +2481,113 @@ struct ContentView: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    /// Sheet mit Straßennamen/Abbiege-Hinweisen für einen Einzeltreffer (s.
+    /// `curatedRouteStepsDetail`, Map-Matching-Versuch aus ROADMAP.md) - lädt asynchron über
+    /// `CuratedRouteStepMatcher`, sobald ein heruntergeladener Wege-Graph die betroffene Region
+    /// abdeckt. Zeigt einen erklärenden Hinweis statt einer leeren Liste, wenn keine passende
+    /// Region heruntergeladen ist oder das Matching zu lückenhaft war (s.
+    /// `CuratedRouteStepMatcher.minMatchedFraction`) - bewusst kein Fehler-Alert, das ist ein
+    /// erwarteter, harmloser Fall (die Kernfunktion "Route finden/anzeigen" funktioniert davon
+    /// unabhängig weiter).
+    private func curatedRouteStepsDetailSheet(_ match: RouteMatch) -> some View {
+        NavigationStack {
+            Group {
+                if isLoadingCuratedRouteSteps {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let curatedRouteSteps, !curatedRouteSteps.isEmpty {
+                    List(Array(curatedRouteSteps.enumerated()), id: \.offset) { _, step in
+                        Text(step.instructions)
+                    }
+                } else {
+                    ContentUnavailableView(
+                        "Keine Straßendaten verfügbar",
+                        systemImage: "signpost.right.and.left",
+                        description: Text(
+                            "Dafür muss der Wege-Graph der betroffenen Region unter \"Offline-Karten\" heruntergeladen sein."
+                        )
+                    )
+                }
+            }
+            .navigationTitle(match.route.name ?? "Straßennamen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fertig") { curatedRouteStepsDetail = nil }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .task(id: match.id) {
+            await loadCuratedRouteSteps(for: match)
+        }
+    }
+
+    /// Sucht unter allen heruntergeladenen Wege-Graphen (`offlineGraphCandidatePaths`, analog
+    /// `loadDirectRoute`) den ersten, der `path` ausreichend abdeckt (s.
+    /// `CuratedRouteStepMatcher.minMatchedFraction`), und liefert dessen Treffer als vollwertiges
+    /// `BikeRoutingEngine.Result` (Distanz + Schritte) - gemeinsame Grundlage für die On-Demand-
+    /// Vorschau (`loadCuratedRouteSteps`) und die aktive Navigation
+    /// (`loadCuratedRouteForNavigation`), damit beide nicht getrennt durch dieselbe
+    /// Kandidaten-Liste laufen.
+    private static func matchCuratedRouteSteps(
+        along path: [CLLocationCoordinate2D], candidatePaths: [String]
+    ) async -> BikeRoutingEngine.Result? {
+        await Task.detached(priority: .userInitiated) { () -> BikeRoutingEngine.Result? in
+            for graphPath in candidatePaths {
+                guard let repository = WayGraphCache.shared.repository(for: graphPath) else { continue }
+                guard let steps = CuratedRouteStepMatcher.steps(along: path, using: repository) else { continue }
+                let distanceMeters = zip(path, path.dropFirst()).reduce(0.0) { total, pair in
+                    total + CLLocation(latitude: pair.0.latitude, longitude: pair.0.longitude)
+                        .distance(from: CLLocation(latitude: pair.1.latitude, longitude: pair.1.longitude))
+                }
+                return BikeRoutingEngine.Result(coordinates: path, distanceMeters: distanceMeters, steps: steps)
+            }
+            return nil
+        }.value
+    }
+
+    /// Lädt die Straßennamen/Abbiege-Hinweise für `match` zwischen `startPlace`/`zielPlace` - s.
+    /// `curatedRouteStepsDetailSheet`. Der abschließende Identitäts-Check verwirft ein verspätet
+    /// eintreffendes Ergebnis, falls der Nutzer das Sheet zwischenzeitlich schon geschlossen oder
+    /// einen anderen Treffer geöffnet hat (analog `lastMatchingCoordinates` in `runMatching`).
+    private func loadCuratedRouteSteps(for match: RouteMatch) async {
+        curatedRouteSteps = nil
+        guard let start = startPlace?.coordinate, let end = zielPlace?.coordinate,
+              let path = RouteMatcher.routeSegmentPath(along: match.route.lines, from: start, to: end)
+        else {
+            curatedRouteSteps = []
+            return
+        }
+
+        isLoadingCuratedRouteSteps = true
+        let result = await Self.matchCuratedRouteSteps(along: path, candidatePaths: offlineGraphCandidatePaths())
+
+        guard curatedRouteStepsDetail?.id == match.id else { return }
+        isLoadingCuratedRouteSteps = false
+        curatedRouteSteps = result?.steps ?? []
+    }
+
+    /// Lädt `curatedRoute` für die tatsächlich laufende Turn-by-Turn-Navigation eines ausgewählten
+    /// Einzeltreffers (s. `activeStepRoute`, `curatedRoute`) - Gegenstück zu `loadCuratedRouteSteps`
+    /// für die aktive Navigation statt der On-Demand-Vorschau. Wird proaktiv bei jeder Auswahl
+    /// aufgerufen (`.onChange(of: selectedMatch)`), nicht erst bei "Los", damit die Anzeige beim
+    /// Start der Navigation schon bereitsteht. Der abschließende Identitäts-Check verwirft ein
+    /// verspätet eintreffendes Ergebnis, falls der Nutzer zwischenzeitlich einen anderen Treffer
+    /// gewählt hat.
+    private func loadCuratedRouteForNavigation(_ match: RouteMatch) {
+        guard let start = startPlace?.coordinate, let end = zielPlace?.coordinate,
+              let path = RouteMatcher.routeSegmentPath(along: match.route.lines, from: start, to: end)
+        else { return }
+
+        let candidatePaths = offlineGraphCandidatePaths()
+        Task {
+            let result = await Self.matchCuratedRouteSteps(along: path, candidatePaths: candidatePaths)
+            guard selectedMatch?.id == match.id, let result else { return }
+            curatedRoute = DirectRoute(offlineResult: result)
+        }
     }
 
     /// Wisch-Pager für mehrere von `findCombinedMatches` gefundene Alternativen (Nutzer-Wunsch
