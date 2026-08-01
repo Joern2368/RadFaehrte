@@ -444,6 +444,20 @@ struct ContentView: View {
         }
         .onChange(of: startPlace) { runMatching(); updateCamera(); loadNearbyMatches() }
         .onChange(of: zielPlace) { runMatching(); updateCamera(); loadNearbyMatches() }
+        .onChange(of: isDirectRouteMode) { _, newValue in
+            // Zentrale Durchsetzung der gegenseitigen Ausschließlichkeit der drei Auswahl-Zustände
+            // (`isDirectRouteMode`/`selectedMatch`/`combinedMatch`) - Live-Beobachtung 2026-08-01
+            // (Textsuche Hannover -> Braunschweig): Ohne diesen Handler setzten mehrere Stellen
+            // (`selectDirectRoute`, `filterAndReorderMatchesByPracticalDistance`)
+            // `isDirectRouteMode = true`, ohne dabei ein zuvor gesetztes `combinedMatch`
+            // zurückzusetzen - beide Treffer blieben dann gleichzeitig mit Häkchen markiert, obwohl
+            // sich `selectedMatch`/`combinedMatch` laut ihren eigenen `onChange`-Handlern unten
+            // eigentlich gegenseitig ausschließen sollten.
+            if newValue {
+                selectedMatch = nil
+                combinedMatch = nil
+            }
+        }
         .onChange(of: selectedMatch) { _, newValue in
             if newValue != nil {
                 isDirectRouteMode = false
