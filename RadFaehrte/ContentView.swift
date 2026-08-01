@@ -123,6 +123,11 @@ struct ContentView: View {
     /// Start der Navigation, damit die Anzeige nicht erst nach "Los" nachzieht.
     @State private var curatedRoute: DirectRoute?
     @State private var currentCuratedStepIndex = 0
+    /// Straßennamen/Abbiege-Hinweise für die kombinierte Kette in `combinedRouteDetail` (On-Demand-
+    /// Vorschau, analog `curatedRouteSteps` für Einzeltreffer) - über alle Etappen zusammengeführt,
+    /// s. `matchCuratedRouteSteps(forLegs:candidatePaths:)`.
+    @State private var combinedRouteSteps: [BikeRoutingEngine.Result.Step]?
+    @State private var isLoadingCombinedRouteSteps = false
 
     @State private var locationManager = LocationManager()
     @State private var isNavigating = false
@@ -453,6 +458,12 @@ struct ContentView: View {
             } ?? []
             routeSelectionToken += 1
             loadCombinedConnectorRoute(to: newValue)
+            if let newValue {
+                loadCuratedRouteForNavigation(forCombined: newValue)
+            } else {
+                curatedRoute = nil
+                currentCuratedStepIndex = 0
+            }
         }
         .onChange(of: routeToStart) { _, newValue in
             if let newValue {
@@ -946,7 +957,7 @@ struct ContentView: View {
         if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
             return (directRoutes[selectedDirectRouteIndex], currentDirectRouteStepIndex)
         }
-        if selectedMatch != nil, let curatedRoute, !curatedRoute.steps.isEmpty {
+        if (selectedMatch != nil || combinedMatch != nil), let curatedRoute, !curatedRoute.steps.isEmpty {
             return (curatedRoute, currentCuratedStepIndex)
         }
         return nil
@@ -2463,13 +2474,34 @@ struct ContentView: View {
     /// auf den abgeschnittenen Titel-Text in `combinedRouteRow` bei langen Ketten.
     private func combinedRouteDetailSheet(_ match: RouteMatcher.CombinedRouteMatch) -> some View {
         NavigationStack {
-            List(match.legs) { leg in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(leg.route.name ?? "Unbenannte Route")
-                        .font(.body.weight(.medium))
-                    Text("~\(String(format: "%.1f", leg.distanceKm)) km")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            List {
+                Section("Etappen") {
+                    ForEach(match.legs) { leg in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(leg.route.name ?? "Unbenannte Route")
+                                .font(.body.weight(.medium))
+                            Text("~\(String(format: "%.1f", leg.distanceKm)) km")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                // Straßennamen über alle Etappen zusammengeführt (s. `loadCombinedRouteSteps`) -
+                // eigene Sektion statt pro Etappe verschachtelt, da Etappengrenzen für die
+                // Turn-by-Turn-Abfolge keine Rolle spielen (dieselbe Straße kann nahtlos über
+                // eine Etappengrenze weiterlaufen).
+                Section("Straßennamen") {
+                    if isLoadingCombinedRouteSteps {
+                        ProgressView()
+                    } else if let combinedRouteSteps, !combinedRouteSteps.isEmpty {
+                        ForEach(Array(combinedRouteSteps.enumerated()), id: \.offset) { _, step in
+                            Text(step.instructions)
+                        }
+                    } else {
+                        Text("Keine Straßendaten verfügbar - dafür muss der Wege-Graph der betroffenen Region(en) unter \"Offline-Karten\" heruntergeladen sein.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("Etappen")
@@ -2481,6 +2513,9 @@ struct ContentView: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .task(id: match.id) {
+            await loadCombinedRouteSteps(for: match)
+        }
     }
 
     /// Sheet mit Straßennamen/Abbiege-Hinweisen für einen Einzeltreffer (s.
@@ -2586,6 +2621,74 @@ struct ContentView: View {
         Task {
             let result = await Self.matchCuratedRouteSteps(along: path, candidatePaths: candidatePaths)
             guard selectedMatch?.id == match.id, let result else { return }
+            curatedRoute = DirectRoute(offlineResult: result)
+        }
+    }
+
+    /// Wie `matchCuratedRouteSteps(along:candidatePaths:)`, aber für eine kombinierte Kette
+    /// mehrerer Etappen (`RouteMatcher.CombinedRouteMatch`) - jede Etappe hat ihr fertig berechnetes
+    /// `pathCoordinates` (s. `CombinedRouteLeg`) bereits vorliegen, kein erneutes
+    /// `routeSegmentPath` nötig. Jede Etappe wird unabhängig gematcht (Etappen können in
+    /// unterschiedlichen heruntergeladenen Regionen liegen, z. B. über eine Bundesland-Grenze
+    /// hinweg), die Ergebnisse werden aneinandergereiht. Etappenübergänge werden wie normale
+    /// Hop-Grenzen behandelt (identischer Schritt-Text an der Nahtstelle verschmolzen, analog
+    /// `CuratedRouteStepMatcher.append`) - ein Etappenwechsel selbst erzeugt also keinen
+    /// künstlichen Extra-Eintrag, wenn dieselbe Straße nahtlos weitergeht. `nil`, wenn weniger als
+    /// die Hälfte der Etappen gematcht werden konnte (analog
+    /// `CuratedRouteStepMatcher.minMatchedFraction`) - lückenhafte Namen über mehrere Etappen
+    /// hinweg wären irreführender als gar keine.
+    private static func matchCuratedRouteSteps(
+        forLegs legs: [RouteMatcher.CombinedRouteLeg], candidatePaths: [String]
+    ) async -> BikeRoutingEngine.Result? {
+        var mergedCoordinates: [CLLocationCoordinate2D] = []
+        var mergedSteps: [BikeRoutingEngine.Result.Step] = []
+        var totalDistanceMeters = 0.0
+        var matchedLegCount = 0
+
+        for leg in legs where leg.pathCoordinates.count >= 2 {
+            guard let legResult = await matchCuratedRouteSteps(along: leg.pathCoordinates, candidatePaths: candidatePaths)
+            else { continue }
+            matchedLegCount += 1
+            totalDistanceMeters += legResult.distanceMeters
+            mergedCoordinates.append(contentsOf: legResult.coordinates)
+            for step in legResult.steps {
+                if let last = mergedSteps.last, last.instructions == step.instructions {
+                    mergedSteps[mergedSteps.count - 1] = BikeRoutingEngine.Result.Step(
+                        instructions: last.instructions, endCoordinate: step.endCoordinate, direction: last.direction
+                    )
+                } else {
+                    mergedSteps.append(step)
+                }
+            }
+        }
+
+        guard !mergedSteps.isEmpty, matchedLegCount * 2 >= legs.count else { return nil }
+        return BikeRoutingEngine.Result(coordinates: mergedCoordinates, distanceMeters: totalDistanceMeters, steps: mergedSteps)
+    }
+
+    /// Lädt die Straßennamen/Abbiege-Hinweise für eine kombinierte Kette - s.
+    /// `combinedRouteDetailSheet`. Analog `loadCuratedRouteSteps` für Einzeltreffer.
+    private func loadCombinedRouteSteps(for match: RouteMatcher.CombinedRouteMatch) async {
+        combinedRouteSteps = nil
+        isLoadingCombinedRouteSteps = true
+        let result = await Self.matchCuratedRouteSteps(forLegs: match.legs, candidatePaths: offlineGraphCandidatePaths())
+
+        guard combinedRouteDetail?.id == match.id else { return }
+        isLoadingCombinedRouteSteps = false
+        combinedRouteSteps = result?.steps ?? []
+    }
+
+    /// Lädt `curatedRoute` für die tatsächlich laufende Turn-by-Turn-Navigation einer ausgewählten
+    /// kombinierten Kette - Gegenstück zu `loadCuratedRouteForNavigation(_:)` für Einzeltreffer.
+    /// Schreibt in dieselbe `curatedRoute`/`currentCuratedStepIndex`-Ablage (s. `activeStepRoute`) -
+    /// unkritisch, da `selectedMatch`/`combinedMatch` sich laut bestehender Logik gegenseitig
+    /// ausschließen und der abschließende Identitäts-Check ein verspätetes Ergebnis nach einem
+    /// zwischenzeitlichen Moduswechsel verwirft.
+    private func loadCuratedRouteForNavigation(forCombined match: RouteMatcher.CombinedRouteMatch) {
+        let candidatePaths = offlineGraphCandidatePaths()
+        Task {
+            let result = await Self.matchCuratedRouteSteps(forLegs: match.legs, candidatePaths: candidatePaths)
+            guard combinedMatch?.id == match.id, let result else { return }
             curatedRoute = DirectRoute(offlineResult: result)
         }
     }
