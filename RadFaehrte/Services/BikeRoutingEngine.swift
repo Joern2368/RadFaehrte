@@ -194,7 +194,11 @@ nonisolated final class BikeRoutingEngine {
     /// vorherigen und der ersten Kante des neuen Abschnitts grob eine Abbiege-Richtung geschätzt -
     /// ohne die Kreuzungs-/Namensänderungs-Heuristiken echter Navigations-Engines, kann also bei
     /// sanften Straßenschwenks gelegentlich daneben liegen (Live-Test/Kalibrierung nötig).
-    private static func buildSteps(
+    ///
+    /// Bewusst nicht `private` (wie der Rest der A*-Interna dieser Klasse): `CuratedRouteStepMatcher`
+    /// baut Knotenpfade auf andere Weise auf (Map-Matching statt A*-Suche), nutzt für die
+    /// eigentliche Namens-/Richtungs-Aufbereitung aber dieselbe Logik statt sie zu duplizieren.
+    static func buildSteps(
         path: [Int], nameIndex: [Int: UInt32], repository: WayGraphRepository
     ) -> [Result.Step] {
         guard path.count >= 2 else { return [] }

@@ -544,6 +544,47 @@ struct RadFaehrteTests {
         #expect(result.distanceMeters < beelineMeters * 2.5)
     }
 
+    /// Map-Matching-Versuch (`CuratedRouteStepMatcher`, s. ROADMAP.md): Rundlauf-Test statt echter
+    /// kuratierter Routen-Geometrie, um Grenzfragen der Bremen-Enklave (Achim/Osnabrück liegen
+    /// außerhalb des heruntergeladenen Bremen-Wege-Graphen, s. u. "Bremen und Niedersachsen
+    /// heruntergeladen...") aus der Gleichung zu nehmen und den Matching-Algorithmus selbst
+    /// isoliert zu prüfen: Nimmt die tatsächlich von `BikeRoutingEngine` gefundene Route
+    /// Hauptbahnhof -> Bürgerpark (liegt per Konstruktion vollständig auf Kanten des
+    /// Wege-Graphen) als Stellvertreter für eine kuratierte Route und lässt sie erneut durch
+    /// `CuratedRouteStepMatcher` laufen. Da die Polyline exakt dem Graphen folgt, sollten
+    /// praktisch alle Stützpunkt-Hops matchen und die rekonstruierte Distanz nah an der
+    /// Referenzdistanz liegen.
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: RadFaehrteTests.bremenWayGraphPath)))
+    func curatedRouteStepMatcherReconstructsStepsAlongKnownGraphPath() async throws {
+        let repository = try #require(WayGraphRepository(path: Self.bremenWayGraphPath))
+        let engine = BikeRoutingEngine(repository: repository)
+
+        let hauptbahnhof = CLLocationCoordinate2D(latitude: 53.0836, longitude: 8.8138)
+        let buergerpark = CLLocationCoordinate2D(latitude: 53.0960, longitude: 8.8065)
+        let reference = try #require(engine.route(from: hauptbahnhof, to: buergerpark))
+
+        let steps = try #require(
+            CuratedRouteStepMatcher.steps(along: reference.coordinates, using: repository),
+            "Erwartete gematchte Schritte entlang einer Polyline, die per Konstruktion auf dem Wege-Graphen liegt"
+        )
+
+        #expect(!steps.isEmpty)
+        #expect(steps.allSatisfy { !$0.instructions.isEmpty })
+
+        let reconstructedMeters = zip(
+            [hauptbahnhof] + steps.map(\.endCoordinate), steps.map(\.endCoordinate)
+        ).reduce(0.0) { total, pair in
+            total + CLLocation(latitude: pair.0.latitude, longitude: pair.0.longitude)
+                .distance(from: CLLocation(latitude: pair.1.latitude, longitude: pair.1.longitude))
+        }
+        // 10 % Toleranz statt exaktem Vergleich - beim Live-Lauf lag der rekonstruierte Wert
+        // tatsächlich innerhalb von 1 % der Referenz (direkte Kanten-Treffer dominieren, da die
+        // Referenzpolyline per Konstruktion aus Graph-Knoten besteht), 10 % lässt Spielraum für
+        // Bridging-Fälle bei echter (nicht graph-generierter) Routen-Geometrie.
+        #expect(reconstructedMeters > reference.distanceMeters * 0.9)
+        #expect(reconstructedMeters < reference.distanceMeters * 1.1)
+    }
+
     /// Regressionstest für einen Nutzer-Fund (2026-07-31, Münster -> Köln): "EuroVelo 3 - Pilgrim's
     /// Route - part Germany" liegt nahe Münster, ist dort aber nicht durchgehend genug kartiert, um
     /// als Einzeltreffer/Teil einer Kombination zu erscheinen - wurde bisher nur als reiner
