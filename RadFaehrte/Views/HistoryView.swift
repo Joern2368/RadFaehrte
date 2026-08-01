@@ -17,6 +17,7 @@ struct HistoryView: View {
 
     @State private var tours: [DrivenTour] = []
     @State private var selectedTour: DrivenTour?
+    @State private var exportFile: GPXExportFile?
     private let snapshotCache = TourMapSnapshotCache()
 
     /// Feste deutsche Locale, da die App-Oberfläche nicht lokalisiert ist und `.formatted()`
@@ -159,8 +160,27 @@ struct HistoryView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Fertig") { selectedTour = nil }
                 }
+                if tour.clCoordinates.count >= 2 {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            exportTour(tour)
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel("Tour exportieren")
+                    }
+                }
+            }
+            .sheet(item: $exportFile) { file in
+                ActivityView(activityItems: [file.url])
             }
         }
+    }
+
+    private func exportTour(_ tour: DrivenTour) {
+        let name = "RadFährte Tour \(Self.dateFormat.format(tour.date))"
+        guard let url = GPXWriter.writeTemporaryFile(name: name, lines: [tour.clCoordinates]) else { return }
+        exportFile = GPXExportFile(url: url)
     }
 
     private func detailRow(label: String, value: String) -> some View {

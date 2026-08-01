@@ -109,6 +109,143 @@ nonisolated final class RouteRepository {
         return results
     }
 
+    /// Route-Zusammenfassungen (ohne Geometrie) für alle Routen, deren Bounding Box das
+    /// übergebene Rechteck überschneidet - für die "Alle Routen"-Übersicht, die pro Region
+    /// potenziell hunderte Treffer auflisten muss und dafür nicht wie `routesOverlapping` jedes
+    /// Mal die volle (u. U. tausende Punkte lange) Geometrie dekodieren soll. `limit` begrenzt
+    /// sowohl das Gesamtergebnis als auch jede einzelne Datenbankabfrage.
+    ///
+    /// Beide Query-Varianten filtern Namen im Muster `"<Zahl>-<Zahl>"` (z. B. "43-94") heraus -
+    /// das sind keine echten Radrouten, sondern einzelne Segmente des Knotenpunkt-Wegenetzes
+    /// (jede Verbindung zwischen zwei nummerierten Knoten ist in OSM eine eigene `name`/`ref`-
+    /// gleiche Relation, network=rcn). Live-Test bestätigt (Nutzer, 2026-08-01, Umkreis Bremen):
+    /// ohne Filter 134 von 205 Treffern solche Segmente, die durch alphabetisches Sortieren
+    /// (Zahlen vor Buchstaben) außerdem die komplette sichtbare Liste vor den echten Routen
+    /// füllten.
+    func routeSummaries(
+        minLon: Double, minLat: Double, maxLon: Double, maxLat: Double, limit: Int
+    ) -> [RouteSummary] {
+        var seenIds: Set<Int64> = []
+        var results: [RouteSummary] = []
+        for db in databases {
+            for summary in routeSummaries(in: db, minLon: minLon, minLat: minLat, maxLon: maxLon, maxLat: maxLat, limit: limit) {
+                if seenIds.insert(summary.id).inserted {
+                    results.append(summary)
+                    if results.count >= limit { return results }
+                }
+            }
+        }
+        return results
+    }
+
+    private func routeSummaries(
+        in db: OpaquePointer, minLon: Double, minLat: Double, maxLon: Double, maxLat: Double, limit: Int
+    ) -> [RouteSummary] {
+        let sql = """
+            SELECT id, name, network, ref, distance_km, operator
+            FROM routes
+            WHERE name IS NOT NULL AND name != '' AND name NOT GLOB '[0-9]*-[0-9]*'
+                AND min_lon <= ? AND max_lon >= ? AND min_lat <= ? AND max_lat >= ?
+            LIMIT ?
+        """
+
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            assertionFailure("SQL prepare fehlgeschlagen: \(String(cString: sqlite3_errmsg(db)))")
+            return []
+        }
+
+        sqlite3_bind_double(statement, 1, maxLon)
+        sqlite3_bind_double(statement, 2, minLon)
+        sqlite3_bind_double(statement, 3, maxLat)
+        sqlite3_bind_double(statement, 4, minLat)
+        sqlite3_bind_int(statement, 5, Int32(limit))
+
+        var results: [RouteSummary] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let summary = decodeSummary(from: statement) {
+                results.append(summary)
+            }
+        }
+        return results
+    }
+
+    /// Route-Zusammenfassungen (ohne Geometrie) aller Routen, deren Name den Suchtext enthält
+    /// (case-insensitiv). Es gibt keinen Index auf `name`, ein voller Tabellenscan über die
+    /// ~50.000 Zeilen ist für eine gedebouncte Texteingabe (kein Query pro Tastendruck) aber
+    /// unproblematisch; `limit` deckelt zusätzlich die Laufzeit.
+    func routeSummaries(matchingName query: String, limit: Int) -> [RouteSummary] {
+        var seenIds: Set<Int64> = []
+        var results: [RouteSummary] = []
+        for db in databases {
+            for summary in routeSummaries(in: db, matchingName: query, limit: limit) {
+                if seenIds.insert(summary.id).inserted {
+                    results.append(summary)
+                    if results.count >= limit { return results }
+                }
+            }
+        }
+        return results
+    }
+
+    private func routeSummaries(in db: OpaquePointer, matchingName query: String, limit: Int) -> [RouteSummary] {
+        let sql = """
+            SELECT id, name, network, ref, distance_km, operator
+            FROM routes
+            WHERE name LIKE ? COLLATE NOCASE AND name NOT GLOB '[0-9]*-[0-9]*'
+            LIMIT ?
+        """
+
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+            assertionFailure("SQL prepare fehlgeschlagen: \(String(cString: sqlite3_errmsg(db)))")
+            return []
+        }
+
+        sqlite3_bind_text(statement, 1, "%\(query)%", -1, Self.sqliteTransient)
+        sqlite3_bind_int(statement, 2, Int32(limit))
+
+        var results: [RouteSummary] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let summary = decodeSummary(from: statement) {
+                results.append(summary)
+            }
+        }
+        return results
+    }
+
+    /// Dekodiert eine Ergebniszeile im Schema `id, name, network, ref, distance_km, operator`
+    /// (ohne Geometrie-Spalte, anders als `decodeRoute(from:)`) zu einer `RouteSummary`. `nil`
+    /// nur bei fehlendem Namen (sollte durch die `WHERE`-Klauseln oben nie vorkommen).
+    private func decodeSummary(from statement: OpaquePointer?) -> RouteSummary? {
+        guard let name = textColumn(statement, 1) else { return nil }
+        let id = sqlite3_column_int64(statement, 0)
+        let network = textColumn(statement, 2)
+        let ref = textColumn(statement, 3)
+        let distanceKm: Double? = sqlite3_column_type(statement, 4) == SQLITE_NULL
+            ? nil : sqlite3_column_double(statement, 4)
+        let operatorName = textColumn(statement, 5)
+
+        return RouteSummary(
+            id: id,
+            name: name,
+            network: network,
+            ref: ref,
+            distanceKm: distanceKm,
+            operatorName: operatorName
+        )
+    }
+
+    /// Konstante für `sqlite3_bind_text`, die SQLite anweist, den String selbst zu kopieren
+    /// (statt eines Zeigers, der schon ungültig sein könnte, bis die Query läuft) - Standard-
+    /// Idiom für den C-SQLite-Wrapper in Swift, da `SQLITE_TRANSIENT` als Makro nicht importiert
+    /// wird.
+    private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
     /// Eine einzelne Route anhand ihrer OSM-Relations-ID (z. B. für die Kombinationssuche, die
     /// per Junction-Tabelle nur IDs kennt und die volle Geometrie nachladen muss). Fragt die
     /// Datenbanken der Reihe nach ab, bis eine einen Treffer liefert. Bei einer ID-Kollision über

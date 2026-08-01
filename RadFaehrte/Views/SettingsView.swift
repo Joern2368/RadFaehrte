@@ -87,6 +87,16 @@ struct SettingsView: View {
 
                 Section {
                     NavigationLink {
+                        AllRoutesView()
+                    } label: {
+                        Label("Alle Routen", systemImage: "list.bullet")
+                    }
+                } footer: {
+                    Text("Routen nach Ort oder Name durchsuchen - z. B. um zu prüfen, ob ein bekannter Radweg in der App hinterlegt ist.")
+                }
+
+                Section {
+                    NavigationLink {
                         HowItWorksView()
                     } label: {
                         Label("Wie funktioniert's?", systemImage: "questionmark.circle")

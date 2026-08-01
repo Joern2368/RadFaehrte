@@ -5,6 +5,7 @@
 //  Created for Apple-Watch-Anbindung.
 //
 
+import CoreLocation
 import Foundation
 import WatchConnectivity
 
@@ -23,8 +24,6 @@ import WatchConnectivity
 final class WatchSessionManager: NSObject, WCSessionDelegate {
     static let shared = WatchSessionManager()
 
-    private var lastSentState: WatchNavState?
-
     private override init() {
         super.init()
     }
@@ -35,16 +34,35 @@ final class WatchSessionManager: NSObject, WCSessionDelegate {
         WCSession.default.activate()
     }
 
+    /// Sendet bewusst **immer**, ohne Vergleich mit dem zuletzt gesendeten Zustand - eine frühere
+    /// Version übersprang unveränderte Sends, was nach einer Neuinstallation der Watch-App zu
+    /// einer stillen, leeren/stummen App führte (Nutzer-Beobachtung 2026-08-01): Die frische
+    /// Watch-App kannte den aktuellen Stand nicht, das iPhone hielt ihn aber für "bereits
+    /// gesendet" und schickte nichts erneut, solange sich der Navigationsstatus nicht zufällig
+    /// änderte. Da während der Navigation ohnehin schon fast jede Sekunde gesendet wird (Distanz
+    /// ändert sich laufend), ist der Mehraufwand durch den Wegfall der Sparsamkeits-Prüfung
+    /// vernachlässigbar - macht die Übertragung dafür robust gegen Neuinstallation/
+    /// Verbindungsaussetzer der Watch-App.
     func send(_ state: WatchNavState) {
         guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
-        guard state != lastSentState else { return }
-        lastSentState = state
         do {
             try WCSession.default.updateApplicationContext(state.dictionaryRepresentation)
             Self.appendDebugLog("send: OK hapticTrigger=\(state.hapticTrigger) -> \(state.instructionText) / \(state.distanceText)")
         } catch {
             Self.appendDebugLog("send: FAILED \(error)")
         }
+    }
+
+    /// Schickt die Geometrie der aktuell aktiven Route für die Kartenanzeige auf der Watch -
+    /// separat von `send`/`updateApplicationContext` (s. `WatchRouteTransferKey`), da sie sich
+    /// während einer Fahrt kaum ändert. Bewusst ohne Sparsamkeits-Prüfung (anders als in einer
+    /// früheren Version) - wird ohnehin nur bei Navigationsstart/Neuberechnung aufgerufen, nicht
+    /// bei jedem Standort-Update, ein Weglassen wäre nach einer Neuinstallation der Watch-App
+    /// genau dieselbe Falle wie bei `send` (s. dort).
+    func sendRoute(_ lines: [[CLLocationCoordinate2D]]) {
+        guard WCSession.isSupported(), WCSession.default.activationState == .activated else { return }
+        let payload = lines.map { line in line.map { [$0.latitude, $0.longitude] } }
+        WCSession.default.transferUserInfo([WatchRouteTransferKey.lines: payload])
     }
 
     /// TEMP-DEBUG (Apple-Watch-Anbindung, Live-Test 2026-07-30): Datei-Logging statt Konsole, da

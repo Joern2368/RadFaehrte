@@ -571,6 +571,25 @@ final class RouteMatcher {
     /// Kartenlücke im bekannten Fernweg) dagegen zu wirken.
     private static let sameRefPriorityBonusKm: Double = 20
 
+    /// Fund 2026-07-31 (Nutzer-Beispiel Bremen -> Münster, "Brückenradweg" + "Friedensroute"):
+    /// `findCombinedMatches` finalisierte bisher jede Route-ID **genau einmal**, unabhängig vom
+    /// Einstiegspunkt - problematisch bei Routen, deren eigene OSM-Geometrie in mehrere nicht
+    /// zusammenhängende Fragmente zerfällt (s. `RouteGraph`, ~10% aller benannten Fernwege
+    /// betroffen). Bremen -> Münster: "D7 Pilgerroute" liegt (per reiner Umkreisprüfung, ohne
+    /// Pfad-Check) sowohl nahe Bremen als auch nahe Münster und wird deshalb selbst schon als
+    /// Direkttreffer *und* als Start-Kandidat der Kombinationssuche verwendet - letzteres mit
+    /// Einstiegspunkt bei Bremen. Von dort aus hat die Route aber keinen durchgehenden Pfad zu
+    /// ihrer eigenen Anschlussstelle bei Osnabrück (anderes Geometrie-Fragment) - die Route wurde
+    /// trotzdem als global "erledigt" markiert und blockierte damit dauerhaft den eigentlich
+    /// funktionierenden zweiten Zugang über "Brückenradweg" bei Osnabrück (dieselbe Route-ID,
+    /// anderer, gut angebundener Einstiegspunkt), über den "Friedensroute" erreichbar gewesen
+    /// wäre. Ersetzt das reine Route-ID-`Set` durch `visitedEntryPoints` - erlaubt bis zu
+    /// `maxEntryPointsPerRoute` klar getrennte (≥ `minEntryPointSeparationKm` auseinanderliegende)
+    /// Einstiegspunkte pro Route, bevor sie als erschöpft gilt. `maxVisitedRoutes` bleibt die
+    /// harte Obergrenze für die Gesamtsuche, daher kein unbegrenztes Blow-up.
+    private static let maxEntryPointsPerRoute = 3
+    private static let minEntryPointSeparationKm: Double = 5
+
     /// Viele Regionen taggen ihr lokales Knotenpunkt-Wegenetz (einzelne Abschnitte zwischen
     /// nummerierten Knoten) mit `network=rcn` statt `lcn` - am `network`-Tag allein nicht von
     /// einem echten Fernweg zu unterscheiden. Zwei beobachtete Namensmuster (s. auch
@@ -757,8 +776,9 @@ final class RouteMatcher {
     /// swipebare Alternativen wie beim Wisch-Pager für einzelne Treffer (`matchesPager`), da die
     /// A*-Priorität mit Ref-Bonus nicht immer die subjektiv "richtige" (z. B. bekannteste)
     /// Kombination zuerst findet. Jede zusätzliche Kette endet zwangsläufig über eine andere
-    /// letzte Etappen-Route (da `finalized` ein erneutes Verarbeiten derselben Route-ID
-    /// verhindert), Alternativen unterscheiden sich also immer mindestens im letzten Wegstück.
+    /// letzte Etappen-Route (da `visitedEntryPoints` ein erneutes Verarbeiten desselben
+    /// Einstiegspunkts verhindert), Alternativen unterscheiden sich also immer mindestens im
+    /// letzten Wegstück.
     /// Rein lesende SQLite-Abfragen + mehrere Pro-Route-Dijkstras - bewusst `nonisolated`, damit
     /// der Aufrufer das abseits des Main-Threads laufen lassen kann (s. `ContentView`).
     nonisolated func findCombinedMatches(
@@ -785,9 +805,9 @@ final class RouteMatcher {
         // falsche Kopie - `routeSegmentDistances` projizierte den polnischen Einstiegspunkt dabei
         // stillschweigend auf die (Hunderte km entfernte) niederländische Geometrie und wies eine
         // ~500-km-Etappe als ~0 km aus. `route(withId:near:)` löst deshalb bei jedem Zugriff
-        // anhand des aktuellen Einstiegspunkts neu auf; `finalized` sorgt ohnehin dafür, dass jede
-        // ID höchstens einmal verarbeitet wird, ein Cache über mehrere Aufrufe hinweg würde hier
-        // also nichts einsparen, aber genau diesen Fehler ermöglichen.
+        // anhand des aktuellen Einstiegspunkts neu auf; `visitedEntryPoints` sorgt ohnehin dafür,
+        // dass derselbe Einstiegspunkt höchstens einmal verarbeitet wird, ein Cache über mehrere
+        // Aufrufe hinweg würde hier also nichts einsparen, aber genau diesen Fehler ermöglichen.
         func route(withId id: Int64, near point: CLLocationCoordinate2D) -> BikeRoute? {
             let candidates = repository.allRoutes(withId: id)
             guard !candidates.isEmpty else { return nil }
@@ -798,14 +818,25 @@ final class RouteMatcher {
             }
         }
 
-        var bestDistanceKm: [Int64: Double] = [:]
-        var finalized: Set<Int64> = []
+        // Bereits verarbeitete Einstiegspunkte pro Route-ID (s. `maxEntryPointsPerRoute`-Doku oben:
+        // ersetzt das frühere reine Route-ID-`Set`, das eine Route nach dem ersten - ggf. wegen
+        // eines Geometrie-Fragments erfolglosen - Einstieg dauerhaft blockierte).
+        var visitedEntryPoints: [Int64: [CLLocationCoordinate2D]] = [:]
+
+        func isNewEntryPoint(_ point: CLLocationCoordinate2D, for routeId: Int64) -> Bool {
+            (visitedEntryPoints[routeId] ?? []).allSatisfy {
+                Self.kilometers($0, point) >= Self.minEntryPointSeparationKm
+            }
+        }
+
         var queue = CombinedSearchQueue()
         var results: [CombinedRouteMatch] = []
+        var resultRouteIdSets: Set<Set<Int64>> = []
+        var seededRouteIds: Set<Int64> = []
 
         for candidate in startCandidates {
-            guard bestDistanceKm[candidate.route.id] == nil else { continue }
-            bestDistanceKm[candidate.route.id] = 0
+            guard !seededRouteIds.contains(candidate.route.id) else { continue }
+            seededRouteIds.insert(candidate.route.id)
             queue.push(CombinedSearchEntry(
                 routeId: candidate.route.id, entryPoint: candidate.nearestPoint, cumulativeKm: 0,
                 priority: Self.kilometers(candidate.nearestPoint, end), legs: []
@@ -822,8 +853,10 @@ final class RouteMatcher {
             // Schleife das auch tatsächlich zeitnah bemerkt, statt bis `maxVisitedRoutes` (2000)
             // weiterzurechnen).
             guard !Task.isCancelled else { break }
-            guard !finalized.contains(current.routeId) else { continue }
-            finalized.insert(current.routeId)
+            let existingEntries = visitedEntryPoints[current.routeId] ?? []
+            guard existingEntries.count < Self.maxEntryPointsPerRoute,
+                  isNewEntryPoint(current.entryPoint, for: current.routeId) else { continue }
+            visitedEntryPoints[current.routeId, default: []].append(current.entryPoint)
 
             visitedCount += 1
             guard visitedCount <= maxVisitedRoutes else { break }
@@ -840,12 +873,25 @@ final class RouteMatcher {
                     route: currentRoute, entryPoint: current.entryPoint, exitPoint: endAnchor, distanceKm: finishKmValue
                 )
                 let allLegs = current.legs + [finalLeg]
-                results.append(CombinedRouteMatch(
-                    legs: allLegs,
-                    distanceToStartKm: Self.kilometers(start, allLegs[0].entryPoint),
-                    distanceToEndKm: Self.kilometers(allLegs[allLegs.count - 1].exitPoint, end)
-                ))
-                if results.count >= maxAlternatives { break }
+                // Nur als neue Alternative zählen, wenn sich die Menge der genutzten Routen-IDs
+                // von allen bisherigen Ergebnissen unterscheidet - verhindert, dass
+                // `maxAlternatives` von mehreren, sich nur im genauen Einstiegspunkt
+                // unterscheidenden Varianten derselben Routen-Kombination verbraucht wird (Fund
+                // 2026-07-31 beim `maxEntryPointsPerRoute`-Fix oben: ohne diese Prüfung konnten
+                // z. B. zwei Ketten, die beide zweimal dieselbe stark fragmentierte
+                // "EuroVelo 13"-Relation nutzen, allein durch die neu erlaubten Mehrfach-Einstiege
+                // alle drei Alternativen-Plätze belegen, bevor eine inhaltlich andere Kette wie
+                // "Alte Salzstraße" -> "Ostseeküsten-Radweg" überhaupt in Betracht gezogen wurde).
+                let routeIdSet = Set(allLegs.map { $0.route.id })
+                if !resultRouteIdSets.contains(routeIdSet) {
+                    resultRouteIdSets.insert(routeIdSet)
+                    results.append(CombinedRouteMatch(
+                        legs: allLegs,
+                        distanceToStartKm: Self.kilometers(start, allLegs[0].entryPoint),
+                        distanceToEndKm: Self.kilometers(allLegs[allLegs.count - 1].exitPoint, end)
+                    ))
+                    if results.count >= maxAlternatives { break }
+                }
             }
 
             let neighbors = repository.junctions(forRouteId: current.routeId)
@@ -855,22 +901,32 @@ final class RouteMatcher {
                 along: currentRoute.lines, from: current.entryPoint, to: neighborCoordinates
             )
 
+            let routeIdsUsedSoFar = Set(current.legs.map { $0.route.id }).union([current.routeId])
             for (index, neighbor) in neighbors.enumerated() {
-                guard !finalized.contains(neighbor.partnerRouteId),
-                      let legDistanceKm = legDistances[index] else { continue }
+                guard let legDistanceKm = legDistances[index] else { continue }
+                let partnerEntries = visitedEntryPoints[neighbor.partnerRouteId] ?? []
+                guard partnerEntries.count < Self.maxEntryPointsPerRoute else { continue }
+                // Verhindert, dass eine einzelne Kette dieselbe Route zweimal nutzt (z. B. über
+                // eine Route verlassen und später an anderer Stelle wieder darauf einsteigen) -
+                // geometrisch zwar über je einen echten Pfad abgedeckt (jede Etappe für sich
+                // gültig), ergäbe als Nutzer-Vorschlag aber eine verwirrende Zickzack-Route statt
+                // einer sinnvollen Verkettung unterschiedlicher Fernwege. `visitedEntryPoints`
+                // (mehrere Einstiegspunkte je Route) bleibt trotzdem nötig, damit z. B. eine Route
+                // wie "D7 Pilgerroute", deren Bremer Einstieg in eine Sackgasse führt, an anderer
+                // Stelle (Osnabrück) noch als Zwischenetappe für eine *andere* Kette nutzbar bleibt
+                // (s. `maxEntryPointsPerRoute`-Doku oben) - nur eben nicht zweimal in derselben Kette.
+                guard !routeIdsUsedSoFar.contains(neighbor.partnerRouteId) else { continue }
                 let newCumulativeKm = current.cumulativeKm + legDistanceKm
-                if let known = bestDistanceKm[neighbor.partnerRouteId], known <= newCumulativeKm { continue }
-                bestDistanceKm[neighbor.partnerRouteId] = newCumulativeKm
                 let leg = CombinedRouteLeg(
                     route: currentRoute, entryPoint: current.entryPoint, exitPoint: neighbor.coordinate, distanceKm: legDistanceKm
                 )
                 // Bonus, wenn die nächste Etappe denselben `ref`-Tag trägt (z. B. "EV2" bei
                 // EuroVelo 2 diesseits und jenseits der Grenze) - macht Ketten bevorzugt, die auf
                 // demselben bekannten Fernweg bleiben, statt rein nach kürzester Gesamtstrecke zu
-                // optimieren. Nur ein Bonus in der Warteschlangen-Priorität, `cumulativeKm`/
-                // `bestDistanceKm` bleiben die echte Streckenlänge - das Ergebnis kann dadurch
-                // bewusst von der global kürzesten Kette abweichen (Nutzer-Entscheidung), bleibt
-                // aber immer eine tatsächlich befahrbare Verbindung.
+                // optimieren. Nur ein Bonus in der Warteschlangen-Priorität, `cumulativeKm` bleibt
+                // die echte Streckenlänge - das Ergebnis kann dadurch bewusst von der global
+                // kürzesten Kette abweichen (Nutzer-Entscheidung), bleibt aber immer eine
+                // tatsächlich befahrbare Verbindung.
                 let sameRef = currentRoute.ref.map { !$0.isEmpty } == true
                     && currentRoute.ref == repository.ref(forRouteId: neighbor.partnerRouteId)
                 let priority = newCumulativeKm + Self.kilometers(neighbor.coordinate, end)

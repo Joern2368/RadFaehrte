@@ -20,12 +20,17 @@ struct HowItWorksView: View {
         Topic(
             icon: "magnifyingglass",
             title: "Route suchen",
-            text: "Start und Ziel eingeben - RadFährte zeigt dir sowohl offizielle, beschilderte Radrouten in der Nähe als auch eine direkte Fahrrad-Route. Durch die Treffer wischt du einfach durch. Zusätzlich sucht RadFährte im Hintergrund nach einer Kombination mehrerer Fernwege, die an Anschlussstellen ineinander übergehen (z. B. Weser-Radweg → Aller-Radweg → Leine-Heide-Radweg für Bremen → Hannover) - erkennbar an den durch \"→\" getrennten Routennamen in der Ergebniszeile. Das kann auch dann noch eine sinnvolle Alternative sein, wenn schon durchgehende Einzelrouten gefunden wurden, und erscheint als eigene Sektion unterhalb, sobald diese Suche fertig ist - sie kann einige Sekunden dauern, bei größerer Entfernung zwischen Start und Ziel auch spürbar länger, da dafür mehrere mögliche Streckenkombinationen durchsucht werden. Über das kleine Listen-Symbol neben einer Kombination öffnet sich eine Übersicht aller Etappen mit ihrer jeweiligen Länge, falls der Titel bei vielen Etappen abgeschnitten ist. Findet RadFährte mehrere solcher Kombinationen, kannst du auch hier durch die Alternativen wischen, genau wie bei einzelnen Radrouten. Liegt dabei ein bekannter internationaler Fernweg (EuroVelo, D-Route) in der Nähe von Start oder Ziel, erscheint er als ganz normal wählbarer Treffer, auch wenn er an dieser Stelle nicht durchgehend kartiert ist - statt einer Streckenlänge zeigt er dann \"Kartendaten hier lückenhaft\" an, lässt sich aber trotzdem antippen und nutzen. Die Adressvorschläge sind auf deine Nähe eingegrenzt - suchst du z. B. von unterwegs eine Adresse in einer weit entfernten Stadt (etwa zu Hause), wird sie manchmal nicht vorgeschlagen. Ergänze in dem Fall den Ort in der Sucheingabe (z. B. \"Bückeburger Straße, Bremen\")."
+            text: "Start und Ziel eingeben - RadFährte zeigt dir sowohl offizielle, beschilderte Radrouten in der Nähe als auch eine direkte Fahrrad-Route. Durch die Treffer wischt du einfach durch. Zusätzlich sucht RadFährte im Hintergrund nach einer Kombination mehrerer Fernwege, die an Anschlussstellen ineinander übergehen (z. B. Weser-Radweg → Aller-Radweg → Leine-Heide-Radweg für Bremen → Hannover) - erkennbar an den durch \"→\" getrennten Routennamen in der Ergebniszeile. Das kann auch dann noch eine sinnvolle Alternative sein, wenn schon durchgehende Einzelrouten gefunden wurden, und erscheint als eigene Sektion unterhalb, sobald diese Suche fertig ist - sie kann einige Sekunden dauern, bei größerer Entfernung zwischen Start und Ziel auch spürbar länger, da dafür mehrere mögliche Streckenkombinationen durchsucht werden. Über das kleine Listen-Symbol neben einer Kombination öffnet sich eine Übersicht aller Etappen mit ihrer jeweiligen Länge, falls der Titel bei vielen Etappen abgeschnitten ist. Findet RadFährte mehrere solcher Kombinationen, kannst du auch hier durch die Alternativen wischen, genau wie bei einzelnen Radrouten. Liegt dabei ein bekannter internationaler Fernweg (EuroVelo, D-Route) in der Nähe von Start oder Ziel, erscheint er als ganz normal wählbarer Treffer, auch wenn er an dieser Stelle nicht durchgehend kartiert ist - statt einer Streckenlänge zeigt er dann \"Kartendaten hier lückenhaft\" an, lässt sich aber trotzdem antippen und nutzen. Die Adressvorschläge sind auf deine Nähe eingegrenzt - suchst du z. B. von unterwegs eine Adresse in einer weit entfernten Stadt (etwa zu Hause), wird sie manchmal nicht vorgeschlagen. Ergänze in dem Fall den Ort in der Sucheingabe (z. B. \"Bückeburger Straße, Bremen\"). Statt einer Adresse tippst du im Ziel-Feld auch auf \"Auf Karte wählen\" und setzt dein Ziel direkt per Fingertipp auf der Karte - praktisch, wenn du die genaue Adresse nicht kennst, aber die Stelle auf der Karte siehst."
         ),
         Topic(
             icon: "location.north.line.fill",
             title: "Navigation",
             text: "Mit \"Los\" startest du die Navigation. Die Karte folgt automatisch deiner Position und Fahrtrichtung, die bereits gefahrene Strecke wird rot eingezeichnet. Weichst du bei der direkten Route ab, wird automatisch neu berechnet."
+        ),
+        Topic(
+            icon: "square.and.arrow.up",
+            title: "Route exportieren",
+            text: "Über das Teilen-Symbol neben \"Los\" exportierst du die gerade gewählte Route (Einzeltreffer, Kombination mehrerer Fernwege oder Direkte Fahrrad-Route) als .gpx-Datei - z. B. um sie auf einen Fahrradcomputer zu übertragen oder an jemanden zu schicken, der sie mit einer anderen App öffnet. Bei einem Einzeltreffer wird dabei nur der gesuchte Abschnitt zwischen Start und Ziel exportiert, nicht die komplette Fernroute."
         ),
         Topic(
             icon: "square.grid.3x2",
@@ -40,7 +45,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "applewatch",
             title: "Apple Watch",
-            text: "Ist eine Apple Watch mit installierter RadFährte-Watch-App gekoppelt, zeigt sie während der Navigation automatisch die aktuelle Anweisung samt Entfernung am Handgelenk an - bei der \"Direkten Fahrrad-Route\" kurz vor einer Abbiegung zusätzlich mit einer kurzen Vibration. Bei kuratierten Radrouten ohne Schritt-für-Schritt-Anweisungen zeigt die Watch stattdessen den Routennamen."
+            text: "Ist eine Apple Watch mit installierter RadFährte-Watch-App gekoppelt, zeigt sie während der Navigation automatisch die aktuelle Anweisung samt Entfernung am Handgelenk an - bei der \"Direkten Fahrrad-Route\" kurz vor einer Abbiegung zusätzlich mit spürbarer, für Links-/Rechtsabbiegungen unterschiedlicher Vibration. Bei kuratierten Radrouten ohne Schritt-für-Schritt-Anweisungen zeigt die Watch stattdessen den Routennamen. Darunter zeigt eine kleine, eng um die aktuelle Position gezoomte Karte den nahen Streckenverlauf, damit du die Route auch am Handgelenk visuell verfolgen kannst."
         ),
         Topic(
             icon: "location.fill.viewfinder",
@@ -55,7 +60,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "clock.arrow.circlepath",
             title: "Verlauf",
-            text: "Nach jeder beendeten Fahrt zeigt ein Abschluss-Fenster Strecke, Dauer und Durchschnittstempo - dort entscheidest du, ob die Tour im Verlauf-Tab gespeichert oder verworfen wird."
+            text: "Nach jeder beendeten Fahrt zeigt ein Abschluss-Fenster Strecke, Dauer und Durchschnittstempo - dort entscheidest du, ob die Tour im Verlauf-Tab gespeichert oder verworfen wird. In der Detailansicht einer gespeicherten Fahrt lässt sich die aufgezeichnete Strecke über das Teilen-Symbol ebenfalls als .gpx-Datei exportieren."
         ),
         Topic(
             icon: "arrow.down.circle",
@@ -71,6 +76,11 @@ struct HowItWorksView: View {
             icon: "map",
             title: "Kartenansicht anpassen",
             text: "In den Einstellungen unter \"Karte\" wählst du den Kartenstil (Standard, Satellit oder Hybrid) sowie die Ausrichtung, mit der eine neue Navigation startet (Fahrtrichtung oben oder Norden oben) - während der Fahrt bleibt der Umschalt-Button dafür wie gewohnt verfügbar."
+        ),
+        Topic(
+            icon: "list.bullet",
+            title: "Alle Routen",
+            text: "In den Einstellungen unter \"Alle Routen\" durchsuchst du den kompletten Bestand an bekannten Radrouten - z. B. um zu prüfen, ob ein dir bekannter lokaler Radweg in der App hinterlegt ist. Zwei Sucharten stehen zur Wahl: \"In der Nähe\" zeigt Routen im Umkreis eines eingegebenen Orts oder deiner aktuellen Position, \"Nach Name\" findet Routen anhand eines (auch nur teilweise eingegebenen) Namens. Das Badge neben jedem Treffer zeigt, ob es sich um eine internationale, nationale, regionale oder lokale Route handelt. Ein Tipp auf einen Treffer zeigt ihren Streckenverlauf auf der Karte."
         )
     ]
 

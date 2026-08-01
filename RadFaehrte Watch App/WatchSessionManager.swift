@@ -6,6 +6,7 @@
 //  Gegenstück auf der iOS-Seite) und löst bei einer bevorstehenden Abbiegung haptisches Feedback aus.
 //
 
+import CoreLocation
 import Foundation
 import WatchConnectivity
 import WatchKit
@@ -14,6 +15,10 @@ final class WatchSessionManager: NSObject, WCSessionDelegate, ObservableObject {
     static let shared = WatchSessionManager()
 
     @Published var state: WatchNavState = .idle
+    /// Geometrie der aktuell aktiven Route für die Kartenanzeige (s. `WatchContentView`) - separat
+    /// von `state`, da sie über `transferUserInfo` statt `updateApplicationContext` ankommt (s.
+    /// `WatchRouteTransferKey`).
+    @Published var routeLines: [[CLLocationCoordinate2D]] = []
 
     /// Zuletzt gesehener `hapticTrigger`-Wert - `nil` bedeutet "noch keine Basislinie", damit ein
     /// beim App-Start bereits vorhandener (alter) Kontext nicht sofort eine Vibration auslöst,
@@ -34,40 +39,73 @@ final class WatchSessionManager: NSObject, WCSessionDelegate, ObservableObject {
     /// Empfang nach App-Start bewusst `false` (reiner Sync-Vorgang, keine echte neue Abbiegung),
     /// bei jedem späteren Update `true`.
     private func apply(_ newState: WatchNavState, playHapticIfChanged: Bool) {
-        if playHapticIfChanged, newState.isNavigating,
-           let lastHapticTrigger, newState.hapticTrigger != lastHapticTrigger {
+        let shouldPlay = playHapticIfChanged && newState.isNavigating
+            && lastHapticTrigger != nil && newState.hapticTrigger != lastHapticTrigger
+        Self.appendDebugLog(
+            "apply: playHapticIfChanged=\(playHapticIfChanged) isNavigating=\(newState.isNavigating) "
+            + "lastHapticTrigger=\(String(describing: lastHapticTrigger)) newHapticTrigger=\(newState.hapticTrigger) "
+            + "direction=\(newState.direction) shouldPlay=\(shouldPlay)"
+        )
+        if shouldPlay {
             playTurnHaptic(direction: newState.direction)
         }
         lastHapticTrigger = newState.hapticTrigger
         state = newState
     }
 
-    /// Eigenes, klar unterscheidbares Muster statt eines einzelnen `WKHapticType`-Aufrufs -
-    /// Nutzer-Feedback nach dem ersten Live-Test (2026-07-31): die einfache `.directionUp`-Haptik
-    /// wirkte zu schwach, außerdem sollen sich Links-/Rechtsabbiegungen blind unterscheiden
-    /// lassen. `.notification` statt `.directionUp`/`.click` gewählt, weil es im Vergleich der
-    /// System-Haptiken am kräftigsten/auffälligsten wirkt. `WKInterfaceDevice.play(_:)` selbst hat
-    /// keinen Stärke-Regler - die Watch-Haptik-Palette ist auf feste, von Apple definierte Muster
-    /// beschränkt (kein Custom-Intensity-API wie Core Haptics unter iOS) - deshalb hier stattdessen
-    /// mehrfaches, zeitlich versetztes Abspielen: links = 2× lang (eher aufeinanderfolgend), rechts
-    /// = 5× kurz (schneller Stakkato), sonstige Manöver (z. B. Kreisverkehr/Ausfahrt ohne klare
-    /// Links/Rechts-Erkennung im Text) = 3× mittig als dritte, unterscheidbare Variante.
+    /// Klar unterscheidbares Haptik-Muster pro Richtung, per Live-Test am Handgelenk gefunden
+    /// (2026-08-01, über temporäre Test-Buttons in der Watch-App, inzwischen wieder entfernt):
+    ///
+    /// - `.navigationLeftTurn`/`.navigationRightTurn`/`.navigationGenericManeuver` (Apples eigene,
+    ///   extra für Turn-by-Turn-Navigation vorgesehene Typen) blieben auf diesem Gerät (Apple Watch
+    ///   Series 8, watchOS 26.5) **komplett stumm** - kein Impuls spürbar. `.notification` vibriert
+    ///   dagegen zuverlässig, deshalb als einziger Baustein verwendet statt der wirkungslosen
+    ///   Navigations-Typen.
+    /// - Unterscheidung über die **Anzahl** der `.notification`-Impulse (1× links, 2× geradeaus,
+    ///   3× rechts) statt über den Typ.
+    /// - **Mindestabstand zwischen den Impulsen entscheidend, nicht die Anzahl selbst**: 0,35 s und
+    ///   0,6 s Pause verschmolzen mehrere Impulse zuverlässig zu einem einzigen gefühlten Impuls;
+    ///   der nötige Mindestabstand liegt irgendwo zwischen 0,6 s und 2,6 s. 1,2 s zwischen allen
+    ///   Impulsen bestätigt: alle Impulse kommen einzeln an, links/rechts fühlen sich klar
+    ///   unterscheidbar an.
+    ///
+    /// **Noch offen**: nur im Vordergrund (manueller Button-Tap) verifiziert. Frühere
+    /// `asyncAfter`-Versuche scheiterten bei einer **echten**, im Hintergrund laufenden Navigation
+    /// am kurzen Zeitfenster nach `didReceiveApplicationContext` (s. ROADMAP.md, zweiter
+    /// Funktionsbug) - ob das aktuelle Muster (bis zu 2,4 s Gesamtdauer bei "rechts") dort ebenso
+    /// zuverlässig ankommt, ist noch durch eine echte Fahrt mit Abbiegung zu bestätigen.
     private func playTurnHaptic(direction: WatchNavState.Direction) {
+        let pattern: [(type: WKHapticType, delay: Double)]
         switch direction {
-        case .left:
-            playRepeated(.notification, count: 2, interval: 0.45)
-        case .right:
-            playRepeated(.notification, count: 5, interval: 0.16)
-        case .straight:
-            playRepeated(.notification, count: 3, interval: 0.3)
+        case .left: pattern = [(.notification, 0)]
+        case .right: pattern = [(.notification, 0), (.notification, 1.2), (.notification, 2.4)]
+        case .straight: pattern = [(.notification, 0), (.notification, 1.2)]
+        }
+        Self.appendDebugLog("playTurnHaptic: direction=\(direction) pattern=\(pattern)")
+        for (i, pulse) in pattern.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + pulse.delay) {
+                WKInterfaceDevice.current().play(pulse.type)
+                Self.appendDebugLog("playTurnHaptic: pulse \(i + 1)/\(pattern.count) played type=\(pulse.type)")
+            }
         }
     }
 
-    private func playRepeated(_ type: WKHapticType, count: Int, interval: TimeInterval) {
-        for i in 0..<count {
-            DispatchQueue.main.asyncAfter(deadline: .now() + interval * Double(i)) {
-                WKInterfaceDevice.current().play(type)
-            }
+    /// TEMP-DEBUG (Apple-Watch-Anbindung, Haptik-Muster-Suche 2026-07-31): Datei-Logging auf der
+    /// Watch selbst statt Konsole (analog zum iPhone-seitigen `WatchSessionManager.
+    /// appendDebugLog`) - wieder entfernen, sobald das Haptik-Muster live bestätigt ist.
+    private static let debugLogURL: URL? = FileManager.default
+        .urls(for: .documentDirectory, in: .userDomainMask).first?
+        .appendingPathComponent("watch_haptic_debug.log")
+
+    private static func appendDebugLog(_ line: String) {
+        guard let debugLogURL else { return }
+        guard let data = ("\(Date()) \(line)\n").data(using: .utf8) else { return }
+        if FileManager.default.fileExists(atPath: debugLogURL.path), let handle = try? FileHandle(forWritingTo: debugLogURL) {
+            handle.seekToEndOfFile()
+            handle.write(data)
+            try? handle.close()
+        } else {
+            try? data.write(to: debugLogURL)
         }
     }
 
@@ -85,6 +123,19 @@ final class WatchSessionManager: NSObject, WCSessionDelegate, ObservableObject {
         let newState = WatchNavState(dictionary: applicationContext)
         DispatchQueue.main.async {
             self.apply(newState, playHapticIfChanged: true)
+        }
+    }
+
+    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
+        guard let rawLines = userInfo[WatchRouteTransferKey.lines] as? [[[Double]]] else { return }
+        let lines = rawLines.map { line in
+            line.compactMap { point -> CLLocationCoordinate2D? in
+                guard point.count == 2 else { return nil }
+                return CLLocationCoordinate2D(latitude: point[0], longitude: point[1])
+            }
+        }
+        DispatchQueue.main.async {
+            self.routeLines = lines
         }
     }
 }

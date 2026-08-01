@@ -49,6 +49,12 @@ struct ContentView: View {
     /// vollen verfügbaren Platz bekommt statt sich den Bildschirm mit ihr zu teilen.
     @State private var isEditingStart = false
     @State private var isEditingZiel = false
+    /// Aktiv zwischen Antippen von "Auf Karte wählen" im Ziel-Feld und dem nächsten Kartentipp
+    /// (Nutzer-Idee: Ziel per Fingertipp setzen statt nur über die Adresssuche). Bewusst ein
+    /// expliziter Modus statt jeden Kartentipp automatisch als Ziel zu werten - sonst würde
+    /// normales Erkunden/Verschieben der Karte versehentlich das Ziel ändern. Deaktiviert sich
+    /// nach dem nächsten Tipp automatisch wieder (s. `handleMapTap`).
+    @State private var isPickingZielOnMap = false
     /// `true`, wenn `matches` nicht von `findMatches` (innerhalb des Schwellenwerts) stammen,
     /// sondern vom Fallback `findClosestMatches` (keine Route in der Nähe gefunden, stattdessen
     /// die nächstgelegenen Vorschläge unabhängig vom Schwellenwert). Steuert den Hinweistext in
@@ -103,8 +109,28 @@ struct ContentView: View {
     @State private var showLocationDeniedAlert = false
     @State private var showEndNavigationConfirmation = false
     @State private var isResolvingCurrentLocationForStart = false
+    /// Deadline für `isResolvingCurrentLocationForStart` (s. `resolveCurrentLocationAsStartIfReady`)
+    /// - verhindert endloses Warten auf einen frischen GPS-Fix, z. B. bei schlechtem Empfang drinnen.
+    @State private var resolvingStartLocationDeadline: Date?
     @State private var hasCenteredOnInitialLocation = false
+    /// Zwingt die blaue Standort-`Annotation` bei einem größeren GPS-Sprung zu einem echten
+    /// Neuzeichnen (s. `updateUserLocationMarkerTokenIfNeeded`, Kommentar an der `ForEach`-
+    /// Einbindung im `Map`-Builder).
+    @State private var userLocationMarkerToken = 0
+    @State private var lastUserLocationMarkerCoordinate: CLLocationCoordinate2D?
     @State private var selectedRouteLines: [[CLLocationCoordinate2D]] = []
+    /// Wird bei jeder Neuzuweisung von `selectedRouteLines` erhöht und fließt in die `ForEach`-
+    /// Identität der Routen-`MapPolyline`s ein (s. `routeLineSlots`). Ohne das behielten zwei
+    /// nacheinander gewählte Routen mit zufällig gleicher Segment-Anzahl (der Normalfall: fast
+    /// jede Route ergibt nach `mergedLines` genau ein zusammenhängendes Segment) über `\.offset`
+    /// dieselbe `ForEach`-Identität - SwiftUI aktualisiert dann nur die Koordinaten der
+    /// bestehenden `MapPolyline` an Ort und Stelle, statt sie zu entfernen und neu hinzuzufügen.
+    /// MapKits SwiftUI-Overlay-Darstellung zeichnet eine so "in place" geänderte Polyline dabei
+    /// zuverlässig nicht neu (Nutzer-Beobachtung 2026-08-01: gewählte Route blieb unsichtbar, bis
+    /// eine andere Route mit abweichender Segment-Anzahl zwischenzeitlich ausgewählt wurde). Der
+    /// Token erzwingt bei jeder Auswahl eine neue Identität und damit ein echtes Entfernen+
+    /// Hinzufügen des Overlays.
+    @State private var routeSelectionToken = 0
     @State private var is3DEnabled = false
     @State private var isHeadingUpEnabled = true
     /// Nutzer-Wunsch: Anweisungs-Banner + Statistik-Leiste per Button ein-/ausblendbar - ist er
@@ -133,6 +159,10 @@ struct ContentView: View {
     @State private var isLoadingDirectRoute = false
     @State private var directRoutes: [DirectRoute] = []
     @State private var selectedDirectRouteIndex = 0
+    /// Zeigt das Teilen-Sheet mit der per `exportRoute()` erzeugten `.gpx`-Datei der aktuell
+    /// gewählten Route (Nutzer-Idee 2026-08-01: Route an einen Radcomputer übertragen oder an
+    /// jemanden schicken, der sie mit einer anderen App öffnet).
+    @State private var exportFile: GPXExportFile?
     /// `true`, während eine automatische Neuberechnung der "Direkten Fahrrad-Route" wegen
     /// Abweichens von der Strecke läuft (siehe `checkDirectRouteDeviation`) - verhindert
     /// überlappende Neuberechnungen bei mehreren Standort-Updates während eine noch läuft.
@@ -194,6 +224,7 @@ struct ContentView: View {
                         LocationSearchField(
                             label: "Ziel",
                             selectedPlace: boundZielPlace,
+                            onPickOnMap: { isPickingZielOnMap = true },
                             biasCoordinate: startPlace?.coordinate ?? locationManager.currentLocation?.coordinate,
                             onFocusChange: { isEditingZiel = $0 }
                         )
@@ -218,13 +249,26 @@ struct ContentView: View {
                 }
 
                 if selectedMatch != nil || isDirectRouteMode || combinedMatch != nil {
-                    Button {
-                        startNavigating()
-                    } label: {
-                        Label("Los", systemImage: "location.fill")
-                            .frame(maxWidth: .infinity)
+                    HStack(spacing: 8) {
+                        Button {
+                            startNavigating()
+                        } label: {
+                            Label("Los", systemImage: "location.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        if exportableRoute != nil {
+                            Button {
+                                exportRoute()
+                            } label: {
+                                Image(systemName: "square.and.arrow.up")
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel("Route exportieren")
+                            .accessibilityIdentifier("exportRoute")
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
                     .padding(.horizontal)
                 }
             }
@@ -237,19 +281,39 @@ struct ContentView: View {
             MapReader { proxy in
                 Map(position: $cameraPosition) {
                     if let userLocationDisplayCoordinate {
-                        Annotation("Standort", coordinate: userLocationDisplayCoordinate) {
-                            userLocationMarker
+                        // `ForEach` mit `userLocationMarkerToken` statt einer einzelnen `Annotation`
+                        // - derselbe Grund wie bei `routeLineSlots`: MapKit zeichnet eine bestehende
+                        // Annotation, deren Koordinate sich "in place" ändert, bei größeren Sprüngen
+                        // mitunter nicht neu (Nutzer-Beobachtung 2026-08-01: blauer Punkt blieb nach
+                        // App-Neustart an einer alten, falschen Position stehen, obwohl
+                        // `locationManager.currentLocation` bereits die korrekte GPS-Position
+                        // lieferte - per Debug-Log bestätigt). `userLocationMarkerToken` wird nur bei
+                        // einem größeren Sprung erhöht (s. `updateUserLocationMarkerTokenIfNeeded`),
+                        // damit normale, kleine GPS-Updates während der Navigation weiterhin sanft
+                        // in derselben Annotation-Instanz aktualisiert werden.
+                        ForEach([userLocationMarkerToken], id: \.self) { _ in
+                            Annotation("Standort", coordinate: userLocationDisplayCoordinate) {
+                                userLocationMarker
+                            }
+                            .annotationTitles(.hidden)
                         }
-                        .annotationTitles(.hidden)
                     }
                     if !isNavigating {
                         if let startPlace {
-                            Marker(startPlace.title, systemImage: "flag.circle.fill", coordinate: startPlace.coordinate)
-                                .tint(.green)
+                            // `ForEach` statt einzelner `Marker`, mit `startPlace.id` (neue `UUID`
+                            // bei jeder Auswahl, s. `SelectedPlace`) als Identität - derselbe Grund
+                            // wie beim blauen Punkt oben: verhindert, dass der Marker bei einer neuen
+                            // Auswahl an der alten Position hängen bleibt.
+                            ForEach([startPlace]) { place in
+                                Marker(place.title, systemImage: "flag.circle.fill", coordinate: place.coordinate)
+                                    .tint(.green)
+                            }
                         }
                         if let zielPlace {
-                            Marker(zielPlace.title, systemImage: "flag.checkered.circle.fill", coordinate: zielPlace.coordinate)
-                                .tint(.red)
+                            ForEach([zielPlace]) { place in
+                                Marker(place.title, systemImage: "flag.checkered.circle.fill", coordinate: place.coordinate)
+                                    .tint(.red)
+                            }
                         }
                     }
                     routeOverlayContent
@@ -311,6 +375,11 @@ struct ContentView: View {
                     recenterButtonOverlay
                         .padding(.bottom, 24)
                 }
+                .overlay(alignment: .top) {
+                    if isPickingZielOnMap {
+                        pickZielOnMapBanner
+                    }
+                }
                 .clipShape(RoundedRectangle(cornerRadius: mapFillsFullScreen ? 0 : 12))
             }
             .padding(.horizontal, mapFillsFullScreen ? 0 : nil)
@@ -338,6 +407,7 @@ struct ContentView: View {
                 combinedMatch = nil
             }
             selectedRouteLines = newValue.map { Self.mergedLines($0.route.lines) } ?? []
+            routeSelectionToken += 1
             loadConnectorRoute(to: newValue)
         }
         .onChange(of: combinedMatch) { _, newValue in
@@ -355,6 +425,7 @@ struct ContentView: View {
             selectedRouteLines = newValue.map {
                 $0.legs.flatMap { $0.pathCoordinates.isEmpty ? Self.mergedLines($0.route.lines) : [$0.pathCoordinates] }
             } ?? []
+            routeSelectionToken += 1
             loadCombinedConnectorRoute(to: newValue)
         }
         .onChange(of: routeToStart) { _, newValue in
@@ -398,6 +469,9 @@ struct ContentView: View {
         .sheet(isPresented: $showQuickSettings) {
             NavigationQuickSettingsView()
         }
+        .sheet(item: $exportFile) { file in
+            ActivityView(activityItems: [file.url])
+        }
     }
 
     private func startNavigating() {
@@ -432,6 +506,7 @@ struct ContentView: View {
         currentDirectRouteStepIndex = 0
         lastWatchHapticStepIndex = nil
         updateWatchNavigationState()
+        sendActiveRouteToWatch()
         if let location = locationManager.currentLocation {
             // Bewusst `animated: false` (sofortiges Setzen ohne Animation), nicht
             // `recenterAnimation: true`: Live-Test mit einer sehr langen Strecke (Rotterdam→
@@ -503,6 +578,40 @@ struct ContentView: View {
         swap(&startPlace, &zielPlace)
     }
 
+    /// Übernimmt einen per Kartentipp gewählten Punkt als Ziel (s. `isPickingZielOnMap`,
+    /// `handleMapTap`). Setzt zunächst einen Platzhaltertitel, damit Marker und Ergebnisliste
+    /// sofort reagieren, statt auf das (u. U. langsame) Reverse Geocoding zu warten -
+    /// `reverseGeocodeZielPlace` ersetzt den Titel anschließend asynchron durch eine echte Adresse.
+    private func pickZielOnMap(at coordinate: CLLocationCoordinate2D) {
+        isPickingZielOnMap = false
+        isImportedRouteMode = false
+        let place = SelectedPlace(title: "Ziel auf der Karte", subtitle: "", coordinate: coordinate)
+        zielPlace = place
+        reverseGeocodeZielPlace(place)
+    }
+
+    /// Löst `place.coordinate` per Reverse Geocoding in eine Adresse auf und ersetzt `zielPlace`
+    /// damit - aber nur, falls der Nutzer zwischenzeitlich nicht schon ein anderes Ziel gewählt hat
+    /// (Vergleich über `place.id`, das sich bei jeder neuen Auswahl ändert, s. `SelectedPlace`).
+    private func reverseGeocodeZielPlace(_ place: SelectedPlace) {
+        let location = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
+        Task {
+            guard let placemark = try? await CLGeocoder().reverseGeocodeLocation(location).first else { return }
+            guard zielPlace?.id == place.id else { return }
+            let title = [placemark.thoroughfare, placemark.subThoroughfare]
+                .compactMap { $0 }
+                .joined(separator: " ")
+            let subtitle = [placemark.postalCode, placemark.locality]
+                .compactMap { $0 }
+                .joined(separator: " ")
+            zielPlace = SelectedPlace(
+                title: title.isEmpty ? (placemark.name ?? place.title) : title,
+                subtitle: subtitle,
+                coordinate: place.coordinate
+            )
+        }
+    }
+
     /// `LocationSearchField` bindet hierüber statt direkt auf `$startPlace`/`$zielPlace`, damit
     /// jede Bedienung der Suchfelder (Auswahl oder Löschen) `isImportedRouteMode` zurücksetzt -
     /// `startImportedRoute` selbst setzt `startPlace`/`zielPlace` über die rohen `@State`-Werte,
@@ -524,14 +633,34 @@ struct ContentView: View {
             break
         }
         isResolvingCurrentLocationForStart = true
+        resolvingStartLocationDeadline = Date().addingTimeInterval(Self.maxLocationWaitForStart)
         locationManager.requestAuthorization()
         locationManager.startUpdating()
         if let location = locationManager.currentLocation {
-            resolveCurrentLocationAsStart(location)
+            resolveCurrentLocationAsStartIfReady(location)
         }
     }
 
+    /// Ab dieser Entfernung (Meter) zur zuletzt fürs Marker-Redraw übernommenen Position gilt ein
+    /// neuer GPS-Fix als "größerer Sprung" (s. `userLocationMarkerToken`) - deutlich über normalem
+    /// GPS-Rauschen/normaler Fahrgeschwindigkeit zwischen zwei Updates, aber klein genug, um einen
+    /// Fall wie den beobachteten (App-Neustart, alte falsche Position weit entfernt von der neuen
+    /// korrekten) zuverlässig zu erkennen.
+    private static let userLocationMarkerJumpThresholdMeters: Double = 300
+
+    private func updateUserLocationMarkerTokenIfNeeded(_ location: CLLocation) {
+        if let last = lastUserLocationMarkerCoordinate {
+            let distance = location.distance(from: CLLocation(latitude: last.latitude, longitude: last.longitude))
+            guard distance > Self.userLocationMarkerJumpThresholdMeters else { return }
+        }
+        lastUserLocationMarkerCoordinate = location.coordinate
+        userLocationMarkerToken += 1
+    }
+
     private func handleLocationUpdate() {
+        if let location = locationManager.currentLocation {
+            updateUserLocationMarkerTokenIfNeeded(location)
+        }
         if isNavigating {
             if let location = locationManager.currentLocation {
                 accumulateTourDistance(location)
@@ -548,7 +677,7 @@ struct ContentView: View {
             }
             updateNavigationCamera()
         } else if isResolvingCurrentLocationForStart, let location = locationManager.currentLocation {
-            resolveCurrentLocationAsStart(location)
+            resolveCurrentLocationAsStartIfReady(location)
         } else if !hasCenteredOnInitialLocation, startPlace == nil, zielPlace == nil,
                   let location = locationManager.currentLocation {
             hasCenteredOnInitialLocation = true
@@ -578,6 +707,37 @@ struct ContentView: View {
             return [directRoutes[selectedDirectRouteIndex].coordinates]
         }
         return selectedRouteLines
+    }
+
+    /// Name + Geometrie der aktuell gewählten Route fürs GPX-Exportieren (`exportRoute()`) - `nil`
+    /// unter derselben Bedingung wie der "Los"-Button. Anders als `selectedRouteLines` beim
+    /// Einzeltreffer bewusst nur das gesuchte Teilstück (Start bis Ziel, per `routeSegmentPath`),
+    /// nicht die komplette Geometrie der ganzen Fernroute - sonst würde z. B. bei "Brückenradweg"
+    /// die komplette Route statt nur der gesuchten Strecke Bremen -> Osnabrück exportiert
+    /// (Nutzer-Idee 2026-08-01).
+    private var exportableRoute: (name: String, lines: [[CLLocationCoordinate2D]])? {
+        if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
+            let startTitle = startPlace?.title ?? "Start"
+            let zielTitle = zielPlace?.title ?? "Ziel"
+            return (name: "\(startTitle) – \(zielTitle)", lines: [directRoutes[selectedDirectRouteIndex].coordinates])
+        }
+        if let combinedMatch {
+            return (name: combinedMatch.routeNames.joined(separator: " – "), lines: selectedRouteLines)
+        }
+        if let selectedMatch {
+            let name = selectedMatch.route.name ?? "Radroute"
+            if let start = startPlace?.coordinate, let end = zielPlace?.coordinate,
+               let segment = RouteMatcher.routeSegmentPath(along: selectedMatch.route.lines, from: start, to: end) {
+                return (name: name, lines: [segment])
+            }
+            return (name: name, lines: selectedRouteLines)
+        }
+        return nil
+    }
+
+    private func exportRoute() {
+        guard let exportableRoute, let url = GPXWriter.writeTemporaryFile(name: exportableRoute.name, lines: exportableRoute.lines) else { return }
+        exportFile = GPXExportFile(url: url)
     }
 
     /// Toleranz fürs Einrasten der roten Linie auf die Routen-Geometrie - bewusst eng (nur echtes
@@ -824,7 +984,10 @@ struct ContentView: View {
             distanceText: currentStepDistanceText ?? navigationInstructionSubtitle,
             direction: previewedStep.map { watchDirection(for: $0) } ?? .straight,
             routeName: isDirectRouteMode ? nil : (combinedMatch?.routeNames.joined(separator: " → ") ?? selectedMatch?.route.name),
-            hapticTrigger: watchHapticTriggerCounter
+            hapticTrigger: watchHapticTriggerCounter,
+            currentLatitude: locationManager.currentLocation?.coordinate.latitude,
+            currentLongitude: locationManager.currentLocation?.coordinate.longitude,
+            heading: locationManager.currentHeading
         )
         WatchSessionManager.appendDebugLog(
             "updateWatchNavigationState: isDirectRouteMode=\(isDirectRouteMode) directRoutes.count=\(directRoutes.count) "
@@ -833,6 +996,18 @@ struct ContentView: View {
             + "-> title=\(state.instructionText) distance=\(state.distanceText)"
         )
         WatchSessionManager.shared.send(state)
+    }
+
+    /// Schickt die Geometrie der aktuell aktiven Route zur Kartenanzeige auf der Watch - bewusst
+    /// nur an den Stellen aufgerufen, an denen sich die aktive Route tatsächlich ändern kann
+    /// (Navigationsstart, Neuberechnung), nicht bei jedem Standort-Update wie
+    /// `updateWatchNavigationState` (unnötiger Datenverkehr für eine Geometrie, die sich
+    /// zwischendurch nicht ändert - `WatchSessionManager.sendRoute` filtert zusätzlich selbst
+    /// unveränderte Aufrufe heraus). `maxPoints: 100` deutlich kleiner als der iPhone-Kartenwert
+    /// (500) - auf dem winzigen Watch-Display bringt mehr Detail ohnehin nichts.
+    private func sendActiveRouteToWatch() {
+        let lines = activeNavigationRouteLines.map { Self.decimated($0, maxPoints: 100) }
+        WatchSessionManager.shared.sendRoute(lines)
     }
 
     /// Schlüsselwörter, an denen eine Abbiegung im fertig formulierten `instructions`-Text einer
@@ -946,6 +1121,7 @@ struct ContentView: View {
             selectedDirectRouteIndex = 0
             currentDirectRouteStepIndex = 0
             lastWatchHapticStepIndex = nil
+            sendActiveRouteToWatch()
         }
     }
 
@@ -963,8 +1139,30 @@ struct ContentView: View {
             + EuropaLand.allCases.compactMap { europaWayGraphStore.path(for: $0) }
     }
 
+    /// Ältester `timestamp`, den ein GPS-Fix für "Aktueller Standort" noch haben darf, um sofort
+    /// übernommen zu werden - iOS liefert nach `startUpdating()` häufig zuerst die letzte gecachte
+    /// Position (ggf. von einem früheren Aufenthaltsort, Minuten/Stunden/Tage alt), bevor der
+    /// echte aktuelle Fix nachkommt. Ein frischer GPS-Fix hat dagegen praktisch immer einen
+    /// `timestamp` nahe der Jetztzeit. Nutzer-Beobachtung 2026-08-01: "Aktueller Standort" landete
+    /// an der Nordseeküste, obwohl das iPhone tatsächlich in Bremen war - passte zu einem
+    /// übernommenen alten Cache-Wert (`resolveCurrentLocationAsStart` prüfte bisher weder Alter
+    /// noch stoppte es erst nach einem guten Fix).
+    private static let maxLocationAgeForStart: TimeInterval = 15
+    /// Nicht endlos auf einen frischeren Fix warten (z. B. bei schlechtem GPS-Empfang drinnen) -
+    /// nach dieser Wartezeit wird auch ein älterer Fix akzeptiert, statt "Aktueller Standort"
+    /// unbegrenzt hängen zu lassen.
+    private static let maxLocationWaitForStart: TimeInterval = 8
+
+    private func resolveCurrentLocationAsStartIfReady(_ location: CLLocation) {
+        let isFreshEnough = Date().timeIntervalSince(location.timestamp) <= Self.maxLocationAgeForStart
+        let deadlineReached = resolvingStartLocationDeadline.map { Date() >= $0 } ?? true
+        guard isFreshEnough || deadlineReached else { return }
+        resolveCurrentLocationAsStart(location)
+    }
+
     private func resolveCurrentLocationAsStart(_ location: CLLocation) {
         isResolvingCurrentLocationForStart = false
+        resolvingStartLocationDeadline = nil
         locationManager.stopUpdating()
         startPlace = SelectedPlace(title: "Aktueller Standort", subtitle: "", coordinate: location.coordinate)
     }
@@ -1067,6 +1265,25 @@ struct ContentView: View {
     /// Kartenausschnitt, damit sie sowohl beim Heranzoomen als auch beim Übersichtsblick
     /// sinnvoll bleibt.
     private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
+        if isPickingZielOnMap {
+            if let coordinate = proxy.convert(point, from: .local) {
+                // Bewusst NICHT synchron im Gesten-Callback: `pickZielOnMap` setzt `zielPlace`,
+                // was über `onChange` sofort `runMatching()`/`updateCamera()` auslöst - ist dabei
+                // (anders als beim umgekehrten Ablauf, s. u.) bereits ein Start gesetzt, läuft die
+                // volle Suche inkl. neuer Karten-Overlays (`selectedRouteLines`/`routeSelectionToken`)
+                // synchron mit, während MapKit noch mitten in der Verarbeitung dieser selben
+                // `SpatialTapGesture` steckt - führte beim Live-Test zu wiederholten Abstürzen
+                // (Nutzer-Beobachtung 2026-08-01: nur in dieser Reihenfolge, nie wenn das Ziel
+                // zuerst ohne gesetzten Start gewählt wurde). `DispatchQueue.main.async` schiebt die
+                // Zustandsänderung auf den nächsten Runloop-Durchlauf, nachdem die Geste selbst
+                // fertig verarbeitet ist.
+                DispatchQueue.main.async {
+                    pickZielOnMap(at: coordinate)
+                }
+            }
+            return
+        }
+
         guard isDirectRouteMode, directRoutes.count > 1,
               let tapCoordinate = proxy.convert(point, from: .local) else { return }
 
@@ -1212,6 +1429,28 @@ struct ContentView: View {
                 .accessibilityIdentifier("showNavigationBanner")
                 .accessibilityLabel("Hinweise einblenden")
         }
+    }
+
+    /// Hinweis-Banner während `isPickingZielOnMap` aktiv ist (s. `handleMapTap`, `pickZielOnMap`) -
+    /// erklärt den sonst unsichtbaren Modus und bietet einen expliziten Ausstieg ohne Kartentipp.
+    private var pickZielOnMapBanner: some View {
+        HStack {
+            Image(systemName: "hand.tap.fill")
+                .foregroundStyle(.secondary)
+            Text("Tippe auf die Karte, um dein Ziel zu setzen")
+                .font(.subheadline.weight(.medium))
+            Spacer()
+            Button("Abbrechen") {
+                isPickingZielOnMap = false
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.regularMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding()
+        .accessibilityIdentifier("pickZielOnMapBanner")
     }
 
     /// Nutzer-konfigurierbare Statistik-Leiste (3 oder 6 frei wählbare Felder, s.
@@ -1588,6 +1827,20 @@ struct ContentView: View {
         }
     }
 
+    /// Einzelnes Linien-Segment für `routeOverlayContent`, mit einer Identität, die sich bei
+    /// jeder neuen Routen-Auswahl ändert (s. `routeSelectionToken`-Kommentar an
+    /// `selectedRouteLines`), auch wenn Segment-Index und -Anzahl zufällig gleich bleiben.
+    private struct RouteLineSlot: Identifiable {
+        let id: String
+        let coordinates: [CLLocationCoordinate2D]
+    }
+
+    private var routeLineSlots: [RouteLineSlot] {
+        selectedRouteLines.enumerated().map { offset, line in
+            RouteLineSlot(id: "\(routeSelectionToken)-\(offset)", coordinates: line)
+        }
+    }
+
     @MapContentBuilder
     private var routeOverlayContent: some MapContent {
         if isDirectRouteMode {
@@ -1598,12 +1851,19 @@ struct ContentView: View {
                 }
             }
             if directRoutes.indices.contains(selectedDirectRouteIndex) {
-                MapPolyline(coordinates: directRoutes[selectedDirectRouteIndex].coordinates)
-                    .stroke(.blue, lineWidth: 5)
+                // `ForEach` statt einer einzelnen `MapPolyline`, damit ein Wechsel zwischen
+                // Alternativen (`selectedDirectRouteIndex`) die `ForEach`-Identität ändert (s.
+                // `routeSelectionToken`-Kommentar) - sonst bliebe die hervorgehobene Route beim
+                // Umschalten mitunter unsichtbar, da MapKit dieselbe Overlay-Instanz nur mit neuen
+                // Koordinaten aktualisiert statt sie neu zu zeichnen.
+                ForEach([selectedDirectRouteIndex], id: \.self) { index in
+                    MapPolyline(coordinates: directRoutes[index].coordinates)
+                        .stroke(.blue, lineWidth: 5)
+                }
             }
         } else {
-            ForEach(Array(selectedRouteLines.enumerated()), id: \.offset) { _, line in
-                MapPolyline(coordinates: line)
+            ForEach(routeLineSlots) { slot in
+                MapPolyline(coordinates: slot.coordinates)
                     .stroke(.blue, lineWidth: 4)
             }
             if let connectorRouteToStart {
@@ -1947,44 +2207,13 @@ struct ContentView: View {
             } else {
                 directRouteSection
 
-                // Einzeltreffer (falls vorhanden) - unabhängig davon, ob zusätzlich (s. u.) noch
-                // eine kombinierte Route gefunden wird. Nutzer-Wunsch (2026-07-30): mehr Auswahl,
-                // auch wenn schon ein durchgehend beschilderter Einzeltreffer existiert (z. B.
-                // Brückenradweg + Friedensroute als Alternative zu EuroVelo 3/D7 Pilgerroute bei
-                // Bremen -> Münster) - anders als früher schließen sich Einzeltreffer und
-                // Kombination jetzt nicht mehr gegenseitig aus.
-                if !matches.isEmpty {
-                    Divider()
-                    if isFallbackMatches {
-                        Text("Keine Radroute in der Nähe – nächstgelegene Vorschläge:")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 8)
-                            .padding(.horizontal, 4)
-                    }
-                    matchesPager(matches, subtitle: subtitle(for:))
-                }
-
-                if isSearchingCombinedMatch {
-                    // Suche nach einer Routen-Kombination läuft noch (kann je nach Region einige
-                    // Sekunden dauern) - ohne diesen Hinweis wirkte die Suche in der Zwischenzeit
-                    // wie ein Fehlschlag (Live-Test München -> Nürnberg). Läuft jetzt auch neben
-                    // bereits vorhandenen Einzeltreffern, blockiert deren Anzeige aber nicht.
-                    Divider()
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Suche nach Routen-Kombination …")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 4)
-                } else if !combinedMatches.isEmpty {
-                    Divider()
-                    combinedMatchesPager(combinedMatches)
-                }
+                // Nutzer-Entscheidung 2026-08-01: Die Reihenfolge der Abschnitte selbst (Einzel-
+                // treffer vor Kombination) soll unverändert bleiben - unpraktikable Einzeltreffer
+                // wie "[D9] Weser-Romantische Straße Teil 1" sollen stattdessen *innerhalb* des
+                // Einzeltreffer-Pagers nach hinten rutschen (s. `appendNearbyWellKnownMatches`s
+                // Sortierung nach `combinedDistanceKm`), nicht den ganzen Abschnitt verdrängen.
+                singleMatchesSection
+                combinedMatchesSection
 
                 if matches.isEmpty && combinedMatches.isEmpty && !isSearchingCombinedMatch {
                     Divider()
@@ -2002,6 +2231,51 @@ struct ContentView: View {
         .onChange(of: matches) { pagedMatchIndex = 0 }
         .onChange(of: nearbyMatches) { pagedMatchIndex = 0 }
         .onChange(of: combinedMatches) { pagedCombinedMatchIndex = 0 }
+    }
+
+    @ViewBuilder
+    private var singleMatchesSection: some View {
+        // Einzeltreffer (falls vorhanden) - unabhängig davon, ob zusätzlich (s. u.) noch
+        // eine kombinierte Route gefunden wird. Nutzer-Wunsch (2026-07-30): mehr Auswahl,
+        // auch wenn schon ein durchgehend beschilderter Einzeltreffer existiert (z. B.
+        // Brückenradweg + Friedensroute als Alternative zu EuroVelo 3/D7 Pilgerroute bei
+        // Bremen -> Münster) - anders als früher schließen sich Einzeltreffer und
+        // Kombination jetzt nicht mehr gegenseitig aus.
+        if !matches.isEmpty {
+            Divider()
+            if isFallbackMatches {
+                Text("Keine Radroute in der Nähe – nächstgelegene Vorschläge:")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 8)
+                    .padding(.horizontal, 4)
+            }
+            matchesPager(matches, subtitle: subtitle(for:))
+        }
+    }
+
+    @ViewBuilder
+    private var combinedMatchesSection: some View {
+        if isSearchingCombinedMatch {
+            // Suche nach einer Routen-Kombination läuft noch (kann je nach Region einige
+            // Sekunden dauern) - ohne diesen Hinweis wirkte die Suche in der Zwischenzeit
+            // wie ein Fehlschlag (Live-Test München -> Nürnberg). Läuft jetzt auch neben
+            // bereits vorhandenen Einzeltreffern, blockiert deren Anzeige aber nicht.
+            Divider()
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Suche nach Routen-Kombination …")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+        } else if !combinedMatches.isEmpty {
+            Divider()
+            combinedMatchesPager(combinedMatches)
+        }
     }
 
     /// Einzelne Zeile für die direkte Fahrrad-Route. Bei mehreren Alternativen können diese
@@ -2240,15 +2514,28 @@ struct ContentView: View {
         activeSearchTasks.removeAll()
     }
 
+    /// Start-/Ziel-Koordinaten der zuletzt tatsächlich ausgeführten Suche - verhindert eine
+    /// überflüssige zweite Suche, wenn sich an einem bereits gesetzten `SelectedPlace` nur der
+    /// Titel ändert, die Koordinate aber identisch bleibt (z. B. `reverseGeocodeZielPlace`, das
+    /// nachträglich die Adresse eines per Kartentipp gesetzten Ziels einträgt - das löst über
+    /// `onChange(of: zielPlace)` erneut `runMatching()` aus, obwohl sich am eigentlichen Ziel
+    /// nichts geändert hat). Ohne diese Sperre konnte die zweite, redundante Suche eine bereits
+    /// getroffene Auswahl (z. B. "Direkte Fahrrad-Route") mit einem inzwischen asynchron
+    /// eingetroffenen `combinedMatch` der ersten Suche überlagern, statt sie sauber abzulösen -
+    /// sichtbar als zwei gleichzeitig markierte Treffer in der Ergebnisliste (Nutzer-Beobachtung
+    /// 2026-08-01).
+    @State private var lastMatchingCoordinates: (start: CLLocationCoordinate2D, end: CLLocationCoordinate2D)?
+
     private func runMatching() {
         guard !isImportedRouteMode else { return }
-        cancelActiveSearchTasks()
-        matchingGeneration += 1
-        routeSegmentDistances = [:]
-        combinedMatch = nil
-        combinedMatches = []
-        isSearchingCombinedMatch = false
         guard let start = startPlace?.coordinate, let end = zielPlace?.coordinate else {
+            lastMatchingCoordinates = nil
+            cancelActiveSearchTasks()
+            matchingGeneration += 1
+            routeSegmentDistances = [:]
+            combinedMatch = nil
+            combinedMatches = []
+            isSearchingCombinedMatch = false
             matches = []
             isFallbackMatches = false
             selectedMatch = nil
@@ -2256,6 +2543,18 @@ struct ContentView: View {
             directRoutes = []
             return
         }
+        if let last = lastMatchingCoordinates,
+           last.start.latitude == start.latitude, last.start.longitude == start.longitude,
+           last.end.latitude == end.latitude, last.end.longitude == end.longitude {
+            return
+        }
+        lastMatchingCoordinates = (start, end)
+        cancelActiveSearchTasks()
+        matchingGeneration += 1
+        routeSegmentDistances = [:]
+        combinedMatch = nil
+        combinedMatches = []
+        isSearchingCombinedMatch = false
         let strictMatches = matcher.findMatches(start: start, end: end)
         if strictMatches.isEmpty {
             matches = []
@@ -2365,6 +2664,17 @@ struct ContentView: View {
     /// Eine echte Kartenlücke zwischen den Anschlusspunkten zeigt sich dann ganz normal über den
     /// bestehenden "Kartendaten hier lückenhaft"-Hinweis (s. `subtitle(for:)`,
     /// `filterAndReorderMatchesByPracticalDistance`), verhindert aber nicht mehr die Anzeige.
+    ///
+    /// Nach dem Ergänzen wird `matches` nach `combinedDistanceKm` (Anfahrt zu Start + Ziel
+    /// zusammen) aufsteigend sortiert - Nutzer-Beobachtung 2026-08-01 (Bremen -> Münster, "[D9]
+    /// Weser-Romantische Straße Teil 1", ~147 km Entfernung zur Route): Ohne Sortierung landete ein
+    /// nur zufällig nah an *einem* der beiden Punkte liegender, praktisch aber unbrauchbarer
+    /// Treffer als erste (Standard-)Seite im Wisch-Pager - wirkte dadurch wie die Hauptempfehlung,
+    /// obwohl eine tatsächlich verbindende Route (`combinedMatches`) vorlag. Blendet weiterhin
+    /// nichts aus (Nutzer-Wunsch 2026-07-31 bleibt gültig), verschiebt nur die Reihenfolge -
+    /// Einzeltreffer aus `findMatches` (beide Seiten ohnehin ≤ `thresholdKm`) landen durch ihre von
+    /// Natur aus kleine `combinedDistanceKm` weiterhin praktisch immer vor den nur einseitig nahen
+    /// `nearbyWellKnownRouteMatches`-Ergänzungen.
     private func appendNearbyWellKnownMatches(
         _ wellKnown: [RouteMatch], usedRefs: Set<String>, generation: Int
     ) {
@@ -2376,6 +2686,7 @@ struct ContentView: View {
         }
         guard !additional.isEmpty else { return }
         matches.append(contentsOf: additional)
+        matches.sort { $0.combinedDistanceKm < $1.combinedDistanceKm }
         loadRouteSegmentDistances(for: additional, generation: generation)
     }
 
@@ -2472,9 +2783,19 @@ struct ContentView: View {
 
     /// Realistische Gesamtstrecke für einen Treffer (Anfahrt zum Streckenanfang + Strecke auf der
     /// Route + Anfahrt vom Streckenende zum Ziel).
+    ///
+    /// Bei einer echten Kartenlücke (kein Pfad zwischen den Anschlusspunkten, `segment == nil` -
+    /// s. `nearbyWellKnownRouteMatches`/"Kartendaten hier lückenhaft") früher `.greatestFiniteMagnitude`
+    /// - sortierte solche Treffer dadurch immer ans Ende, selbst wenn beide Anschlusspunkte sehr
+    /// nah an Start/Ziel liegen (Nutzer-Beobachtung 2026-08-01: "EuroVelo 3 ... Kartendaten hier
+    /// lückenhaft" mit nur ~0,5 km `combinedDistanceKm` landete hinter "[D9] Weser-Romantische
+    /// Straße Teil 1" mit ~147 km, weil letztere trotz praktischer Nutzlosigkeit eine *berechenbare*
+    /// Zahl hatte). Fällt jetzt stattdessen auf `combinedDistanceKm` zurück (Anfahrt zu Start + Ziel
+    /// ohne den unbekannten Lücken-Anteil) - reflektiert eher, wie vielversprechend die Route
+    /// tatsächlich ist, auch wenn die genaue Streckenlänge wegen der Lücke unbekannt bleibt.
     private func practicalDistanceKm(for match: RouteMatch) -> Double {
         guard let segment = routeSegmentDistances[match.id], let segment else {
-            return .greatestFiniteMagnitude
+            return match.combinedDistanceKm
         }
         return match.distanceToStartKm + segment.distanceKm + match.distanceToEndKm
     }

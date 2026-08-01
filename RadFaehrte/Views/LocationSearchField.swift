@@ -11,6 +11,10 @@ struct LocationSearchField: View {
     @Binding var selectedPlace: SelectedPlace?
     var isResolvingCurrentLocation: Bool = false
     var onUseCurrentLocation: (() -> Void)? = nil
+    /// Nur beim Ziel-Feld gesetzt (Nutzer-Idee: Ziel per Fingertipp auf der Karte statt nur über
+    /// die Adresssuche setzen) - aktiviert in `ContentView` den Karten-Auswahlmodus
+    /// (`isPickingZielOnMap`), der eigentliche Tap wird dort per `handleMapTap` verarbeitet.
+    var onPickOnMap: (() -> Void)? = nil
     var biasCoordinate: CLLocationCoordinate2D? = nil
     /// Meldet Fokus-Änderungen nach außen, damit `ContentView` z. B. die Ergebnisliste ausblenden
     /// kann, solange dieses Feld aktiv bearbeitet wird (mehr Platz für die Vorschlagsliste).
@@ -38,9 +42,28 @@ struct LocationSearchField: View {
                 }
             }
 
-            if isFocused && (onUseCurrentLocation != nil || !viewModel.results.isEmpty) {
+            if isFocused && (onUseCurrentLocation != nil || onPickOnMap != nil || !viewModel.results.isEmpty) {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
+                        if let onPickOnMap {
+                            Button {
+                                onPickOnMap()
+                                isFocused = false
+                            } label: {
+                                HStack {
+                                    Image(systemName: "hand.tap.fill")
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 20)
+                                    Text("Auf Karte wählen")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                }
+                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .accessibilityIdentifier("pickOnMap-\(label)")
+                            Divider()
+                        }
                         if let onUseCurrentLocation {
                             Button {
                                 onUseCurrentLocation()

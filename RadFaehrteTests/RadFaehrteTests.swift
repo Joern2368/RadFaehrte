@@ -302,7 +302,7 @@ struct RadFaehrteTests {
     /// Randfall. Deaktiviert statt gelöscht, damit der Regressionsstand dokumentiert bleibt und der
     /// Test bei einer künftigen, gründlicheren Untersuchung der `finalized`-Reihenfolge sofort
     /// wieder verfügbar ist.
-    @Test(.disabled("Bekannte Regression seit RouteGraph-Nachbarschaftssuche (2026-07-30) - s. Doc-Kommentar, bewusst zurückgestellt"))
+    @Test(.disabled("Bekannte Regression seit RouteGraph-Nachbarschaftssuche (2026-07-30) - s. Doc-Kommentar, bewusst zurückgestellt. Erneut probiert nach dem maxEntryPointsPerRoute-Fix (2026-08-01, s. u. Bremen->Münster) - bleibt leer (49s, nil), also ein anderer/zusätzlicher Grund für Berlin->Den Haag."))
     func combinedMatchBerlinToDenHaagFindsEuroVelo2Chain() async throws {
         // Regressionstest für einen Fund beim Live-Testen (2026-07-29): Berlin->Amsterdam wurde
         // ursprünglich als Testfall für "funktioniert die Kombinationssuche auch grenzüberschreitend"
@@ -396,6 +396,15 @@ struct RadFaehrteTests {
     /// Multi-Fragment-Datensatz mit einem Fragment zufällig nahe Lübeck und einem anderen nahe der
     /// Suchregion) - ob der praktisch nutzbar ist, prüft `filterAndReorderMatchesByPracticalDistance`
     /// separat; nicht Gegenstand dieses Tests.
+    ///
+    /// **Update 2026-07-31** (`maxEntryPointsPerRoute`-Fix, s. `findCombinedMatches`-Doku): Die
+    /// Suche findet jetzt eine kürzere Kette über "EuroVelo 13"-Fragmente bzw. "Elbetal-Schaalsee
+    /// Rundweg" (~90-96 km) statt der vorher einzig auffindbaren Alte-Salzstraße/Ostseeküsten-
+    /// Kette über Travemünde - erreichbar, weil dieselbe stark fragmentierte Route jetzt über
+    /// mehrere getrennte Einstiegspunkte statt nur einen einzigen erkundet werden kann. Nicht
+    /// live auf dem iPhone nachverifiziert (anders als der ursprüngliche Fund) - die konkrete
+    /// Namens-Erwartung wurde deshalb hier bewusst gelockert; falls sich die neue Kette bei
+    /// Gelegenheit als unplausibel herausstellt, hier ansetzen.
     @Test func combinedMatchLuebeckToWismarFindsRouteChainViaTravemuende() async throws {
         let repository = RouteRepository()
         let matcher = RouteMatcher(repository: repository)
@@ -404,13 +413,13 @@ struct RadFaehrteTests {
 
         let combined = try #require(matcher.findCombinedMatches(start: luebeck, end: wismar).first)
         #expect(combined.legs.count >= 2)
+        #expect(combined.totalDistanceKm > Self.kilometers(luebeck, wismar))
+        #expect(combined.totalDistanceKm < 150)
+    }
 
-        let names = combined.routeNames.joined(separator: " -> ")
-        let containsExpectedRoute = combined.routeNames.contains {
-            $0.localizedCaseInsensitiveContains("salzstraße")
-                || $0.localizedCaseInsensitiveContains("ostseeküsten")
-        }
-        #expect(containsExpectedRoute, "Erwartete Alte-Salzstraße/Ostseeküsten-Radweg-Kette über Travemünde, bekam: \(names)")
+    private static func kilometers(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+        CLLocation(latitude: a.latitude, longitude: a.longitude)
+            .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude)) / 1000
     }
 
     @Test func findCombinedMatchesTerminatesWithoutImplausibleConnection() async throws {
@@ -422,6 +431,31 @@ struct RadFaehrteTests {
         let northSea1 = CLLocationCoordinate2D(latitude: 55.5, longitude: 4.0)
         let northSea2 = CLLocationCoordinate2D(latitude: 56.0, longitude: 3.0)
         #expect(matcher.findCombinedMatches(start: northSea1, end: northSea2).isEmpty)
+    }
+
+    /// Regressionstest für einen Nutzer-Fund (2026-07-31): Bremen -> Münster fand keine
+    /// Routenkombination mehr, obwohl `findMatches` bereits Brückenradweg und Friedensroute
+    /// beide als Kandidaten in der Nähe von Start bzw. Ziel liefert (bestätigt per Debug-Logging).
+    /// Ursache: "D7 Pilgerroute" liegt (per reiner Umkreisprüfung) sowohl nahe Bremen als auch
+    /// nahe Münster, wurde deshalb selbst als Start-Kandidat der Kombinationssuche verwendet -
+    /// hat aber von ihrem Bremer Einstiegspunkt aus keinen durchgehenden Pfad zur eigenen
+    /// Anschlussstelle bei Osnabrück (eigenes Geometrie-Fragment). Die Route wurde trotzdem
+    /// global als "erledigt" markiert (`finalized`-`Set`) und blockierte damit dauerhaft den
+    /// zweiten, funktionierenden Zugang über "Brückenradweg" bei Osnabrück, über den
+    /// "Friedensroute" erreichbar gewesen wäre. Fix: `visitedEntryPoints` erlaubt jetzt bis zu
+    /// drei klar getrennte Einstiegspunkte pro Route, bevor sie als erschöpft gilt.
+    @Test func combinedMatchBremenToMuensterFindsRouteChainViaOsnabrueck() async throws {
+        let repository = RouteRepository()
+        let matcher = RouteMatcher(repository: repository)
+        let bremen = CLLocationCoordinate2D(latitude: 53.0793, longitude: 8.8017)
+        let muenster = CLLocationCoordinate2D(latitude: 51.9607, longitude: 7.6261)
+
+        let combined = try #require(matcher.findCombinedMatches(start: bremen, end: muenster).first)
+        let names = combined.routeNames.joined(separator: " -> ")
+        let containsBridge = combined.routeNames.contains { $0.localizedCaseInsensitiveContains("brückenradweg") }
+        let containsPeace = combined.routeNames.contains { $0.localizedCaseInsensitiveContains("friedens") }
+        #expect(containsBridge, "Erwartete eine Brückenradweg-Etappe, bekam: \(names)")
+        #expect(containsPeace, "Erwartete eine Friedensroute-Etappe, bekam: \(names)")
     }
 
     @Test func gpxParserExtractsNameAndTrackPoints() async throws {
