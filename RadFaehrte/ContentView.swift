@@ -2090,6 +2090,23 @@ struct ContentView: View {
         return "der Nachbarregion"
     }
 
+    /// Live-Fund 2026-08-01 (Freiburg -> Stuttgart, 214 km, beide Enden innerhalb desselben
+    /// heruntergeladenen Bundeslands Baden-Württemberg): `BikeRoutingEngine`s Standard-Obergrenze
+    /// (300.000 besuchte Knoten, kalibriert für lokale Stadt-Strecken) brach die Suche bei einem
+    /// so großen Bundesland (11,3 Mio. Knoten) nach 2,9 s erfolglos ab, obwohl Start und Ziel
+    /// beide einen Knoten fanden - `loadDirectRoute` fiel danach still auf Online-Routing zurück.
+    /// Dasselbe Limit wie `CrossRegionRouteStitcher.legMaxVisitedNodes` (dort schon für
+    /// Bundesland-übergreifende Teilstrecken erhöht, s. dort) hilft bei echten großen, aber
+    /// zusammenhängenden Strecken - bewusst als eigene Konstante hier dupliziert statt importiert,
+    /// um `CrossRegionRouteStitcher` nicht wegen eines unabhängigen Anwendungsfalls anzufassen.
+    /// ⚠️ Für den konkreten Freiburg-Stuttgart-Fall selbst **kein** vollständiger Fix: Eine
+    /// anschließende BFS-Erreichbarkeitsprüfung (unabhängig von Gewichtung/Zeitlimit) zeigte, dass
+    /// Stuttgarts nächstgelegener Knoten in einer komplett von Freiburgs Komponente getrennten
+    /// Graph-Insel liegt (11,2 von 11,3 Mio. Knoten von Freiburg aus erreichbar, Stuttgart nicht
+    /// darunter) - ein echter Fehler in der Wege-Graph-Erstellung für dieses Bundesland
+    /// (`Scripts/build_way_graph_v2.py`), kein Umfangsproblem. Noch nicht behoben, s. ROADMAP.md.
+    private static let largeRegionMaxVisitedNodes = 1_500_000
+
     /// Berechnet die Route(n) über die heruntergeladene Offline-Engine (siehe
     /// `WayGraphRepository`/`BikeRoutingEngine`), abseits des Hauptthreads (A*-Suche). Der Graph
     /// selbst wird über `WayGraphCache` nur beim allerersten Zugriff von der Festplatte geladen -
@@ -2102,7 +2119,7 @@ struct ContentView: View {
         let results = await Task.detached(priority: .userInitiated) { () -> [BikeRoutingEngine.Result] in
             guard let repository = WayGraphCache.shared.repository(for: path) else { return [] }
             return BikeRoutingEngine(repository: repository)
-                .routes(from: start, to: end, maxAlternatives: 2)
+                .routes(from: start, to: end, maxAlternatives: 2, maxVisitedNodes: largeRegionMaxVisitedNodes)
         }.value
         return results.map(DirectRoute.init(offlineResult:))
     }
