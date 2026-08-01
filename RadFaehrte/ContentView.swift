@@ -6,6 +6,26 @@
 import SwiftUI
 import MapKit
 
+/// Ergebnis der Straßennamen-Suche für einen kuratierten Treffer/eine kombinierte Kette (s.
+/// `curatedRouteStepsDetailSheet`/`combinedRouteDetailSheet`) - unterscheidet zwei grundverschiedene
+/// Fehlschlags-Ursachen, damit die Fehlermeldung nicht pauschal auf den Wege-Graph-Download
+/// verweist, wenn der eigentliche Grund ein anderer ist (Live-Fund 2026-08-01, Nutzer testete
+/// Münster -> Dortmund: "Deutsche Fußball Route NRW" zeigte in der Ergebnisliste bereits
+/// "Kartendaten hier lückenhaft" - `routeSegmentPath` findet für diesen Abschnitt schon keinen
+/// durchgehenden Pfad in der Routen-Geometrie selbst, unabhängig vom Wege-Graphen. Ein
+/// Wege-Graph-Download hätte daran nichts geändert).
+private enum CuratedRouteStepsAvailability {
+    case steps([BikeRoutingEngine.Result.Step])
+    /// `RouteMatcher.routeSegmentPath`/`pathCoordinates` fanden schon keinen durchgehenden Pfad in
+    /// der Routen-Geometrie selbst - derselbe Grund, aus dem die Ergebnisliste an dieser Stelle
+    /// "Kartendaten hier lückenhaft" zeigt (s. `ContentView.subtitle(for:)`). Ein heruntergeladener
+    /// Wege-Graph würde daran nichts ändern.
+    case noRouteGeometry
+    /// Die Routen-Geometrie war durchgehend, aber kein heruntergeladener Wege-Graph deckte sie
+    /// ausreichend ab (s. `CuratedRouteStepMatcher.minMatchedFraction`).
+    case noWayGraphMatch
+}
+
 struct ContentView: View {
     @AppStorage(AppSettingsKey.averageSpeedKmh) private var averageSpeedKmh = AppSettingsDefaults.averageSpeedKmh
 
@@ -111,12 +131,11 @@ struct ContentView: View {
     /// "Direkte Fahrrad-Route", s. `isDirectRouteMode`/`previewedStep`) - kleinerer, risikoärmerer
     /// erster Schritt, der die bestehende Navigations-State-Machine nicht anfasst.
     @State private var curatedRouteStepsDetail: RouteMatch?
-    /// `nil` = noch nicht geladen, `[]` explizit leer (Wege-Graph hat keine Namen), s.
-    /// `curatedRouteStepsDetailSheet`.
-    @State private var curatedRouteSteps: [BikeRoutingEngine.Result.Step]?
+    /// `nil` = noch nicht geladen, s. `curatedRouteStepsDetailSheet`/`CuratedRouteStepsAvailability`.
+    @State private var curatedRouteStepsResult: CuratedRouteStepsAvailability?
     @State private var isLoadingCuratedRouteSteps = false
     /// Straßennamen/Abbiege-Hinweise für den aktuell **ausgewählten** Einzeltreffer (`selectedMatch`),
-    /// als vollwertige `DirectRoute` (Koordinaten + Schritte) - anders als `curatedRouteSteps` (nur
+    /// als vollwertige `DirectRoute` (Koordinaten + Schritte) - anders als `curatedRouteStepsResult` (nur
     /// für die On-Demand-Vorschau eines beliebigen, noch nicht zwingend ausgewählten Treffers) wird
     /// das hier für die tatsächlich laufende Turn-by-Turn-Navigation gebraucht (s. `activeStepRoute`).
     /// Wird proaktiv bei jeder Auswahl geladen (`.onChange(of: selectedMatch)`), nicht erst beim
@@ -124,9 +143,9 @@ struct ContentView: View {
     @State private var curatedRoute: DirectRoute?
     @State private var currentCuratedStepIndex = 0
     /// Straßennamen/Abbiege-Hinweise für die kombinierte Kette in `combinedRouteDetail` (On-Demand-
-    /// Vorschau, analog `curatedRouteSteps` für Einzeltreffer) - über alle Etappen zusammengeführt,
-    /// s. `matchCuratedRouteSteps(forLegs:candidatePaths:)`.
-    @State private var combinedRouteSteps: [BikeRoutingEngine.Result.Step]?
+    /// Vorschau, analog `curatedRouteStepsResult` für Einzeltreffer) - über alle Etappen
+    /// zusammengeführt, s. `matchCuratedRouteSteps(forLegs:candidatePaths:)`.
+    @State private var combinedRouteStepsResult: CuratedRouteStepsAvailability?
     @State private var isLoadingCombinedRouteSteps = false
 
     @State private var locationManager = LocationManager()
@@ -2493,12 +2512,12 @@ struct ContentView: View {
                 Section("Straßennamen") {
                     if isLoadingCombinedRouteSteps {
                         ProgressView()
-                    } else if let combinedRouteSteps, !combinedRouteSteps.isEmpty {
-                        ForEach(Array(combinedRouteSteps.enumerated()), id: \.offset) { _, step in
+                    } else if case let .steps(steps) = combinedRouteStepsResult {
+                        ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
                             Text(step.instructions)
                         }
                     } else {
-                        Text("Keine Straßendaten verfügbar - dafür muss der Wege-Graph der betroffenen Region(en) unter \"Offline-Karten\" heruntergeladen sein.")
+                        Text("Keine Straßendaten verfügbar. \(Self.curatedRouteStepsUnavailableReason(combinedRouteStepsResult))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -2532,17 +2551,15 @@ struct ContentView: View {
                 if isLoadingCuratedRouteSteps {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let curatedRouteSteps, !curatedRouteSteps.isEmpty {
-                    List(Array(curatedRouteSteps.enumerated()), id: \.offset) { _, step in
+                } else if case let .steps(steps) = curatedRouteStepsResult {
+                    List(Array(steps.enumerated()), id: \.offset) { _, step in
                         Text(step.instructions)
                     }
                 } else {
                     ContentUnavailableView(
                         "Keine Straßendaten verfügbar",
                         systemImage: "signpost.right.and.left",
-                        description: Text(
-                            "Dafür muss der Wege-Graph der betroffenen Region unter \"Offline-Karten\" heruntergeladen sein."
-                        )
+                        description: Text(Self.curatedRouteStepsUnavailableReason(curatedRouteStepsResult))
                     )
                 }
             }
@@ -2589,11 +2606,11 @@ struct ContentView: View {
     /// eintreffendes Ergebnis, falls der Nutzer das Sheet zwischenzeitlich schon geschlossen oder
     /// einen anderen Treffer geöffnet hat (analog `lastMatchingCoordinates` in `runMatching`).
     private func loadCuratedRouteSteps(for match: RouteMatch) async {
-        curatedRouteSteps = nil
+        curatedRouteStepsResult = nil
         guard let start = startPlace?.coordinate, let end = zielPlace?.coordinate,
               let path = RouteMatcher.routeSegmentPath(along: match.route.lines, from: start, to: end)
         else {
-            curatedRouteSteps = []
+            curatedRouteStepsResult = .noRouteGeometry
             return
         }
 
@@ -2602,7 +2619,18 @@ struct ContentView: View {
 
         guard curatedRouteStepsDetail?.id == match.id else { return }
         isLoadingCuratedRouteSteps = false
-        curatedRouteSteps = result?.steps ?? []
+        curatedRouteStepsResult = result.map { .steps($0.steps) } ?? .noWayGraphMatch
+    }
+
+    /// Erklärt, warum keine Straßendaten verfügbar sind (s. `CuratedRouteStepsAvailability`) -
+    /// `.none` (noch nicht geladen, sollte hier wegen `isLoadingCuratedRouteSteps` praktisch nie
+    /// auftreten) fällt auf denselben Text wie `.noWayGraphMatch`, da beide für den Nutzer
+    /// ununterscheidbar sind ("es gibt (noch) keine Namen").
+    private static func curatedRouteStepsUnavailableReason(_ result: CuratedRouteStepsAvailability?) -> String {
+        if case .noRouteGeometry = result {
+            return "Für diesen Streckenabschnitt ist die Kartengeometrie selbst lückenhaft (siehe \"Kartendaten hier lückenhaft\" in der Ergebnisliste) - das lässt sich nicht durch einen Wege-Graph-Download beheben."
+        }
+        return "Dafür muss der Wege-Graph der betroffenen Region unter \"Offline-Karten\" heruntergeladen sein."
     }
 
     /// Lädt `curatedRoute` für die tatsächlich laufende Turn-by-Turn-Navigation eines ausgewählten
@@ -2669,13 +2697,21 @@ struct ContentView: View {
     /// Lädt die Straßennamen/Abbiege-Hinweise für eine kombinierte Kette - s.
     /// `combinedRouteDetailSheet`. Analog `loadCuratedRouteSteps` für Einzeltreffer.
     private func loadCombinedRouteSteps(for match: RouteMatcher.CombinedRouteMatch) async {
-        combinedRouteSteps = nil
+        combinedRouteStepsResult = nil
+        // Keine Etappe hat überhaupt eine nutzbare Geometrie (s. `CombinedRouteLeg.pathCoordinates`)
+        // - ein Wege-Graph-Download würde daran nichts ändern, analog `.noRouteGeometry` bei
+        // Einzeltreffern.
+        guard match.legs.contains(where: { $0.pathCoordinates.count >= 2 }) else {
+            combinedRouteStepsResult = .noRouteGeometry
+            return
+        }
+
         isLoadingCombinedRouteSteps = true
         let result = await Self.matchCuratedRouteSteps(forLegs: match.legs, candidatePaths: offlineGraphCandidatePaths())
 
         guard combinedRouteDetail?.id == match.id else { return }
         isLoadingCombinedRouteSteps = false
-        combinedRouteSteps = result?.steps ?? []
+        combinedRouteStepsResult = result.map { .steps($0.steps) } ?? .noWayGraphMatch
     }
 
     /// Lädt `curatedRoute` für die tatsächlich laufende Turn-by-Turn-Navigation einer ausgewählten
