@@ -729,6 +729,72 @@ struct RadFaehrteTests {
         #expect(handover == nil)
     }
 
+    /// Regressionstest für den Cuxhaven -> Hamburg-Fund (2026-08-02): Eine Strecke kann eine dritte
+    /// Region mittig durchqueren, die selbst weder Start noch Ziel enthält (hier über Niedersachsen
+    /// -> Schleswig-Holstein -> Hamburg) - `findHandoverSequence` muss das als geordnete
+    /// Dreier-Kette erkennen, nicht nur den einfacheren Zwei-Regionen-Fall von
+    /// `findHandoverCoordinate` oben. Simuliert drei "Abdeckungsbereiche" entlang derselben
+    /// Nord-Süd-Linie wie die Zwei-Regionen-Tests, je über ihre Distanz zum Abtastpunkt.
+    @Test func crossRegionRouteStitcherFindsThreeRegionChain() throws {
+        let start = CLLocationCoordinate2D(latitude: 53.20, longitude: 8.80)
+        let end = CLLocationCoordinate2D(latitude: 52.00, longitude: 8.80)
+        let centers = [53.10, 52.60, 52.10].map { CLLocationCoordinate2D(latitude: $0, longitude: 8.80) }
+
+        func distance(from center: CLLocationCoordinate2D) -> (CLLocationCoordinate2D) -> Double? {
+            { point in abs(point.latitude - center.latitude) }
+        }
+
+        let chain = CrossRegionRouteStitcher.findHandoverSequence(
+            start: start, end: end,
+            regionDistanceMeters: centers.map(distance(from:))
+        )
+
+        #expect(chain == [0, 1, 2])
+    }
+
+    /// Gegenprobe: Nur zwei Regionen im Spiel - das ist der einfachere Fall, den
+    /// `findHandoverCoordinate`/`combinedRoute` bereits abdecken. `findHandoverSequence` liefert
+    /// dafür bewusst `nil` (weniger als drei Regionen in der zusammengefassten Kette), damit
+    /// `ContentView` nicht denselben Übergang doppelt (einmal über `combinedRoute`, einmal über
+    /// `chainedRoute`) berechnet.
+    @Test func crossRegionRouteStitcherFindsHandoverSequenceReturnsNilForTwoRegions() {
+        let start = CLLocationCoordinate2D(latitude: 53.20, longitude: 8.80)
+        let end = CLLocationCoordinate2D(latitude: 52.60, longitude: 8.80)
+        let startCenter = CLLocationCoordinate2D(latitude: 53.10, longitude: 8.80)
+        let endCenter = CLLocationCoordinate2D(latitude: 52.90, longitude: 8.80)
+
+        func distance(from center: CLLocationCoordinate2D) -> (CLLocationCoordinate2D) -> Double? {
+            { point in abs(point.latitude - center.latitude) }
+        }
+
+        let chain = CrossRegionRouteStitcher.findHandoverSequence(
+            start: start, end: end,
+            regionDistanceMeters: [distance(from: startCenter), distance(from: endCenter)]
+        )
+
+        #expect(chain == nil)
+    }
+
+    /// Gegenprobe: Eine Region "gewinnt" sowohl nahe Start als auch nahe Ziel, eine zweite nur in
+    /// einem schmalen Mittelband - ergibt die Kette [0, 1, 0], eine Region kommt also zweimal vor.
+    /// `findHandoverSequence` bricht sauber ab (Zeichen einer instabilen Abtastung an einer
+    /// wackligen Grenze) statt einen unplausiblen Zwischen-Hop zurückzugeben.
+    @Test func crossRegionRouteStitcherFindsHandoverSequenceReturnsNilWhenRegionRepeats() {
+        let start = CLLocationCoordinate2D(latitude: 53.20, longitude: 8.80)
+        let end = CLLocationCoordinate2D(latitude: 52.00, longitude: 8.80)
+
+        let regionDistances: [(CLLocationCoordinate2D) -> Double?] = [
+            { point in (point.latitude > 53.0 || point.latitude < 52.2) ? 0.001 : 100.0 },
+            { point in (52.2...53.0).contains(point.latitude) ? 0.001 : 100.0 }
+        ]
+
+        let chain = CrossRegionRouteStitcher.findHandoverSequence(
+            start: start, end: end, regionDistanceMeters: regionDistances
+        )
+
+        #expect(chain == nil)
+    }
+
     /// Regressionstest für die Bounding-Box-Vorfilterung in `ContentView.offlineGraphCandidatePaths`
     /// (Nutzer-Meldung 2026-08-02: Direkt-Routen-Berechnung wurde mit wachsender Zahl
     /// heruntergeladener Bundesländer spürbar langsamer, weil vorher **alle** heruntergeladenen

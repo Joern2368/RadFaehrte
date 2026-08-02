@@ -1208,8 +1208,9 @@ struct ContentView: View {
                 newRoutes = await Self.offlineDirectRoutes(path: path, from: location, to: ziel)
                 if !newRoutes.isEmpty { break }
             }
+            // Ungefiltert (nicht `candidatePaths`) aus demselben Grund wie in `loadDirectRoute`.
             if newRoutes.isEmpty, let combined = await Self.crossRegionOfflineDirectRoute(
-                candidatePaths: candidatePaths, from: location, to: ziel
+                candidatePaths: offlineGraphCandidatePaths(), from: location, to: ziel
             ) {
                 newRoutes = [combined]
             }
@@ -2081,7 +2082,12 @@ struct ContentView: View {
                     return
                 }
             }
-            if let combined = await Self.crossRegionOfflineDirectRoute(candidatePaths: candidatePaths, from: start, to: ziel) {
+            // Ungefiltert (nicht `candidatePaths`): Eine mittig durchquerte Region (s.
+            // `CrossRegionRouteStitcher.chainedRoute`) enthält weder Start noch Ziel und würde vom
+            // Bounding-Box-Filter sonst fälschlich ausgeschlossen.
+            if let combined = await Self.crossRegionOfflineDirectRoute(
+                candidatePaths: offlineGraphCandidatePaths(), from: start, to: ziel
+            ) {
                 isLoadingDirectRoute = false
                 if isDirectRouteMode { directRoutes = [combined] }
                 return
@@ -2099,6 +2105,12 @@ struct ContentView: View {
     /// Online-Routing zurückfallen, obwohl beide Regionen offline vorliegen. Siehe
     /// `CrossRegionRouteStitcher` für das eigentliche Vorgehen (Übergangspunkt an der Luftlinie
     /// suchen, in beiden Graphen unabhängig snappen, zwei Teilrouten aneinanderreihen).
+    ///
+    /// Schlägt der einfache Zwei-Regionen-Versuch fehl, wird zusätzlich `chainedRoute` über **alle**
+    /// `candidatePaths` probiert - für Strecken, die eine mittig durchquerte dritte Region berühren,
+    /// die selbst weder Start noch Ziel enthält (Live-Fund 2026-08-02: Cuxhaven -> Hamburg über
+    /// Niedersachsen -> Schleswig-Holstein -> Hamburg), und die deshalb weder im Pro-Region-Durchlauf
+    /// noch im Zwei-Regionen-Versuch oben auftaucht.
     private static func crossRegionOfflineDirectRoute(
         candidatePaths: [String], from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D
     ) async -> DirectRoute? {
@@ -2120,6 +2132,13 @@ struct ContentView: View {
                         return DirectRoute(offlineResult: result)
                     }
                 }
+            }
+
+            let namedRepositories = repositories.map {
+                (repository: $0.repository, displayName: Self.regionDisplayName(forPath: $0.path))
+            }
+            if let result = CrossRegionRouteStitcher.chainedRoute(start: start, end: end, candidates: namedRepositories) {
+                return DirectRoute(offlineResult: result)
             }
             return nil
         }.value
