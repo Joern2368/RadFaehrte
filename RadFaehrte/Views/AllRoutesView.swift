@@ -264,6 +264,7 @@ private struct RouteDetailSheet: View {
     @State private var route: BikeRoute?
     @State private var isLoading = true
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(AppSettingsKey.averageSpeedKmh) private var averageSpeedKmh = AppSettingsDefaults.averageSpeedKmh
 
     var body: some View {
         NavigationStack {
@@ -317,6 +318,7 @@ private struct RouteDetailSheet: View {
         var parts: [String] = []
         if let ref = summary.ref, !ref.isEmpty { parts.append(ref) }
         if let distanceKm = summary.distanceKm { parts.append("\(Int(distanceKm)) km") }
+        if let duration = estimatedDurationText(distanceKm: summary.distanceKm, speedKmh: averageSpeedKmh) { parts.append(duration) }
         if let label = summary.networkLabel { parts.append(label) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }

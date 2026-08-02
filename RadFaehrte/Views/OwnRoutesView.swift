@@ -17,6 +17,7 @@ struct OwnRoutesView: View {
     let refreshTrigger: Int
     var onStart: (ImportedRoute) -> Void
 
+    @AppStorage(AppSettingsKey.averageSpeedKmh) private var averageSpeedKmh = AppSettingsDefaults.averageSpeedKmh
     @State private var routes: [ImportedRoute] = []
     @State private var isImporterPresented = false
     @State private var importErrorMessage: String?
@@ -70,7 +71,7 @@ struct OwnRoutesView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(route.name)
                     .font(.subheadline.weight(.medium))
-                Text("\(String(format: "%.1f", route.totalDistanceKm)) km")
+                Text(routeSubtitle(route))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -82,6 +83,14 @@ struct OwnRoutesView: View {
             .accessibilityIdentifier("startImportedRoute-\(route.name)")
         }
         .padding(.vertical, 4)
+    }
+
+    private func routeSubtitle(_ route: ImportedRoute) -> String {
+        var parts = ["\(String(format: "%.1f", route.totalDistanceKm)) km"]
+        if let duration = estimatedDurationText(distanceKm: route.totalDistanceKm, speedKmh: averageSpeedKmh) {
+            parts.append(duration)
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func delete(at offsets: IndexSet) {

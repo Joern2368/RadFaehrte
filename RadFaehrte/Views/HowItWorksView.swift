@@ -55,7 +55,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "bicycle",
             title: "Eigene Routen",
-            text: "Im Tab \"Eigene Routen\" importierst du fertige GPX-Touren (z. B. von einer Zeitung oder einem Verein) und fährst sie direkt los - unabhängig von der normalen Start/Ziel-Suche."
+            text: "Im Tab \"Eigene Routen\" importierst du fertige GPX-Touren (z. B. von einer Zeitung oder einem Verein) und fährst sie direkt los - unabhängig von der normalen Start/Ziel-Suche. Unter dem Namen jeder Tour steht neben der Streckenlänge auch eine grobe Schätzung der Fahrzeit, basierend auf der unter \"Einstellungen > Navigation\" hinterlegten Wunschgeschwindigkeit."
         ),
         Topic(
             icon: "clock.arrow.circlepath",
@@ -80,7 +80,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "list.bullet",
             title: "Alle Routen",
-            text: "In den Einstellungen unter \"Alle Routen\" durchsuchst du den kompletten Bestand an bekannten Radrouten - z. B. um zu prüfen, ob ein dir bekannter lokaler Radweg in der App hinterlegt ist. Zwei Sucharten stehen zur Wahl: \"In der Nähe\" zeigt Routen im Umkreis eines eingegebenen Orts oder deiner aktuellen Position, \"Nach Name\" findet Routen anhand eines (auch nur teilweise eingegebenen) Namens. Das Badge neben jedem Treffer zeigt, ob es sich um eine internationale, nationale, regionale oder lokale Route handelt. Ein Tipp auf einen Treffer zeigt ihren Streckenverlauf auf der Karte."
+            text: "In den Einstellungen unter \"Alle Routen\" durchsuchst du den kompletten Bestand an bekannten Radrouten - z. B. um zu prüfen, ob ein dir bekannter lokaler Radweg in der App hinterlegt ist. Zwei Sucharten stehen zur Wahl: \"In der Nähe\" zeigt Routen im Umkreis eines eingegebenen Orts oder deiner aktuellen Position, \"Nach Name\" findet Routen anhand eines (auch nur teilweise eingegebenen) Namens. Das Badge neben jedem Treffer zeigt, ob es sich um eine internationale, nationale, regionale oder lokale Route handelt. Ein Tipp auf einen Treffer zeigt ihren Streckenverlauf auf der Karte, darunter Streckenlänge und eine grobe Schätzung der Fahrzeit (basierend auf der unter \"Einstellungen > Navigation\" hinterlegten Wunschgeschwindigkeit)."
         )
     ]
 
