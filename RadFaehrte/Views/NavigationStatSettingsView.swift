@@ -44,6 +44,11 @@ struct NavigationStatSettingsView: View {
                 .pickerStyle(.segmented)
             }
 
+            // Ohne `.animation(nil, ...)` löst das Umschalten der Feld-Anzahl im selben Zug ein
+            // Einfügen/Entfernen von bis zu 3 Picker-Zeilen weiter unten aus. Die dadurch
+            // ausgelöste implizite List-Diffing-Animation kann den Tap auf dem Segmented Control
+            // "verschlucken" (Tester musste laut Feedback mehrfach auf "6" tippen, bis die Auswahl
+            // griff) - mit deaktivierter Animation greift der Tap sofort.
             Section {
                 ForEach(0..<navigationStatFieldCount, id: \.self) { index in
                     Picker("Feld \(index + 1)", selection: statSlotBinding(index)) {
@@ -55,6 +60,7 @@ struct NavigationStatSettingsView: View {
             } footer: {
                 Text("Legt fest, welche Werte in der Statistik-Leiste über der Karte während der Navigation angezeigt werden.")
             }
+            .animation(nil, value: navigationStatFieldCount)
         }
         .navigationTitle("Statistik-Leiste")
         .navigationBarTitleDisplayMode(.inline)
