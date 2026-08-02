@@ -46,12 +46,17 @@ struct OfflineMapsView<Region: DownloadableRegion>: View {
 
     @ViewBuilder
     private func regionRow(_ region: Region) -> some View {
+        let isDeleting = downloadManager.deletingRegions.contains(region)
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(region.displayName)
                 if let progress = downloadManager.progress[region] {
                     ProgressView(value: progress)
                         .frame(maxWidth: 120)
+                } else if isDeleting {
+                    Text("Wird gelöscht …")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 } else if downloadManager.isDownloaded(region) {
                     Text("Heruntergeladen")
                         .font(.caption)
@@ -63,7 +68,9 @@ struct OfflineMapsView<Region: DownloadableRegion>: View {
                 }
             }
             Spacer()
-            if downloadManager.progress[region] != nil {
+            if isDeleting {
+                ProgressView()
+            } else if downloadManager.progress[region] != nil {
                 Button("Abbrechen", role: .destructive) {
                     downloadManager.cancel(region)
                 }

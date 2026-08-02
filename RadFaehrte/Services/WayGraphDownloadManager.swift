@@ -81,6 +81,9 @@ final class WayGraphDownloadManager<Region: DownloadableRegion> {
     /// Property-Zugriff (auch wenn er intern das Dateisystem ändert) tut das nicht.
     private(set) var downloaded: Set<Region>
     private(set) var progress: [Region: Double] = [:]
+    /// Regionen, deren Löschen gerade läuft - für einen Ladeindikator in `OfflineMapsView`
+    /// (s. Doc-Kommentar an `delete(_:)`).
+    private(set) var deletingRegions: Set<Region> = []
     var errorMessage: String?
 
     /// Hält die KVO-Beobachtung des Downloadfortschritts am Leben, solange ein Download läuft -
@@ -100,15 +103,29 @@ final class WayGraphDownloadManager<Region: DownloadableRegion> {
         downloaded.contains(region)
     }
 
+    /// Löscht eine heruntergeladene Region. Läuft in einem `Task.detached` statt synchron auf dem
+    /// Main-Thread: Bei großen Regionen (z. B. Polen, ~1,4 GB) blockierte das Freigeben des
+    /// gemappten Wege-Graphen (`WayGraphCache.invalidate`) plus das eigentliche Löschen die UI
+    /// spürbar (~5 s) ohne jede Rückmeldung - wirkte wie ein nicht erkannter Tastendruck
+    /// (Nutzer-Meldung 2026-08-02). `deletingRegions` zeigt währenddessen einen Ladeindikator in
+    /// `OfflineMapsView`, analog zum Spinner bei der Kombinationssuche.
     func delete(_ region: Region) {
+        guard !deletingRegions.contains(region) else { return }
         // Pfad vor dem Löschen merken (`path(for:)` liefert danach `nil`, da die Datei nicht mehr
         // existiert) - ohne diese Invalidierung würde `ContentView` nach einem erneuten Download
         // unbemerkt weiter mit dem alten, im `WayGraphCache` gehaltenen Graphen rechnen.
-        if let path = store.path(for: region) {
-            WayGraphCache.shared.invalidate(path: path)
+        let path = store.path(for: region)
+        deletingRegions.insert(region)
+        Task.detached { [store] in
+            if let path {
+                WayGraphCache.shared.invalidate(path: path)
+            }
+            store.delete(region)
+            await MainActor.run { [weak self] in
+                self?.downloaded.remove(region)
+                self?.deletingRegions.remove(region)
+            }
         }
-        store.delete(region)
-        downloaded.remove(region)
     }
 
     /// Bricht einen laufenden Download ab (z. B. wenn er hängen geblieben ist). Der
