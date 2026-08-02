@@ -39,6 +39,18 @@ nonisolated final class BikeRoutingEngine {
     /// nicht gegen echte Grenzfälle kalibriert.
     private static let maxVisitedNodes = 300_000
 
+    /// Ab welcher Kursänderung (Grad) `stepDetails` überhaupt eine Abbiegung ausgibt (Text,
+    /// Pfeil-Icon, Watch-Haptik-Trigger über `isTurnInstruction` in `ContentView`) statt "Weiter
+    /// auf ...". Ursprünglich 20° - führte laut Live-Test zu Fehlalarmen bei sanften
+    /// Straßenschwenks, die keine echte Abbiegung sind. Auf 30° angehoben, um das zu reduzieren;
+    /// weiterhin eine grobe Schätzung, nicht gegen echte Kreuzungen kalibriert - Kehrseite eines zu
+    /// hohen Werts wäre eine tatsächliche, aber sanfte Abbiegung, die stillschweigend übergangen
+    /// wird (deutlich harmloser als eine falsche Ansage).
+    private static let turnAngleThresholdDegrees = 30.0
+
+    /// Ab welcher Kursänderung (Grad) eine Abbiegung als "scharf" (statt normal) angesagt wird.
+    private static let sharpTurnAngleThresholdDegrees = 120.0
+
     private let repository: WayGraphRepository
 
     init(repository: WayGraphRepository) {
@@ -248,8 +260,8 @@ nonisolated final class BikeRoutingEngine {
     /// Formuliert die Anweisung für einen neuen Abschnitt und die grobe Richtung fürs Pfeil-Icon
     /// in der Navigations-Kopfzeile. `incomingBearing == nil` beim allerersten Abschnitt der
     /// Route - dort gibt es noch keine vorherige Fahrtrichtung, mit der sich ein Abbiegen
-    /// vergleichen ließe. Schwellenwerte (20°/120°) grob geschätzt, nicht gegen echte Kreuzungen
-    /// kalibriert.
+    /// vergleichen ließe. Schwellenwerte s. `turnAngleThresholdDegrees`/
+    /// `sharpTurnAngleThresholdDegrees`.
     private static func stepDetails(
         incomingBearing: Double?, outgoingBearing: Double, name: String?
     ) -> (text: String, direction: Result.Step.Direction) {
@@ -260,11 +272,11 @@ nonisolated final class BikeRoutingEngine {
         while delta > 180 { delta -= 360 }
         while delta < -180 { delta += 360 }
         let magnitude = abs(delta)
-        guard magnitude >= 20 else {
+        guard magnitude >= turnAngleThresholdDegrees else {
             return (name.map { "Weiter auf \($0)" } ?? "Route folgen", .straight)
         }
         let isRight = delta > 0
-        let turn = magnitude >= 120
+        let turn = magnitude >= sharpTurnAngleThresholdDegrees
             ? (isRight ? "Scharf rechts abbiegen" : "Scharf links abbiegen")
             : (isRight ? "Rechts abbiegen" : "Links abbiegen")
         let text = name.map { "\(turn) auf \($0)" } ?? turn

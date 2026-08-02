@@ -25,7 +25,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "location.north.line.fill",
             title: "Navigation",
-            text: "Mit \"Los\" startest du die Navigation. Die Karte folgt automatisch deiner Position und Fahrtrichtung, die bereits gefahrene Strecke wird rot eingezeichnet. Weichst du bei der direkten Route ab, wird automatisch neu berechnet. Liegt für einen ausgewählten einzelnen Treffer oder eine kombinierte Kette mehrerer Fernwege der Wege-Graph der betroffenen Region(en) als Download vor, zeigt die Kopfzeile auch dort echte Abbiege-Hinweise mit Straßennamen statt nur \"Route folgen\" - genau wie bei der direkten Route, nur ohne deren automatische Neuberechnung bei Abweichung, da du hier bewusst der offiziellen Strecke folgen willst."
+            text: "Mit \"Los\" startest du die Navigation. Die Karte folgt automatisch deiner Position und Fahrtrichtung, die bereits gefahrene Strecke wird rot eingezeichnet. Weichst du bei der direkten Route ab, wird automatisch neu berechnet. Liegt für einen ausgewählten einzelnen Treffer oder eine kombinierte Kette mehrerer Fernwege der Wege-Graph der betroffenen Region(en) als Download vor, zeigt die Kopfzeile auch dort echte Abbiege-Hinweise mit Straßennamen statt nur \"Route folgen\" - genau wie bei der direkten Route, nur ohne deren automatische Neuberechnung bei Abweichung, da du hier bewusst der offiziellen Strecke folgen willst. Kurz bevor eine dieser Abbiegungen ansteht, liest RadFährte sie zusätzlich laut vor - lässt sich in den Einstellungen unter \"Navigation\" abschalten."
         ),
         Topic(
             icon: "square.and.arrow.up",

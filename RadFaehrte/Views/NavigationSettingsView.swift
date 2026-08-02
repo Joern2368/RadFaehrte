@@ -11,6 +11,7 @@ import SwiftUI
 struct NavigationSettingsView: View {
     @AppStorage(AppSettingsKey.averageSpeedKmh) private var averageSpeedKmh = AppSettingsDefaults.averageSpeedKmh
     @AppStorage(AppSettingsKey.navigationLookaheadMeters) private var navigationLookaheadMeters = AppSettingsDefaults.navigationLookaheadMeters
+    @AppStorage(AppSettingsKey.isVoiceGuidanceEnabled) private var isVoiceGuidanceEnabled = AppSettingsDefaults.isVoiceGuidanceEnabled
 
     var body: some View {
         Form {
@@ -48,6 +49,12 @@ struct NavigationSettingsView: View {
                 }
             } footer: {
                 Text("Welche Werte in der Statistik-Leiste über der Karte während der Navigation angezeigt werden.")
+            }
+
+            Section {
+                Toggle("Sprachausgabe für Abbiegehinweise", isOn: $isVoiceGuidanceEnabled)
+            } footer: {
+                Text("Kündigt Abbiegungen zusätzlich zur Watch-Vibration laut an - wie bei der Watch-Vibration nur für einen ausgewählten Einzeltreffer, eine kombinierte Kette oder die \"Direkte Fahrrad-Route\", jeweils mit heruntergeladenem Wege-Graph bzw. echten Abbiege-Hinweisen.")
             }
         }
         .navigationTitle("Navigation")

@@ -15,6 +15,7 @@ enum AppSettingsKey {
     static let appearanceMode = "appearanceMode"
     static let mapStyle = "mapStyle"
     static let navigationDefaultHeadingUp = "navigationDefaultHeadingUp"
+    static let isVoiceGuidanceEnabled = "isVoiceGuidanceEnabled"
 }
 
 enum AppSettingsDefaults {
@@ -45,4 +46,6 @@ enum AppSettingsDefaults {
     /// `ContentView` (`true`), damit sich für Nutzer, die die Einstellung nicht anfassen, am
     /// bisherigen Verhalten nichts ändert.
     static let navigationDefaultHeadingUp: Bool = true
+
+    static let isVoiceGuidanceEnabled: Bool = true
 }

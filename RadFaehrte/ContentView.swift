@@ -158,6 +158,8 @@ struct ContentView: View {
     @State private var isLoadingCombinedRouteSteps = false
 
     @State private var locationManager = LocationManager()
+    @State private var voiceAnnouncer = VoiceAnnouncer()
+    @AppStorage(AppSettingsKey.isVoiceGuidanceEnabled) private var isVoiceGuidanceEnabled = AppSettingsDefaults.isVoiceGuidanceEnabled
     @State private var isNavigating = false
     @State private var showLocationDeniedAlert = false
     @State private var showEndNavigationConfirmation = false
@@ -250,9 +252,14 @@ struct ContentView: View {
     @State private var tourRouteLocations: [CLLocation] = []
     @State private var tourSummary: TourSummary?
     @State private var currentDirectRouteStepIndex = 0
-    /// Zuletzt für ein Haptik-Signal an die Apple Watch genutzter Schritt-Index (s.
-    /// `checkWatchHapticTrigger`) - verhindert wiederholtes Auslösen für denselben Abbiege-Schritt.
+    /// Zuletzt für ein Haptik-Signal an die Apple Watch (und die frühe Sprachansage, s.
+    /// `checkTurnAnnouncementTrigger`) genutzter Schritt-Index - verhindert wiederholtes Auslösen
+    /// für denselben Abbiege-Schritt.
     @State private var lastWatchHapticStepIndex: Int?
+    /// Analog `lastWatchHapticStepIndex`, aber für die späte "Jetzt"-Sprachansage in
+    /// `advanceDirectRouteStepIfNeeded` - eigener Merker, da früher und später Trigger
+    /// unabhängig voneinander (und an unterschiedlichen Entfernungs-Schwellen) auslösen.
+    @State private var lastVoiceNowAnnouncementStepIndex: Int?
     /// Hochzählender Zähler, der bei jeder ausgelösten Watch-Haptik erhöht und mit
     /// `updateWatchNavigationState` an `WatchNavState.hapticTrigger` übergeben wird - bewusst nie
     /// zurückgesetzt (auch nicht zwischen zwei Navigationen), damit die Watch eine Änderung immer
@@ -594,6 +601,7 @@ struct ContentView: View {
         currentDirectRouteStepIndex = 0
         currentCuratedStepIndex = 0
         lastWatchHapticStepIndex = nil
+        lastVoiceNowAnnouncementStepIndex = nil
         updateWatchNavigationState()
         sendActiveRouteToWatch()
         if let location = locationManager.currentLocation {
@@ -620,6 +628,7 @@ struct ContentView: View {
         locationManager.stopUpdating()
         locationManager.setBackgroundUpdatesEnabled(false)
         UIApplication.shared.isIdleTimerDisabled = false
+        voiceAnnouncer.stop()
         isNavigating = false
         lastRerouteAt = nil
         WatchSessionManager.shared.send(.idle)
@@ -764,12 +773,14 @@ struct ContentView: View {
         if isNavigating {
             if let location = locationManager.currentLocation {
                 accumulateTourDistance(location)
-                // Haptik-Prüfung bewusst VOR `advanceDirectRouteStepIfNeeded`: die Schritt-
-                // Weiterschaltung passiert schon ab 30 m vor der Abbiegung - liefe die Haptik-
-                // Prüfung danach, könnte ein Schritt bei schneller Fahrt/seltenen GPS-Updates
-                // bereits weitergeschaltet sein, bevor die Haptik für ihn je ausgelöst wurde
+                // Ansage-Prüfung (Haptik + frühe Sprachausgabe) bewusst VOR
+                // `advanceDirectRouteStepIfNeeded`: die Schritt-Weiterschaltung (und mit ihr die
+                // späte "Jetzt"-Ansage) passiert schon ab `stepAdvanceLeadDistanceMeters` vor der
+                // Abbiegung - liefe die Prüfung danach, könnte ein Schritt bei schneller Fahrt/
+                // seltenen GPS-Updates bereits weitergeschaltet sein, bevor sie für ihn je
+                // ausgelöst wurde
                 // (Nutzer-Beobachtung 2026-07-28: Vibration blieb komplett aus).
-                checkWatchHapticTrigger(location)
+                checkTurnAnnouncementTrigger(location)
                 advanceDirectRouteStepIfNeeded(location)
                 checkDirectRouteDeviation(location)
                 updateDisplayedUserLocation(location)
@@ -992,8 +1003,8 @@ struct ContentView: View {
     }
 
     /// Rückt bei der direkten Fahrrad-Route (MKDirections) zum nächsten Navigationsschritt vor,
-    /// sobald der Nutzer nah genug (< 30 m) am Ende des aktuellen Schritts ist. Offizielle
-    /// Radrouten haben keine Schritt-Daten und werden hier nicht behandelt.
+    /// sobald der Nutzer nah genug (< `stepAdvanceLeadDistanceMeters`) am Ende des aktuellen
+    /// Schritts ist. Offizielle Radrouten haben keine Schritt-Daten und werden hier nicht behandelt.
     ///
     /// Reicht dieser einfache Radius-Check nicht (Nutzer-Meldung: nach einem Tunnel ohne
     /// GPS-Empfang blieb die vor dem Tunnel angekündigte Abbiegung stehen, obwohl die Straße
@@ -1002,7 +1013,8 @@ struct ContentView: View {
     /// deutlich weiter vorn auf der Strecke wieder ein (mehrere Schritt-Enden übersprungen, nicht
     /// nur eins), erkennt `nearestSegmentIndex` das am Vergleich der Segment-Indizes und
     /// überspringt alle bereits passierten Schritte auf einmal, statt für immer auf dem
-    /// 30-m-Radius um den ersten (längst passierten) Schritt hängen zu bleiben.
+    /// `stepAdvanceLeadDistanceMeters`-Radius um den ersten (längst passierten) Schritt hängen zu
+    /// bleiben.
     /// Vereinheitlicht den Zugriff auf "die aktuell navigierte Route mit Turn-by-Turn-Schritten" -
     /// entweder die "Direkte Fahrrad-Route" (`directRoutes`) oder ein per Map-Matching
     /// (`CuratedRouteStepMatcher`) mit Straßennamen angereicherter kuratierter Einzeltreffer
@@ -1031,6 +1043,12 @@ struct ContentView: View {
         }
     }
 
+    /// Ab welcher Entfernung zum Ende des aktuellen Schritts auf den nächsten umgeschaltet wird
+    /// (Kopfzeilen-Text, Pfeil-Icon, Watch-Anzeige, s. `setActiveStepIndex`) - ursprünglich 30 m,
+    /// nach Live-Test-Feedback ("fühlt sich beim Fahren zu früh an") auf 10 m gesenkt. Auch der
+    /// Auslösepunkt für die "Jetzt"-Sprachansage, s. `advanceDirectRouteStepIfNeeded`.
+    private static let stepAdvanceLeadDistanceMeters: Double = 10
+
     private func advanceDirectRouteStepIfNeeded(_ location: CLLocation) {
         guard let (route, currentIndex) = activeStepRoute else { return }
         let steps = route.steps
@@ -1038,7 +1056,12 @@ struct ContentView: View {
 
         let stepEnd = steps[currentIndex].endCoordinate
         let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
-        if location.distance(from: stepEndLocation) < 30 {
+        if location.distance(from: stepEndLocation) < Self.stepAdvanceLeadDistanceMeters {
+            if isVoiceGuidanceEnabled, isTurnInstruction(steps[currentIndex]),
+               lastVoiceNowAnnouncementStepIndex != currentIndex {
+                lastVoiceNowAnnouncementStepIndex = currentIndex
+                voiceAnnouncer.speak("Jetzt \(Self.lowercasingFirstLetter(steps[currentIndex].instructions))")
+            }
             setActiveStepIndex(currentIndex + 1)
             return
         }
@@ -1153,6 +1176,14 @@ struct ContentView: View {
         return Self.turnKeywords.contains { lowered.contains($0) }
     }
 
+    /// Für Sprachansagen, die den fertigen (großgeschrieben stehenden) `instructions`-Text mitten
+    /// im Satz einbetten ("In 100 Metern \(...)", "Jetzt \(...)") - ohne das läse sich das
+    /// grammatisch falsch vorgelesen vor ("In 100 Metern Rechts abbiegen...").
+    private static func lowercasingFirstLetter(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        return first.lowercased() + text.dropFirst()
+    }
+
     /// Richtung fürs Pfeil-Icon auf der Watch (analog `navigationInstructionIcon` fürs iPhone) -
     /// bei Online-Routen (strukturiert immer `.straight`, s. `isTurnInstruction`) wird ersatzweise
     /// im Text nach "links"/"rechts" gesucht, damit der Pfeil nicht bei jeder Abbiegung fälschlich
@@ -1174,22 +1205,23 @@ struct ContentView: View {
     /// Sekunden Vorlauf).
     private static let watchHapticLeadDistanceMeters: Double = 100
 
-    /// Löst ein kurzes Haptik-Signal auf der Apple Watch aus, kurz bevor eine Abbiegung der
-    /// "Direkten Fahrrad-Route" ansteht (< `watchHapticLeadDistanceMeters`, deutlich großzügiger
-    /// als der 30-m-Radius von `advanceDirectRouteStepIfNeeded`, damit die Vibration spürbar vor
-    /// der eigentlichen Abbiegung ankommt). Nur bei echten Abbiegungen (`isTurnInstruction`) - bei
-    /// reinem Geradeausfahren (bzw. kuratierten Radrouten ohne Schritt-Daten) gibt es nichts
-    /// anzukündigen. `lastWatchHapticStepIndex` verhindert wiederholtes Auslösen für denselben
-    /// Schritt.
-    private func checkWatchHapticTrigger(_ location: CLLocation) {
+    /// Löst ein kurzes Haptik-Signal auf der Apple Watch und (falls aktiviert, s.
+    /// `isVoiceGuidanceEnabled`) die frühe "In X Metern ..."-Sprachansage aus, kurz bevor eine
+    /// Abbiegung der "Direkten Fahrrad-Route" ansteht (< `watchHapticLeadDistanceMeters`, deutlich
+    /// großzügiger als `stepAdvanceLeadDistanceMeters` in `advanceDirectRouteStepIfNeeded`, das dort
+    /// zusätzlich die späte "Jetzt ..."-Ansage auslöst). Nur bei echten Abbiegungen
+    /// (`isTurnInstruction`) - bei reinem Geradeausfahren (bzw. kuratierten Radrouten ohne
+    /// Schritt-Daten) gibt es nichts anzukündigen. `lastWatchHapticStepIndex` verhindert
+    /// wiederholtes Auslösen für denselben Schritt.
+    private func checkTurnAnnouncementTrigger(_ location: CLLocation) {
         guard let (route, currentIndex) = activeStepRoute else { return }
         guard let previewedStep else {
-            WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: kein previewedStep (currentIndex=\(currentIndex), steps.count=\(route.steps.count))")
+            WatchSessionManager.appendDebugLog("checkTurnAnnouncementTrigger: kein previewedStep (currentIndex=\(currentIndex), steps.count=\(route.steps.count))")
             return
         }
         let turn = isTurnInstruction(previewedStep)
         guard turn else {
-            WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: keine Abbiegung ('\(previewedStep.instructions)', direction=\(previewedStep.direction))")
+            WatchSessionManager.appendDebugLog("checkTurnAnnouncementTrigger: keine Abbiegung ('\(previewedStep.instructions)', direction=\(previewedStep.direction))")
             return
         }
         guard lastWatchHapticStepIndex != currentIndex else {
@@ -1201,12 +1233,16 @@ struct ContentView: View {
         let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
         let distance = location.distance(from: stepEndLocation)
         guard distance < Self.watchHapticLeadDistanceMeters else {
-            WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: noch zu weit (\(Int(distance)) m, Schwelle \(Int(Self.watchHapticLeadDistanceMeters)) m) für '\(previewedStep.instructions)'")
+            WatchSessionManager.appendDebugLog("checkTurnAnnouncementTrigger: noch zu weit (\(Int(distance)) m, Schwelle \(Int(Self.watchHapticLeadDistanceMeters)) m) für '\(previewedStep.instructions)'")
             return
         }
-        WatchSessionManager.appendDebugLog("checkWatchHapticTrigger: AUSLÖSEN bei \(Int(distance)) m für '\(previewedStep.instructions)'")
+        WatchSessionManager.appendDebugLog("checkTurnAnnouncementTrigger: AUSLÖSEN bei \(Int(distance)) m für '\(previewedStep.instructions)'")
         lastWatchHapticStepIndex = currentIndex
         watchHapticTriggerCounter += 1
+        if isVoiceGuidanceEnabled {
+            let leadMeters = Int(Self.watchHapticLeadDistanceMeters)
+            voiceAnnouncer.speak("In \(leadMeters) Metern \(Self.lowercasingFirstLetter(previewedStep.instructions))")
+        }
     }
 
     private func checkDirectRouteDeviation(_ location: CLLocation) {
@@ -1250,6 +1286,7 @@ struct ContentView: View {
             selectedDirectRouteIndex = 0
             currentDirectRouteStepIndex = 0
             lastWatchHapticStepIndex = nil
+            lastVoiceNowAnnouncementStepIndex = nil
             sendActiveRouteToWatch()
         }
     }
