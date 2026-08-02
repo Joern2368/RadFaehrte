@@ -49,6 +49,23 @@ final class WatchSessionManager: NSObject, WCSessionDelegate, ObservableObject {
         if shouldPlay {
             playTurnHaptic(direction: newState.direction)
         }
+        // Trainings-Session koppelt sich an den Navigationsstatus, nicht an `playHapticIfChanged`.
+        // Start bewusst nur, wenn die Watch-App gerade aktiv geöffnet ist (Nutzerwunsch 2026-08-02:
+        // die Uhr soll nicht bei jeder iPhone-Navigation automatisch im Hintergrund mitlaufen -
+        // hoher Akkuverbrauch -, sondern nur, wenn der Nutzer die App selbst dafür öffnet; das
+        // eigentliche Öffnen während einer bereits laufenden Navigation wird separat in
+        // `RadFaehrteWatchApp` per `scenePhase`-Wechsel behandelt). Stop dagegen unabhängig vom
+        // Vordergrund-Status, damit eine einmal gestartete Session beim Navigationsende zuverlässig
+        // auch im Hintergrund endet (identisch zum bisherigen Verhalten).
+        if newState.isNavigating != state.isNavigating {
+            if newState.isNavigating {
+                if WKApplication.shared().applicationState == .active {
+                    WorkoutSessionManager.shared.start()
+                }
+            } else {
+                WorkoutSessionManager.shared.stop()
+            }
+        }
         lastHapticTrigger = newState.hapticTrigger
         state = newState
     }

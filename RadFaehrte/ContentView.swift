@@ -234,6 +234,11 @@ struct ContentView: View {
     @AppStorage(AppSettingsKey.navigationStatSlots) private var navigationStatSlotsRaw = AppSettingsDefaults.navigationStatSlots
     /// Aufgezeichnete Positionen der laufenden Fahrt, fürs Verlauf-Tab (siehe `DrivenTour`).
     @State private var tourTrackPoints: [CLLocationCoordinate2D] = []
+    /// Ungeglättete, zeitgestempelte Positionen der laufenden Fahrt - anders als `tourTrackPoints`
+    /// (auf die aktive Route eingerastet, per Mindestabstand ausgedünnt, ohne Zeitstempel) für die
+    /// `HKWorkoutRoute` in Health gedacht, die echte GPS-Punkte mit Zeitstempeln erwartet (s.
+    /// `WorkoutRecorder.saveRide`).
+    @State private var tourRouteLocations: [CLLocation] = []
     @State private var tourSummary: TourSummary?
     @State private var currentDirectRouteStepIndex = 0
     /// Zuletzt für ein Haptik-Signal an die Apple Watch genutzter Schritt-Index (s.
@@ -572,6 +577,7 @@ struct ContentView: View {
         lastMovingUpdateTimestamp = nil
         lastTourLocation = locationManager.currentLocation
         tourTrackPoints = locationManager.currentLocation.map { [$0.coordinate] } ?? []
+        tourRouteLocations = locationManager.currentLocation.map { [$0] } ?? []
         lastSnapSegment = nil
         lastUserMarkerSnapSegment = nil
         isUserLocationSnapped = false
@@ -609,7 +615,8 @@ struct ContentView: View {
         lastRerouteAt = nil
         WatchSessionManager.shared.send(.idle)
         if let tourStartTime {
-            let duration = Date().timeIntervalSince(tourStartTime)
+            let tourEndTime = Date()
+            let duration = tourEndTime.timeIntervalSince(tourStartTime)
             let distanceKm = tourDistanceMeters / 1000
             let averageSpeedKmh = duration > 0 ? distanceKm / (duration / 3600) : 0
             // Wird erst beim expliziten Tippen auf "Im Verlauf speichern" im Sheet tatsächlich
@@ -623,6 +630,15 @@ struct ContentView: View {
                     coordinates: Self.decimated(tourTrackPoints)
                 )
                 : nil
+            if drivenTour != nil {
+                // Anders als beim Verlauf-Eintrag (s. o.) bewusst *immer* gespeichert, unabhängig
+                // von der Verlauf-Entscheidung im Sheet - Nutzerwunsch (2026-08-02): jede Fahrt soll
+                // in Health landen, auch wenn sie im Verlauf-Tab nicht behalten wird.
+                WorkoutRecorder.shared.saveRide(
+                    start: tourStartTime, end: tourEndTime, distanceMeters: tourDistanceMeters,
+                    locations: tourRouteLocations
+                )
+            }
             tourSummary = TourSummary(
                 distanceKm: distanceKm,
                 duration: duration,
@@ -633,6 +649,7 @@ struct ContentView: View {
         self.tourStartTime = nil
         lastTourLocation = nil
         tourTrackPoints = []
+        tourRouteLocations = []
         lastSnapSegment = nil
         lastUserMarkerSnapSegment = nil
         isUserLocationSnapped = false
@@ -951,6 +968,7 @@ struct ContentView: View {
             }
         }
         lastTourLocation = location
+        tourRouteLocations.append(location)
 
         let snap = snapToActiveRoute(location.coordinate, preferredSegment: lastSnapSegment)
         lastSnapSegment = snap.segment

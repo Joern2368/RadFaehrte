@@ -82,6 +82,16 @@ struct RootTabView: View {
         .task {
             preloadDownloadedWayGraphs()
         }
+        .task {
+            // Bewusst hier statt in `RadFaehrteApp.init()`: Zu diesem frühen Zeitpunkt gibt es noch
+            // kein sichtbares Fenster, aus dem HealthKit den System-Berechtigungsdialog präsentieren
+            // könnte - `requestAuthorization` schlägt dort still fehl, ohne dass der Nutzer je
+            // gefragt wird (live beobachtet: Watch-Seite, die den Aufruf ebenfalls in `init()`
+            // macht, fragte zuverlässig, das iPhone hier zunächst nicht). Sobald `RootTabView`
+            // tatsächlich auf dem Bildschirm ist, existiert ein Fenster, von dem aus die Anfrage
+            // zuverlässig präsentiert werden kann.
+            WorkoutRecorder.shared.requestAuthorizationIfNeeded()
+        }
         .onOpenURL(perform: importSharedGPX)
     }
 

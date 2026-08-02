@@ -45,7 +45,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "applewatch",
             title: "Apple Watch",
-            text: "Ist eine Apple Watch mit installierter RadFährte-Watch-App gekoppelt, zeigt sie während der Navigation automatisch die aktuelle Anweisung samt Entfernung am Handgelenk an - bei der \"Direkten Fahrrad-Route\" kurz vor einer Abbiegung zusätzlich mit spürbarer, für Links-/Rechtsabbiegungen unterschiedlicher Vibration. Bei kuratierten Radrouten ohne Schritt-für-Schritt-Anweisungen zeigt die Watch stattdessen den Routennamen. Darunter zeigt eine kleine, eng um die aktuelle Position gezoomte Karte den nahen Streckenverlauf, damit du die Route auch am Handgelenk visuell verfolgen kannst."
+            text: "Ist eine Apple Watch mit installierter RadFährte-Watch-App gekoppelt, zeigt sie während der Navigation automatisch die aktuelle Anweisung samt Entfernung am Handgelenk an - bei der \"Direkten Fahrrad-Route\" kurz vor einer Abbiegung zusätzlich mit spürbarer, für Links-/Rechtsabbiegungen unterschiedlicher Vibration. Bei kuratierten Radrouten ohne Schritt-für-Schritt-Anweisungen zeigt die Watch stattdessen den Routennamen. Darunter zeigt eine kleine, eng um die aktuelle Position gezoomte Karte den nahen Streckenverlauf, damit du die Route auch am Handgelenk visuell verfolgen kannst. Öffnest du die Watch-App während einer laufenden Navigation zusätzlich selbst auf der Uhr, startet dort automatisch ein Radfahr-Training (dafür fragt sie beim ersten Mal um Health-Zugriff) - das hält die Watch-App zuverlässig aktiv, statt dass sie im Hintergrund pausiert. Ohne geöffnete Watch-App bleibt die Uhr bewusst inaktiv, um Akku zu sparen. Endet die Navigation, endet auch das Training automatisch."
         ),
         Topic(
             icon: "location.fill.viewfinder",
@@ -60,7 +60,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "clock.arrow.circlepath",
             title: "Verlauf",
-            text: "Nach jeder beendeten Fahrt zeigt ein Abschluss-Fenster Strecke, Dauer und Durchschnittstempo - dort entscheidest du, ob die Tour im Verlauf-Tab gespeichert oder verworfen wird. In der Detailansicht einer gespeicherten Fahrt lässt sich die aufgezeichnete Strecke über das Teilen-Symbol ebenfalls als .gpx-Datei exportieren."
+            text: "Nach jeder beendeten Fahrt zeigt ein Abschluss-Fenster Strecke, Dauer und Durchschnittstempo - dort entscheidest du, ob die Tour im Verlauf-Tab gespeichert oder verworfen wird. In der Detailansicht einer gespeicherten Fahrt lässt sich die aufgezeichnete Strecke über das Teilen-Symbol ebenfalls als .gpx-Datei exportieren. Unabhängig von dieser Verlauf-Entscheidung landet jede ausreichend lange Fahrt automatisch als Radfahr-Training in Apple Health (einmalige Berechtigungsanfrage beim ersten Mal) und zählt zu deinen Aktivitätsringen - auch ganz ohne Apple Watch."
         ),
         Topic(
             icon: "arrow.down.circle",
