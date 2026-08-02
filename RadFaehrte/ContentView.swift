@@ -16,10 +16,19 @@ import MapKit
 /// Wege-Graph-Download hätte daran nichts geändert).
 private enum CuratedRouteStepsAvailability {
     case steps([BikeRoutingEngine.Result.Step])
-    /// `RouteMatcher.routeSegmentPath`/`pathCoordinates` fanden schon keinen durchgehenden Pfad in
-    /// der Routen-Geometrie selbst - derselbe Grund, aus dem die Ergebnisliste an dieser Stelle
-    /// "Kartendaten hier lückenhaft" zeigt (s. `ContentView.subtitle(for:)`). Ein heruntergeladener
-    /// Wege-Graph würde daran nichts ändern.
+    /// Echte Lücke in der Routen-Geometrie zwischen Start und Ziel (s.
+    /// `RouteMatcher.routeSegmentPathAllowingGap`), aber mindestens eine Seite bis dahin ließ sich
+    /// gegen einen heruntergeladenen Wege-Graphen matchen - analog zur bereits bestehenden
+    /// Teil-Anzeige bei kombinierten Ketten (`ContentView.matchCuratedRouteSteps(forLegs:)`), wo
+    /// einzelne Etappen ohne Geometrie übersprungen werden. `nil` auf einer Seite, wenn dort keine
+    /// Geometrie vorlag oder das Matching dort scheiterte - die Sheet-Darstellung zeigt dann nur
+    /// die andere Seite plus den Lücken-Hinweis.
+    case partialSteps(fromStart: [BikeRoutingEngine.Result.Step]?, toEnd: [BikeRoutingEngine.Result.Step]?, gapDistanceKm: Double)
+    /// `RouteMatcher.routeSegmentPathAllowingGap`/`pathCoordinates` fanden nicht einmal auf einer
+    /// Seite der Lücke einen Ansatzpunkt (z. B. Anker zu weit von der Routen-Geometrie entfernt) -
+    /// derselbe Grund, aus dem die Ergebnisliste an dieser Stelle "Kartendaten hier lückenhaft"
+    /// zeigt (s. `ContentView.subtitle(for:)`). Ein heruntergeladener Wege-Graph würde daran nichts
+    /// ändern.
     case noRouteGeometry
     /// Die Routen-Geometrie war durchgehend, aber kein heruntergeladener Wege-Graph deckte sie
     /// ausreichend ab (s. `CuratedRouteStepMatcher.minMatchedFraction`).
@@ -2654,6 +2663,31 @@ struct ContentView: View {
                     List(Array(steps.enumerated()), id: \.offset) { _, step in
                         Text(step.instructions)
                     }
+                } else if case let .partialSteps(fromStart, toEnd, gapDistanceKm) = curatedRouteStepsResult {
+                    List {
+                        if let fromStart {
+                            Section {
+                                ForEach(Array(fromStart.enumerated()), id: \.offset) { _, step in
+                                    Text(step.instructions)
+                                }
+                            }
+                        }
+                        Section {
+                            Label(
+                                "Kartenlücke - keine Straßendaten (ca. \(String(format: "%.1f", gapDistanceKm)) km)",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                        if let toEnd {
+                            Section {
+                                ForEach(Array(toEnd.enumerated()), id: \.offset) { _, step in
+                                    Text(step.instructions)
+                                }
+                            }
+                        }
+                    }
                 } else {
                     ContentUnavailableView(
                         "Keine Straßendaten verfügbar",
@@ -2707,18 +2741,42 @@ struct ContentView: View {
     private func loadCuratedRouteSteps(for match: RouteMatch) async {
         curatedRouteStepsResult = nil
         guard let start = startPlace?.coordinate, let end = zielPlace?.coordinate,
-              let path = RouteMatcher.routeSegmentPath(along: match.route.lines, from: start, to: end)
+              let pathResult = RouteMatcher.routeSegmentPathAllowingGap(along: match.route.lines, from: start, to: end)
         else {
             curatedRouteStepsResult = .noRouteGeometry
             return
         }
 
         isLoadingCuratedRouteSteps = true
-        let result = await Self.matchCuratedRouteSteps(along: path, candidatePaths: offlineGraphCandidatePaths())
+        let candidatePaths = offlineGraphCandidatePaths()
 
-        guard curatedRouteStepsDetail?.id == match.id else { return }
-        isLoadingCuratedRouteSteps = false
-        curatedRouteStepsResult = result.map { .steps($0.steps) } ?? .noWayGraphMatch
+        switch pathResult {
+        case let .connected(path):
+            let result = await Self.matchCuratedRouteSteps(along: path, candidatePaths: candidatePaths)
+            guard curatedRouteStepsDetail?.id == match.id else { return }
+            isLoadingCuratedRouteSteps = false
+            curatedRouteStepsResult = result.map { .steps($0.steps) } ?? .noWayGraphMatch
+
+        case let .gap(gap):
+            var fromStartResult: BikeRoutingEngine.Result?
+            if gap.fromStart.count >= 2 {
+                fromStartResult = await Self.matchCuratedRouteSteps(along: gap.fromStart, candidatePaths: candidatePaths)
+            }
+            var toEndResult: BikeRoutingEngine.Result?
+            if gap.toEnd.count >= 2 {
+                toEndResult = await Self.matchCuratedRouteSteps(along: gap.toEnd, candidatePaths: candidatePaths)
+            }
+
+            guard curatedRouteStepsDetail?.id == match.id else { return }
+            isLoadingCuratedRouteSteps = false
+            if fromStartResult == nil, toEndResult == nil {
+                curatedRouteStepsResult = .noWayGraphMatch
+            } else {
+                curatedRouteStepsResult = .partialSteps(
+                    fromStart: fromStartResult?.steps, toEnd: toEndResult?.steps, gapDistanceKm: gap.gapDistanceKm
+                )
+            }
+        }
     }
 
     /// Erklärt, warum keine Straßendaten verfügbar sind (s. `CuratedRouteStepsAvailability`) -

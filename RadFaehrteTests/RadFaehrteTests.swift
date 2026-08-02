@@ -286,6 +286,46 @@ struct RadFaehrteTests {
         #expect(withGap[0] == nil)
     }
 
+    @Test func routeSegmentPathAllowingGapReturnsBothPartialPathsAcrossARealGap() async throws {
+        // Zwei völlig unverbundene Liniensegmente (analog dem Lücken-Fall oben) simulieren eine
+        // echte Netzlücke wie bei "Kartendaten hier lückenhaft" in der Ergebnisliste - hier aber
+        // für die neue gap-aware Funktion hinter der Straßennamen-Teilanzeige für Einzeltreffer
+        // (s. ContentView.loadCuratedRouteSteps).
+        let firstSegment: [CLLocationCoordinate2D] = [
+            CLLocationCoordinate2D(latitude: 53.0, longitude: 8.80),
+            CLLocationCoordinate2D(latitude: 53.0, longitude: 8.81),
+            CLLocationCoordinate2D(latitude: 53.0, longitude: 8.82),
+        ]
+        let secondSegment: [CLLocationCoordinate2D] = [
+            CLLocationCoordinate2D(latitude: 53.0, longitude: 8.90),
+            CLLocationCoordinate2D(latitude: 53.0, longitude: 8.91),
+            CLLocationCoordinate2D(latitude: 53.0, longitude: 8.92),
+        ]
+        let from = CLLocationCoordinate2D(latitude: 53.0, longitude: 8.80)
+        let to = CLLocationCoordinate2D(latitude: 53.0, longitude: 8.92)
+
+        let result = try #require(RouteMatcher.routeSegmentPathAllowingGap(
+            along: [firstSegment, secondSegment], from: from, to: to
+        ))
+
+        guard case let .gap(gap) = result else {
+            Issue.record("Erwartete .gap, aber Pfad war fälschlich als durchgehend verbunden")
+            return
+        }
+
+        // fromStart muss bis zum der Lücke nächstgelegenen Punkt des ersten Segments reichen
+        // (dessen Ende, Richtung zweites Segment), toEnd entsprechend vom lückennächsten Punkt
+        // des zweiten Segments (dessen Anfang) bis zum eigentlichen Ziel.
+        #expect(abs((gap.fromStart.last?.longitude ?? 0) - 8.82) < 0.0001)
+        #expect(abs((gap.toEnd.first?.longitude ?? 0) - 8.90) < 0.0001)
+        #expect(abs((gap.toEnd.last?.longitude ?? 0) - 8.92) < 0.0001)
+
+        // Luftlinie zwischen den beiden lückennächsten Punkten (8.82 -> 8.90 bei 53°N).
+        let expectedGapKm = CLLocation(latitude: 53.0, longitude: 8.82)
+            .distance(from: CLLocation(latitude: 53.0, longitude: 8.90)) / 1000
+        #expect(abs(gap.gapDistanceKm - expectedGapKm) < 0.01)
+    }
+
     @Test func junctionSidecarConnectsWeserAllerLeineHeide() async throws {
         // Schützt vor stillem Veralten von route_junctions.sqlite (manuell zu regenerierendes
         // Derivat, s. Scripts/find_route_junctions.py) - pinnt das bereits real gefahrene, per

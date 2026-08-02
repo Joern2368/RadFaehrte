@@ -37,6 +37,25 @@ final class RouteMatcher {
         let alternateDistanceKm: Double?
     }
 
+    /// Ergebnis von `routeSegmentPathAllowingGap` bei einer echten Lücke im Streckennetz (beide
+    /// Anker liegen plausibel auf der Route, s. `maxPlausibleAnchorDistanceKm`, sind aber nicht
+    /// über die Geometrie verbunden) - statt komplett aufzugeben wie `routeSegmentPath`, liefert
+    /// das die beiden Teilstücke bis zum jeweils der Lücke nächstgelegenen, tatsächlich
+    /// erreichbaren Punkt, plus deren Luftlinien-Abstand als grobes Maß für die Lückengröße.
+    struct RouteSegmentGapResult {
+        let fromStart: [CLLocationCoordinate2D]
+        let toEnd: [CLLocationCoordinate2D]
+        let gapDistanceKm: Double
+    }
+
+    /// Ergebnis von `routeSegmentPathAllowingGap`: entweder ein durchgehender Pfad wie bei
+    /// `routeSegmentPath`, oder - bei einer echten Lücke - zwei Teilstücke (s.
+    /// `RouteSegmentGapResult`).
+    enum RouteSegmentPathResult {
+        case connected([CLLocationCoordinate2D])
+        case gap(RouteSegmentGapResult)
+    }
+
     /// Baut aus den (üblicherweise unsortierten, aus einzelnen OSM-Way-Fragmenten bestehenden)
     /// Liniensegmenten einer Route ein Netz für Dijkstra-Suchen auf. Punkte innerhalb von
     /// `toleranceMeters` werden per Nachbarschaftssuche (s. `node(for:)`) auf denselben Knoten
@@ -261,6 +280,84 @@ final class RouteMatcher {
 
         guard let shortest = dijkstra(from: startNode, to: endNode, adjacency: graph.adjacency) else { return nil }
         return shortest.path.map { graph.coordinate(forNode: $0) }
+    }
+
+    /// Wie `routeSegmentPath`, gibt aber bei einer echten Lücke (Anker beide plausibel auf der
+    /// Route, aber nicht verbunden - anders als zu weit entfernte Anker, s.
+    /// `maxPlausibleAnchorDistanceKm`) nicht auf, sondern liefert die beiden erreichbaren
+    /// Teilstücke bis zur Lücke (s. `RouteSegmentGapResult`). Für die "Straßennamen"-Vorschau eines
+    /// Einzeltreffers (`ContentView.loadCuratedRouteSteps`), analog zur bereits bestehenden
+    /// Teil-Anzeige bei kombinierten Ketten (`ContentView.matchCuratedRouteSteps(forLegs:)`), wo
+    /// einzelne Etappen ohne Geometrie schlicht übersprungen werden, statt die gesamte Kette
+    /// scheitern zu lassen. `nil` unter denselben Bedingungen wie `routeSegmentPath` (keine
+    /// Linien/Anker zu weit entfernt) oder wenn selbst innerhalb der jeweils eigenen Komponente
+    /// kein Pfad zum nächstgelegenen Punkt gefunden werden kann (sollte praktisch nicht auftreten,
+    /// da Start-/End-Knoten immer zu ihrer eigenen Komponente gehören).
+    nonisolated static func routeSegmentPathAllowingGap(
+        along lines: [[CLLocationCoordinate2D]], from: CLLocationCoordinate2D, to: CLLocationCoordinate2D
+    ) -> RouteSegmentPathResult? {
+        guard !lines.isEmpty else { return nil }
+
+        var graph = RouteGraph(lines: lines)
+
+        guard let startAnchor = nearestPoint(from: from, toLines: lines),
+              startAnchor.distanceKm <= maxPlausibleAnchorDistanceKm,
+              let endAnchor = nearestPoint(from: to, toLines: lines),
+              endAnchor.distanceKm <= maxPlausibleAnchorDistanceKm
+        else { return nil }
+
+        let startNode = graph.attach(startAnchor)
+        let endNode = graph.attach(endAnchor)
+
+        if let shortest = dijkstra(from: startNode, to: endNode, adjacency: graph.adjacency) {
+            return .connected(shortest.path.map { graph.coordinate(forNode: $0) })
+        }
+
+        // Echte Lücke: startNode/endNode liegen in unterschiedlichen Komponenten (sonst hätte
+        // Dijkstra oben einen Pfad gefunden). Je Seite den tatsächlich erreichbaren Knoten suchen,
+        // der geografisch am nächsten am jeweils anderen Ende liegt - das ist der sinnvollste
+        // Abbruchpunkt für eine Teilanzeige.
+        let fromStartDistances = dijkstraDistances(from: startNode, adjacency: graph.adjacency)
+        guard let startEdgeNode = Self.nearestReachableNode(to: to, distances: fromStartDistances, graph: graph),
+              let fromStartPath = dijkstra(from: startNode, to: startEdgeNode, adjacency: graph.adjacency)
+        else { return nil }
+
+        let fromEndDistances = dijkstraDistances(from: endNode, adjacency: graph.adjacency)
+        guard let endEdgeNode = Self.nearestReachableNode(to: from, distances: fromEndDistances, graph: graph),
+              let toEndPath = dijkstra(from: endNode, to: endEdgeNode, adjacency: graph.adjacency)
+        else { return nil }
+
+        let startEdgeCoordinate = graph.coordinate(forNode: startEdgeNode)
+        let endEdgeCoordinate = graph.coordinate(forNode: endEdgeNode)
+        let gapDistanceKm = CLLocation(latitude: startEdgeCoordinate.latitude, longitude: startEdgeCoordinate.longitude)
+            .distance(from: CLLocation(latitude: endEdgeCoordinate.latitude, longitude: endEdgeCoordinate.longitude)) / 1000
+
+        return .gap(RouteSegmentGapResult(
+            fromStart: fromStartPath.path.map { graph.coordinate(forNode: $0) },
+            toEnd: toEndPath.path.reversed().map { graph.coordinate(forNode: $0) },
+            gapDistanceKm: gapDistanceKm
+        ))
+    }
+
+    /// Unter allen von `distances` als erreichbar markierten Knoten (`< .greatestFiniteMagnitude`)
+    /// denjenigen mit dem geringsten Luftlinien-Abstand zu `target` - für
+    /// `routeSegmentPathAllowingGap`, um je Seite den sinnvollsten Punkt zum Abbrechen der
+    /// Teilanzeige zu finden (den, der der Lücke am nächsten liegt).
+    private nonisolated static func nearestReachableNode(
+        to target: CLLocationCoordinate2D, distances: [Double], graph: RouteGraph
+    ) -> Int? {
+        let targetLocation = CLLocation(latitude: target.latitude, longitude: target.longitude)
+        var bestNode: Int?
+        var bestDistanceMeters = Double.greatestFiniteMagnitude
+        for node in 0..<distances.count where distances[node] < .greatestFiniteMagnitude {
+            let coordinate = graph.coordinate(forNode: node)
+            let distanceMeters = targetLocation.distance(from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
+            if distanceMeters < bestDistanceMeters {
+                bestDistanceMeters = distanceMeters
+                bestNode = node
+            }
+        }
+        return bestNode
     }
 
     /// Distanzen (Meter) von einem Punkt zu mehreren Zielen entlang derselben Routen-Geometrie -
