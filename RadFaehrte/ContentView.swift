@@ -1200,7 +1200,7 @@ struct ContentView: View {
         guard let ziel = zielPlace?.coordinate else { return }
         isRerouting = true
         lastRerouteAt = Date()
-        let candidatePaths = offlineGraphCandidatePaths()
+        let candidatePaths = offlineGraphCandidatePaths(from: location, to: ziel)
         Task {
             defer { isRerouting = false }
             var newRoutes: [DirectRoute] = []
@@ -1227,17 +1227,48 @@ struct ContentView: View {
     }
 
     /// Pfade aller heruntergeladenen Wege-Graphen (Bundesländer + weitere Länder), in der
-    /// Reihenfolge, in der sie für die Offline-Engine versucht werden sollen (s. `loadDirectRoute`/
-    /// `rerouteDirectRoute`). `path(for:)` ist eine schnelle, synchrone Existenzprüfung, daher
-    /// unproblematisch außerhalb eines Tasks. Es wird bewusst nicht nur die erste gefundene Region
+    /// Reihenfolge, in der sie für die Offline-Engine versucht werden sollen. `path(for:)` ist eine
+    /// schnelle, synchrone Existenzprüfung, daher unproblematisch außerhalb eines Tasks. Für die
+    /// eigentliche Direkt-Routen-Berechnung (`loadDirectRoute`/`rerouteDirectRoute`) stattdessen
+    /// `offlineGraphCandidatePaths(from:to:)` verwenden (Bounding-Box-Vorfilter, s. dort) - diese
+    /// ungefilterte Variante bleibt für das Straßennamen-Matching entlang bereits bekannter, ggf.
+    /// mehrere Regionen überspannender kuratierter Routen in Gebrauch (`loadCuratedRouteSteps`,
+    /// `loadCuratedRouteForNavigation`, `loadCombinedRouteSteps`), wo ein Vorfilter allein nach
+    /// Start-/Zielkoordinate eine mittig durchquerte Region fälschlich ausschließen könnte.
+    private func offlineGraphCandidatePaths() -> [String] {
+        Bundesland.allCases.compactMap { wayGraphStore.path(for: $0) }
+            + EuropaLand.allCases.compactMap { europaWayGraphStore.path(for: $0) }
+    }
+
+    /// Wie `offlineGraphCandidatePaths()`, aber vorgefiltert auf Regionen, deren grobe Bounding-Box
+    /// (s. `RegionBoundingBox`) Start oder Ziel enthalten könnte - für `loadDirectRoute`/
+    /// `rerouteDirectRoute`, wo Start und Ziel (anders als bei einer mehrteiligen kuratierten Route)
+    /// die einzig relevanten Punkte sind. Es wird bewusst nicht nur die erste gefundene Region
     /// verwendet: Sind z. B. sowohl ein deutsches Bundesland als auch die Niederlande
     /// heruntergeladen, würde sonst ein Fahrtziel in der jeweils anderen Region niemals die
     /// Offline-Engine nutzen, obwohl eine passende Region vorhanden wäre - `offlineDirectRoutes`
     /// liefert für eine nicht abgedeckte Region ohnehin ein leeres Ergebnis, wird also einfach
     /// übersprungen.
-    private func offlineGraphCandidatePaths() -> [String] {
-        Bundesland.allCases.compactMap { wayGraphStore.path(for: $0) }
-            + EuropaLand.allCases.compactMap { europaWayGraphStore.path(for: $0) }
+    ///
+    /// Live-Beobachtung (2026-08-02): Bei acht heruntergeladenen Bundesländern lud
+    /// `loadDirectRoute`/`rerouteDirectRoute` vor diesem Filter bei **jeder** Berechnung
+    /// nacheinander alle acht Wege-Graphen (u. a. Baden-Württemberg mit 11,3 Mio. Knoten, s.
+    /// `largeRegionMaxVisitedNodes`), bis eine Region passte - beim ersten Zugriff je Region ein
+    /// spürbarer Festplatten-Lade-/Parse-Vorgang (`WayGraphCache` cached zwar ab dem zweiten
+    /// Zugriff, hält dabei aber alle einmal geladenen Graphen dauerhaft im Speicher, s. dort). Der
+    /// Bounding-Box-Vorfilter hier spart in aller Regel schon das erste Laden der offensichtlich
+    /// nicht zutreffenden Regionen.
+    private func offlineGraphCandidatePaths(
+        from start: CLLocationCoordinate2D, to ziel: CLLocationCoordinate2D
+    ) -> [String] {
+        let bundeslaender = Bundesland.allCases.filter {
+            $0.boundingBox.contains(start) || $0.boundingBox.contains(ziel)
+        }
+        let laender = EuropaLand.allCases.filter {
+            $0.boundingBox.contains(start) || $0.boundingBox.contains(ziel)
+        }
+        return bundeslaender.compactMap { wayGraphStore.path(for: $0) }
+            + laender.compactMap { europaWayGraphStore.path(for: $0) }
     }
 
     /// Ältester `timestamp`, den ein GPS-Fix für "Aktueller Standort" noch haben darf, um sofort
@@ -2040,7 +2071,7 @@ struct ContentView: View {
         // Bevorzugt die Offline-Engine, falls eine Region (Bundesland oder Land) heruntergeladen
         // ist, die Start und Ziel abdeckt (ruhige Wege statt nur die kürzeste Verbindung) - s.
         // `offlineGraphCandidatePaths`.
-        let candidatePaths = offlineGraphCandidatePaths()
+        let candidatePaths = offlineGraphCandidatePaths(from: start, to: ziel)
         Task {
             for path in candidatePaths {
                 let offlineRoutes = await Self.offlineDirectRoutes(path: path, from: start, to: ziel)

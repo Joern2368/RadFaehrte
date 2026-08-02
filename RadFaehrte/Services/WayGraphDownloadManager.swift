@@ -60,7 +60,7 @@ nonisolated extension EuropaLand {
     var approximateSizeMB: Int {
         switch self {
         case .netherlands: return 428
-        case .poland: return 1535
+        case .poland: return 1409
         case .sweden: return 1060
         }
     }

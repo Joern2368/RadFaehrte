@@ -729,4 +729,29 @@ struct RadFaehrteTests {
         #expect(handover == nil)
     }
 
+    /// Regressionstest für die Bounding-Box-Vorfilterung in `ContentView.offlineGraphCandidatePaths`
+    /// (Nutzer-Meldung 2026-08-02: Direkt-Routen-Berechnung wurde mit wachsender Zahl
+    /// heruntergeladener Bundesländer spürbar langsamer, weil vorher **alle** heruntergeladenen
+    /// Wege-Graphen der Reihe nach geladen wurden, bis einer passte). Prüft nur, dass jede Region
+    /// einen bekannten Punkt in sich selbst korrekt einschließt bzw. einen weit entfernten Punkt
+    /// korrekt ausschließt - keine Aussagen über Nachbarregionen, da sich die großzügigen Ränder
+    /// (`RegionBoundingBox.contains(marginDegrees:)`) an gemeinsamen Grenzen bewusst überlappen.
+    @Test func regionBoundingBoxesContainKnownPointsAndExcludeFarAwayOnes() {
+        let bremen = CLLocationCoordinate2D(latitude: 53.0793, longitude: 8.8017)
+        let muenchen = CLLocationCoordinate2D(latitude: 48.1351, longitude: 11.5820)
+        let amsterdam = CLLocationCoordinate2D(latitude: 52.3676, longitude: 4.9041)
+        let stockholm = CLLocationCoordinate2D(latitude: 59.3293, longitude: 18.0686)
+
+        #expect(Bundesland.bremen.boundingBox.contains(bremen))
+        #expect(Bundesland.bayern.boundingBox.contains(muenchen))
+        #expect(EuropaLand.netherlands.boundingBox.contains(amsterdam))
+        #expect(EuropaLand.sweden.boundingBox.contains(stockholm))
+
+        // Bremen liegt weit außerhalb Bayerns/Schwedens/der Niederlande - selbst mit großzügigem
+        // Rand nicht mehr plausibel als "könnte dieselbe Region sein".
+        #expect(!Bundesland.bayern.boundingBox.contains(bremen))
+        #expect(!EuropaLand.sweden.boundingBox.contains(bremen))
+        #expect(!EuropaLand.netherlands.boundingBox.contains(muenchen))
+    }
+
 }

@@ -3,7 +3,30 @@
 //  RadFaehrte
 //
 
+import CoreLocation
 import Foundation
+
+/// Grobe Rechteck-Näherung an die tatsächliche (unregelmäßige) Grenze einer Region - dient nur als
+/// billiger Vorfilter, *bevor* ein `WayGraphRepository` (bei großen Ländern hunderte MB, s.
+/// `WayGraphCache`) überhaupt von der Platte geladen wird, nicht als exakte Grenzprüfung. Deshalb
+/// bewusst mit großzügigem Rand statt möglichst eng: Ein fälschlich als "möglich" durchgelassener
+/// Kandidat kostet nur einen zusätzlichen (günstigen) `nearestNode`-Aufruf auf dem bereits geladenen
+/// Graphen, ein fälschlich ausgeschlossener Kandidat würde dagegen die Offline-Engine für eine
+/// eigentlich abgedeckte Region unbemerkt überspringen.
+nonisolated struct RegionBoundingBox {
+    let minLat: Double
+    let maxLat: Double
+    let minLon: Double
+    let maxLon: Double
+
+    /// `marginDegrees` deckt sowohl die Ungenauigkeit der Rechteck-Näherung an der eigentlich
+    /// unregelmäßigen Grenze ab als auch den Schnapp-Radius von `WayGraphRepository.nearestNode`
+    /// (Standard 2000 m ≈ 0,018°) - großzügig auf 0,15° (≈ 15-17 km) gerundet.
+    func contains(_ coordinate: CLLocationCoordinate2D, marginDegrees: Double = 0.15) -> Bool {
+        coordinate.latitude >= minLat - marginDegrees && coordinate.latitude <= maxLat + marginDegrees
+            && coordinate.longitude >= minLon - marginDegrees && coordinate.longitude <= maxLon + marginDegrees
+    }
+}
 
 /// Eine Region, für die ein Wege-Graph für die "ruhige Wege"-Offline-Routing-Engine heruntergeladen
 /// werden kann (siehe `Scripts/build_way_graph.py`). `rawValue` entspricht zugleich dem
@@ -17,6 +40,10 @@ nonisolated protocol DownloadableRegion: Hashable, CaseIterable, Identifiable wh
     var downloadURL: URL { get }
     /// Tatsächliche Dateigröße des generierten Wege-Graphen, für die Anzeige vor dem Download.
     var approximateSizeMB: Int { get }
+    /// Grobe Bounding-Box, mit der `ContentView.offlineGraphCandidatePaths` Regionen aussortiert,
+    /// die Start/Ziel offensichtlich nicht abdecken können, bevor deren (bei großen Ländern sehr
+    /// große) Wege-Graph überhaupt geladen wird - s. `RegionBoundingBox`.
+    var boundingBox: RegionBoundingBox { get }
 }
 
 /// Bei jeder inkompatiblen Änderung am `.sqlite`-Binärformat (siehe `Scripts/build_way_graph.py`)
@@ -74,6 +101,43 @@ nonisolated enum Bundesland: String, CaseIterable, Identifiable, DownloadableReg
         case .thueringen: return "Thüringen"
         }
     }
+
+    var boundingBox: RegionBoundingBox {
+        switch self {
+        case .badenWuerttemberg:
+            return RegionBoundingBox(minLat: 47.53, maxLat: 49.79, minLon: 7.51, maxLon: 10.50)
+        case .bayern:
+            return RegionBoundingBox(minLat: 47.27, maxLat: 50.56, minLon: 8.98, maxLon: 13.84)
+        case .berlin:
+            return RegionBoundingBox(minLat: 52.34, maxLat: 52.68, minLon: 13.09, maxLon: 13.76)
+        case .brandenburg:
+            return RegionBoundingBox(minLat: 51.36, maxLat: 53.56, minLon: 11.27, maxLon: 14.77)
+        case .bremen:
+            return RegionBoundingBox(minLat: 53.01, maxLat: 53.61, minLon: 8.48, maxLon: 8.99)
+        case .hamburg:
+            return RegionBoundingBox(minLat: 53.39, maxLat: 53.75, minLon: 8.48, maxLon: 10.33)
+        case .hessen:
+            return RegionBoundingBox(minLat: 49.39, maxLat: 51.66, minLon: 7.77, maxLon: 10.24)
+        case .mecklenburgVorpommern:
+            return RegionBoundingBox(minLat: 53.05, maxLat: 54.68, minLon: 10.59, maxLon: 14.41)
+        case .niedersachsen:
+            return RegionBoundingBox(minLat: 51.29, maxLat: 53.89, minLon: 6.65, maxLon: 11.60)
+        case .nordrheinWestfalen:
+            return RegionBoundingBox(minLat: 50.32, maxLat: 52.53, minLon: 5.87, maxLon: 9.46)
+        case .rheinlandPfalz:
+            return RegionBoundingBox(minLat: 48.97, maxLat: 50.94, minLon: 6.11, maxLon: 8.51)
+        case .saarland:
+            return RegionBoundingBox(minLat: 49.11, maxLat: 49.64, minLon: 6.36, maxLon: 7.41)
+        case .sachsen:
+            return RegionBoundingBox(minLat: 50.17, maxLat: 51.68, minLon: 11.87, maxLon: 15.04)
+        case .sachsenAnhalt:
+            return RegionBoundingBox(minLat: 50.94, maxLat: 53.04, minLon: 10.56, maxLon: 13.19)
+        case .schleswigHolstein:
+            return RegionBoundingBox(minLat: 53.36, maxLat: 55.06, minLon: 7.86, maxLon: 11.32)
+        case .thueringen:
+            return RegionBoundingBox(minLat: 50.20, maxLat: 51.65, minLon: 9.88, maxLon: 12.65)
+        }
+    }
 }
 
 /// Weitere europäische Länder außerhalb Deutschlands, für die ein Wege-Graph heruntergeladen werden
@@ -97,6 +161,17 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
         case .netherlands: return "Niederlande"
         case .poland: return "Polen"
         case .sweden: return "Schweden"
+        }
+    }
+
+    var boundingBox: RegionBoundingBox {
+        switch self {
+        case .netherlands:
+            return RegionBoundingBox(minLat: 50.75, maxLat: 53.55, minLon: 3.36, maxLon: 7.23)
+        case .poland:
+            return RegionBoundingBox(minLat: 49.00, maxLat: 54.84, minLon: 14.12, maxLon: 24.15)
+        case .sweden:
+            return RegionBoundingBox(minLat: 55.34, maxLat: 69.06, minLon: 11.11, maxLon: 24.17)
         }
     }
 }
