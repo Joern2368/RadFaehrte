@@ -97,6 +97,16 @@ struct SettingsView: View {
 
                 Section {
                     NavigationLink {
+                        FavoritePlacesView(store: FavoritePlaceStore())
+                    } label: {
+                        Label("Favoriten", systemImage: "star")
+                    }
+                } footer: {
+                    Text("Zuhause, Arbeit und weitere gespeicherte Orte fürs schnelle Auswählen als Start/Ziel. Gespeichert wird direkt in den Suchfeldern über das Stern-Symbol.")
+                }
+
+                Section {
+                    NavigationLink {
                         HowItWorksView()
                     } label: {
                         Label("Wie funktioniert's?", systemImage: "questionmark.circle")
