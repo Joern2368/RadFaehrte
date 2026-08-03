@@ -59,7 +59,9 @@ nonisolated extension EuropaLand {
 
     var approximateSizeMB: Int {
         switch self {
+        case .austria: return 929
         case .belgium: return 299
+        case .czechia: return 495
         case .denmark: return 286
         case .luxembourg: return 35
         case .netherlands: return 428
@@ -70,9 +72,46 @@ nonisolated extension EuropaLand {
     }
 }
 
+/// GitHub-Release-Adresse und tatsächliche Downloadgröße der Wege-Graphen für die 21
+/// französischen Regionen - eigener Release-Tag (`way-graphs-fr-v1`), analog
+/// `way-graphs-eu-v1`/`way-graphs-v4`. Größen nach dem Batch-Build (`Scripts/build_france_regions.sh`,
+/// s. ROADMAP.md) mit den tatsächlich gemessenen Werten befüllt.
+nonisolated extension FranceRegion {
+    var downloadURL: URL {
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/way-graphs-fr-v1/\(rawValue)_ways.sqlite")!
+    }
+
+    var approximateSizeMB: Int {
+        switch self {
+        case .alsace: return 95
+        case .aquitaine: return 257
+        case .auvergne: return 173
+        case .basseNormandie: return 104
+        case .bourgogne: return 160
+        case .bretagne: return 254
+        case .centre: return 176
+        case .champagneArdenne: return 93
+        case .corse: return 48
+        case .francheComte: return 117
+        case .hauteNormandie: return 65
+        case .ileDeFrance: return 136
+        case .languedocRoussillon: return 320
+        case .limousin: return 101
+        case .lorraine: return 145
+        case .midiPyrenees: return 357
+        case .nordPasDeCalais: return 140
+        case .paysDeLaLoire: return 220
+        case .picardie: return 88
+        case .poitouCharentes: return 161
+        case .provenceAlpesCoteDAzur: return 381
+        case .rhoneAlpes: return 532
+        }
+    }
+}
+
 /// Lädt Wege-Graphen für die "ruhige Wege"-Offline-Routing-Engine herunter (siehe
 /// `WayGraphStore`, `BikeRoutingEngine`) und meldet den Fortschritt für die Einstellungen-UI.
-/// Generisch über `Region` (`Bundesland` oder `EuropaLand`), analog `WayGraphStore`.
+/// Generisch über `Region` (`Bundesland`, `EuropaLand` oder `FranceRegion`), analog `WayGraphStore`.
 @Observable
 final class WayGraphDownloadManager<Region: DownloadableRegion> {
     private let store: WayGraphStore<Region>

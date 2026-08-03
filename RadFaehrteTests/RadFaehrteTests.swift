@@ -225,6 +225,40 @@ struct RadFaehrteTests {
         #expect(euroVelo1?.lines.isEmpty == false)
     }
 
+    @Test func routeRepositoryFindsEuroVeloRouteNearVienna() async throws {
+        // Regressionstest für die zusätzliche Österreich-Datenbank (austria.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-Tests oben.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 16.32, minLat: 48.15, maxLon: 16.42, maxLat: 48.25
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("EuroVelo 6") == true })
+
+        let euroVelo6 = routes.first { $0.name?.contains("EuroVelo 6") == true }
+        #expect(euroVelo6?.lines.isEmpty == false)
+    }
+
+    @Test func routeRepositoryFindsEuroVeloRouteNearPrague() async throws {
+        // Regressionstest für die zusätzliche Tschechien-Datenbank (czechia.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-/Österreich-Tests oben.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 14.37, minLat: 50.04, maxLon: 14.47, maxLat: 50.14
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("EuroVelo 7") == true })
+
+        let euroVelo7 = routes.first { $0.name?.contains("EuroVelo 7") == true }
+        #expect(euroVelo7?.lines.isEmpty == false)
+    }
+
     @Test func routeMatcherFindsWeserRadwegForBremenAchim() async throws {
         let matcher = RouteMatcher(repository: RouteRepository())
 

@@ -14,13 +14,16 @@ struct SettingsView: View {
     @AppStorage(AppSettingsKey.navigationDefaultHeadingUp) private var navigationDefaultHeadingUp = AppSettingsDefaults.navigationDefaultHeadingUp
     let wayGraphStore: WayGraphStore<Bundesland>
     let europaWayGraphStore: WayGraphStore<EuropaLand>
+    let franceWayGraphStore: WayGraphStore<FranceRegion>
 
     init(
         wayGraphStore: WayGraphStore<Bundesland> = WayGraphStore(),
-        europaWayGraphStore: WayGraphStore<EuropaLand> = WayGraphStore()
+        europaWayGraphStore: WayGraphStore<EuropaLand> = WayGraphStore(),
+        franceWayGraphStore: WayGraphStore<FranceRegion> = WayGraphStore()
     ) {
         self.wayGraphStore = wayGraphStore
         self.europaWayGraphStore = europaWayGraphStore
+        self.franceWayGraphStore = franceWayGraphStore
     }
 
     var body: some View {
@@ -78,8 +81,19 @@ struct SettingsView: View {
                         OfflineMapsView(
                             store: europaWayGraphStore,
                             title: "Offline-Karten Europa",
-                            footer: "Wie bei den Bundesländern: Für ein heruntergeladenes Land nutzt \"Direkte Fahrrad-Route\" dort eine eigene Offline-Engine statt online über Apple zu routen - funktioniert auch ganz ohne Internetverbindung."
-                        )
+                            footer: "Wie bei den Bundesländern: Für ein heruntergeladenes Land nutzt \"Direkte Fahrrad-Route\" dort eine eigene Offline-Engine statt online über Apple zu routen - funktioniert auch ganz ohne Internetverbindung. Frankreich ist für eine einzelne Datei zu groß und deshalb wie bei den Bundesländern nach Regionen aufgeteilt - der Eintrag führt zu deren eigener Liste.",
+                            trailingLabel: "Frankreich"
+                        ) {
+                            NavigationLink {
+                                OfflineMapsView(
+                                    store: franceWayGraphStore,
+                                    title: "Offline-Karten Frankreich",
+                                    footer: "Frankreich ist für den Wege-Graph-Bau zu groß für eine einzelne Datei - daher wie bei den Bundesländern nach Regionen aufgeteilt. Für heruntergeladene Regionen nutzt \"Direkte Fahrrad-Route\" dieselbe Offline-Engine wie bei Bundesländern/anderen Ländern."
+                                )
+                            } label: {
+                                Text("Frankreich")
+                            }
+                        }
                     } label: {
                         Label("Offline-Karten Europa", systemImage: "arrow.down.circle")
                     }

@@ -37,6 +37,9 @@ struct RootTabView: View {
     private let wayGraphStore = WayGraphStore<Bundesland>()
     /// Analog `wayGraphStore`, aber für Länder außerhalb Deutschlands (aktuell nur Niederlande).
     private let europaWayGraphStore = WayGraphStore<EuropaLand>()
+    /// Analog `wayGraphStore`, aber für die 21 französischen Regionen (Frankreich als Ganzes ist
+    /// für den Wege-Graph-Bau zu groß, s. `FranceRegion`-Doc-Kommentar).
+    private let franceWayGraphStore = WayGraphStore<FranceRegion>()
 
     var body: some View {
         ZStack {
@@ -47,6 +50,7 @@ struct RootTabView: View {
                         drivenTourStore: drivenTourStore,
                         wayGraphStore: wayGraphStore,
                         europaWayGraphStore: europaWayGraphStore,
+                        franceWayGraphStore: franceWayGraphStore,
                         onTourSaved: { drivenToursVersion += 1 }
                     )
                 }
@@ -64,7 +68,11 @@ struct RootTabView: View {
                     )
                 }
                 Tab("Einstellungen", systemImage: "gearshape", value: AppTab.settings) {
-                    SettingsView(wayGraphStore: wayGraphStore, europaWayGraphStore: europaWayGraphStore)
+                    SettingsView(
+                        wayGraphStore: wayGraphStore,
+                        europaWayGraphStore: europaWayGraphStore,
+                        franceWayGraphStore: franceWayGraphStore
+                    )
                 }
             }
 
@@ -105,6 +113,7 @@ struct RootTabView: View {
     private func preloadDownloadedWayGraphs() {
         let paths = Bundesland.allCases.compactMap { wayGraphStore.path(for: $0) }
             + EuropaLand.allCases.compactMap { europaWayGraphStore.path(for: $0) }
+            + FranceRegion.allCases.compactMap { franceWayGraphStore.path(for: $0) }
         guard !paths.isEmpty else { return }
         Task.detached(priority: .background) {
             for path in paths {

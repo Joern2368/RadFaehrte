@@ -142,16 +142,19 @@ nonisolated enum Bundesland: String, CaseIterable, Identifiable, DownloadableReg
 
 /// Weitere europäische Länder außerhalb Deutschlands, für die ein Wege-Graph heruntergeladen werden
 /// kann - bisher Niederlande (Anlass: Rotterdam-Reise 2026-07-27), Polen, Schweden, Dänemark,
-/// Belgien, Luxemburg und Schweiz (s. ROADMAP.md). Eigener Typ statt eines Falls in `Bundesland`,
-/// weil es Länder statt Bundesländer sind (andere Ebene) und die Einstellungen sie in einer
-/// eigenen Liste ("Offline-Karten Europa") getrennt von den deutschen Bundesländern anzeigen.
-/// Fallnamen bewusst auf Englisch (wie bei Geofabrik/den Release-Asset-Dateinamen, z. B.
-/// `netherlands_ways.sqlite`) statt Deutsch wie bei `Bundesland` - dort passt der deutsche
-/// Fallname zufällig zum Geofabrik-Bezeichner (download.geofabrik.de/europe/germany/<bundesland>),
-/// hier nicht (download.geofabrik.de/europe/<land-englisch>). `displayName` liefert trotzdem die
-/// deutsche UI-Bezeichnung.
+/// Belgien, Luxemburg, Schweiz, Österreich und Tschechien (s. ROADMAP.md). Eigener Typ statt
+/// eines Falls in `Bundesland`, weil es Länder statt Bundesländer sind (andere Ebene) und die
+/// Einstellungen sie in einer eigenen Liste ("Offline-Karten Europa") getrennt von den deutschen
+/// Bundesländern anzeigen. Fallnamen bewusst auf Englisch (wie bei Geofabrik/den
+/// Release-Asset-Dateinamen, z. B. `netherlands_ways.sqlite`) statt Deutsch wie bei `Bundesland` -
+/// dort passt der deutsche Fallname zufällig zum Geofabrik-Bezeichner
+/// (download.geofabrik.de/europe/germany/<bundesland>), hier nicht
+/// (download.geofabrik.de/europe/<land-englisch>). `displayName` liefert trotzdem die deutsche
+/// UI-Bezeichnung.
 nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableRegion {
+    case austria
     case belgium
+    case czechia
     case denmark
     case luxembourg
     case netherlands
@@ -163,7 +166,9 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
 
     var displayName: String {
         switch self {
+        case .austria: return "Österreich"
         case .belgium: return "Belgien"
+        case .czechia: return "Tschechien"
         case .denmark: return "Dänemark"
         case .luxembourg: return "Luxemburg"
         case .netherlands: return "Niederlande"
@@ -175,8 +180,12 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
 
     var boundingBox: RegionBoundingBox {
         switch self {
+        case .austria:
+            return RegionBoundingBox(minLat: 46.37, maxLat: 49.02, minLon: 9.53, maxLon: 17.16)
         case .belgium:
             return RegionBoundingBox(minLat: 49.49, maxLat: 51.60, minLon: 2.34, maxLon: 6.41)
+        case .czechia:
+            return RegionBoundingBox(minLat: 48.54, maxLat: 51.06, minLon: 12.08, maxLon: 18.86)
         case .denmark:
             return RegionBoundingBox(minLat: 54.44, maxLat: 58.06, minLon: 7.70, maxLon: 15.65)
         case .luxembourg:
@@ -189,6 +198,121 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
             return RegionBoundingBox(minLat: 55.34, maxLat: 69.06, minLon: 11.11, maxLon: 24.17)
         case .switzerland:
             return RegionBoundingBox(minLat: 45.82, maxLat: 47.81, minLon: 5.95, maxLon: 10.50)
+        }
+    }
+}
+
+/// Französische Regionen (Einteilung vor der 2016er-Gebietsreform, wie von Geofabrik verwendet:
+/// download.geofabrik.de/europe/france/<region>), für die ein Wege-Graph heruntergeladen werden
+/// kann - eigener Typ statt eines Falls in `EuropaLand` (analog zu `Bundesland` vs. `EuropaLand`),
+/// weil Frankreich als Ganzes für den Wege-Graph-Bau zu groß ist (4,7 GB PBF, zweimal am
+/// Speicherdruck des 16-GB-Baurechners gescheitert, s. ROADMAP.md "Frankreich als neuntes Land").
+/// Die 21 Regionen liegen zwischen 32 MB (Corse) und 500 MB (Rhône-Alpes) - dieselbe
+/// Größenordnung, die für Bundesländer/kleinere Länder bereits zuverlässig funktioniert.
+/// Kuratierte Routen (`france.sqlite`) sind davon unabhängig bereits vollständig für ganz
+/// Frankreich vorhanden (kein Speicherproblem bei der leichtgewichtigen Routen-Extraktion).
+nonisolated enum FranceRegion: String, CaseIterable, Identifiable, DownloadableRegion {
+    case alsace
+    case aquitaine
+    case auvergne
+    case basseNormandie = "basse-normandie"
+    case bourgogne
+    case bretagne
+    case centre
+    case champagneArdenne = "champagne-ardenne"
+    case corse
+    case francheComte = "franche-comte"
+    case hauteNormandie = "haute-normandie"
+    case ileDeFrance = "ile-de-france"
+    case languedocRoussillon = "languedoc-roussillon"
+    case limousin
+    case lorraine
+    case midiPyrenees = "midi-pyrenees"
+    case nordPasDeCalais = "nord-pas-de-calais"
+    case paysDeLaLoire = "pays-de-la-loire"
+    case picardie
+    case poitouCharentes = "poitou-charentes"
+    case provenceAlpesCoteDAzur = "provence-alpes-cote-d-azur"
+    case rhoneAlpes = "rhone-alpes"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .alsace: return "Elsass"
+        case .aquitaine: return "Aquitanien"
+        case .auvergne: return "Auvergne"
+        case .basseNormandie: return "Basse-Normandie"
+        case .bourgogne: return "Burgund"
+        case .bretagne: return "Bretagne"
+        case .centre: return "Centre-Val de Loire"
+        case .champagneArdenne: return "Champagne-Ardenne"
+        case .corse: return "Korsika"
+        case .francheComte: return "Franche-Comté"
+        case .hauteNormandie: return "Haute-Normandie"
+        case .ileDeFrance: return "Île-de-France"
+        case .languedocRoussillon: return "Languedoc-Roussillon"
+        case .limousin: return "Limousin"
+        case .lorraine: return "Lothringen"
+        case .midiPyrenees: return "Midi-Pyrénées"
+        case .nordPasDeCalais: return "Nord-Pas-de-Calais"
+        case .paysDeLaLoire: return "Pays de la Loire"
+        case .picardie: return "Picardie"
+        case .poitouCharentes: return "Poitou-Charentes"
+        case .provenceAlpesCoteDAzur: return "Provence-Alpes-Côte d'Azur"
+        case .rhoneAlpes: return "Rhône-Alpes"
+        }
+    }
+
+    /// Aus den PBF-Headern per Range-Request ermittelt (`osmium.io.Reader(...).header().box()`
+    /// auf die ersten 500 KB jeder Datei - der Header-Block liegt am Dateianfang, ein Download
+    /// der kompletten, teils hunderte MB großen Dateien war dafür nicht nötig).
+    var boundingBox: RegionBoundingBox {
+        switch self {
+        case .alsace:
+            return RegionBoundingBox(minLat: 47.38, maxLat: 49.21, minLon: 6.84, maxLon: 8.31)
+        case .aquitaine:
+            return RegionBoundingBox(minLat: 42.61, maxLat: 45.72, minLon: -1.84, maxLon: 1.45)
+        case .auvergne:
+            return RegionBoundingBox(minLat: 44.61, maxLat: 46.81, minLon: 2.06, maxLon: 4.49)
+        case .basseNormandie:
+            return RegionBoundingBox(minLat: 48.18, maxLat: 49.89, minLon: -2.09, maxLon: 0.98)
+        case .bourgogne:
+            return RegionBoundingBox(minLat: 46.15, maxLat: 48.40, minLon: 2.84, maxLon: 5.52)
+        case .bretagne:
+            return RegionBoundingBox(minLat: 47.08, maxLat: 49.41, minLon: -5.88, maxLon: -1.01)
+        case .centre:
+            return RegionBoundingBox(minLat: 46.35, maxLat: 48.94, minLon: 0.05, maxLon: 3.13)
+        case .champagneArdenne:
+            return RegionBoundingBox(minLat: 47.58, maxLat: 50.22, minLon: 3.38, maxLon: 5.89)
+        case .corse:
+            return RegionBoundingBox(minLat: 41.31, maxLat: 43.17, minLon: 8.32, maxLon: 9.75)
+        case .francheComte:
+            return RegionBoundingBox(minLat: 46.26, maxLat: 48.03, minLon: 5.25, maxLon: 7.14)
+        case .hauteNormandie:
+            return RegionBoundingBox(minLat: 48.67, maxLat: 50.09, minLon: 0.01, maxLon: 1.80)
+        case .ileDeFrance:
+            return RegionBoundingBox(minLat: 48.12, maxLat: 49.24, minLon: 1.45, maxLon: 3.56)
+        case .languedocRoussillon:
+            return RegionBoundingBox(minLat: 42.17, maxLat: 44.98, minLon: 1.69, maxLon: 4.85)
+        case .limousin:
+            return RegionBoundingBox(minLat: 44.92, maxLat: 46.46, minLon: 0.63, maxLon: 2.61)
+        case .lorraine:
+            return RegionBoundingBox(minLat: 47.81, maxLat: 49.62, minLon: 4.89, maxLon: 7.69)
+        case .midiPyrenees:
+            return RegionBoundingBox(minLat: 42.53, maxLat: 45.05, minLon: -0.33, maxLon: 3.45)
+        case .nordPasDeCalais:
+            return RegionBoundingBox(minLat: 49.97, maxLat: 51.28, minLon: 1.28, maxLon: 4.27)
+        case .paysDeLaLoire:
+            return RegionBoundingBox(minLat: 46.22, maxLat: 48.57, minLon: -2.67, maxLon: 0.92)
+        case .picardie:
+            return RegionBoundingBox(minLat: 48.84, maxLat: 50.37, minLon: 1.36, maxLon: 4.26)
+        case .poitouCharentes:
+            return RegionBoundingBox(minLat: 45.09, maxLat: 47.18, minLon: -1.90, maxLon: 1.21)
+        case .provenceAlpesCoteDAzur:
+            return RegionBoundingBox(minLat: 42.32, maxLat: 45.13, minLon: 4.14, maxLon: 7.89)
+        case .rhoneAlpes:
+            return RegionBoundingBox(minLat: 44.11, maxLat: 46.57, minLon: 3.69, maxLon: 7.28)
         }
     }
 }
