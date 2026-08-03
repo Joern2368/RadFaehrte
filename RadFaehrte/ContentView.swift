@@ -1178,12 +1178,16 @@ struct ContentView: View {
     /// nur an den Stellen aufgerufen, an denen sich die aktive Route tatsächlich ändern kann
     /// (Navigationsstart, Neuberechnung), nicht bei jedem Standort-Update wie
     /// `updateWatchNavigationState` (unnötiger Datenverkehr für eine Geometrie, die sich
-    /// zwischendurch nicht ändert - `WatchSessionManager.sendRoute` filtert zusätzlich selbst
-    /// unveränderte Aufrufe heraus). `maxPoints: 100` deutlich kleiner als der iPhone-Kartenwert
-    /// (500) - auf dem winzigen Watch-Display bringt mehr Detail ohnehin nichts.
+    /// zwischendurch nicht ändert). Über beide Kanäle gleichzeitig: `sendRoute` (zuverlässig, aber
+    /// ggf. verzögert über eine Zustellwarteschlange) und `sendRouteImmediateIfReachable` (sofort,
+    /// nur falls die Watch gerade erreichbar ist) - Zweiteres behebt, dass eine Neuberechnung
+    /// während der Fahrt trotz bestehender Verbindung teils erst deutlich verzögert auf der Watch
+    /// ankam (Live-Beobachtung Nutzer 2026-08-03). `maxPoints: 100` deutlich kleiner als der
+    /// iPhone-Kartenwert (500) - auf dem winzigen Watch-Display bringt mehr Detail ohnehin nichts.
     private func sendActiveRouteToWatch() {
         let lines = activeNavigationRouteLines.map { Self.decimated($0, maxPoints: 100) }
         WatchSessionManager.shared.sendRoute(lines)
+        WatchSessionManager.shared.sendRouteImmediateIfReachable(lines)
     }
 
     /// Schlüsselwörter, an denen eine Abbiegung im fertig formulierten `instructions`-Text einer

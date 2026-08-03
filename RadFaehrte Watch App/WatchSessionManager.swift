@@ -148,7 +148,15 @@ final class WatchSessionManager: NSObject, WCSessionDelegate, ObservableObject {
     /// "wenn es passt" ankommt). Bewusst dieselbe `apply`-Logik wie beim Kontext-Pfad, damit sich
     /// Anzeige/Haptik/Trainings-Stop nicht unterscheiden, je nachdem, über welchen Kanal ein
     /// Zustand ankam.
+    /// Bewusst zuerst auf die Routen-Geometrie geprüft (s. `WatchRouteTransferKey.lines`), da
+    /// `sendRouteImmediateIfReachable` auf der iOS-Seite denselben Kanal (`sendMessage`) wie die
+    /// regulären Status-Updates nutzt - ohne diese Unterscheidung würde `WatchNavState(dictionary:)`
+    /// eine Routen-Nachricht fälschlich als (leeren) Navigationsstatus interpretieren.
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        if let rawLines = message[WatchRouteTransferKey.lines] as? [[[Double]]] {
+            applyRouteLines(rawLines)
+            return
+        }
         let newState = WatchNavState(dictionary: message)
         DispatchQueue.main.async {
             self.apply(newState, playHapticIfChanged: true)
@@ -157,6 +165,10 @@ final class WatchSessionManager: NSObject, WCSessionDelegate, ObservableObject {
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
         guard let rawLines = userInfo[WatchRouteTransferKey.lines] as? [[[Double]]] else { return }
+        applyRouteLines(rawLines)
+    }
+
+    private func applyRouteLines(_ rawLines: [[[Double]]]) {
         let lines = rawLines.map { line in
             line.compactMap { point -> CLLocationCoordinate2D? in
                 guard point.count == 2 else { return nil }

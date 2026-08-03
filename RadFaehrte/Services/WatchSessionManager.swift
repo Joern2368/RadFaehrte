@@ -97,6 +97,21 @@ final class WatchSessionManager: NSObject, WCSessionDelegate {
         WCSession.default.transferUserInfo([WatchRouteTransferKey.lines: payload])
     }
 
+    /// Gegenstück zu `sendImmediateIfReachable` für die Routen-Geometrie - zusätzlicher, sofortiger
+    /// `sendMessage`-Versuch bei bestehender Verbindung, damit eine Neuberechnung während der Fahrt
+    /// nicht auf die Zustellwarteschlange von `sendRoute`/`transferUserInfo` angewiesen ist
+    /// (Live-Beobachtung Nutzer 2026-08-03: Watch zeigte nach einem Reroute trotz durchgehend
+    /// bestehender Verbindung noch die alte Strecke). `sendRoute` bleibt zusätzlich bestehen als
+    /// zuverlässiger, aber langsamerer Kanal (deckt z. B. ab, dass die Watch zum Zeitpunkt des
+    /// Reroutes kurz nicht erreichbar war).
+    func sendRouteImmediateIfReachable(_ lines: [[CLLocationCoordinate2D]]) {
+        guard WCSession.isSupported(), WCSession.default.activationState == .activated, WCSession.default.isReachable else { return }
+        let payload = lines.map { line in line.map { [$0.latitude, $0.longitude] } }
+        WCSession.default.sendMessage([WatchRouteTransferKey.lines: payload], replyHandler: nil) { error in
+            Self.appendDebugLog("sendRouteImmediateIfReachable: FAILED \(error)")
+        }
+    }
+
     /// TEMP-DEBUG (Apple-Watch-Anbindung, Live-Test 2026-07-30): Datei-Logging statt Konsole, da
     /// `print()` beim Piping über `devicectl --console` bekanntermaßen gepuffert wird (s.
     /// ROADMAP.md) - wieder entfernen, sobald der Haptik-Fix (`hapticTrigger`-Zähler statt
