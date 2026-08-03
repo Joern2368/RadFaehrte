@@ -15,13 +15,6 @@ struct LocationSearchField: View {
     /// die Adresssuche setzen) - aktiviert in `ContentView` den Karten-Auswahlmodus
     /// (`isPickingZielOnMap`), der eigentliche Tap wird dort per `handleMapTap` verarbeitet.
     var onPickOnMap: (() -> Void)? = nil
-    /// Gespeicherte Orte (Zuhause/Arbeit/eigene), die als eigene Zeilen über den Suchergebnissen
-    /// erscheinen - direkt antippbar, keine erneute Adressauflösung nötig (Koordinate liegt schon
-    /// vor). Leer, solange keine Favoriten gespeichert sind.
-    var favorites: [FavoritePlace] = []
-    /// Zeigt einen Stern-Button neben dem Lösch-Symbol, sobald ein Ort ausgewählt ist - `ContentView`
-    /// öffnet darüber den Dialog zum Speichern als Favorit für genau dieses Feld.
-    var onSaveFavorite: (() -> Void)? = nil
     var biasCoordinate: CLLocationCoordinate2D? = nil
     /// Meldet Fokus-Änderungen nach außen, damit `ContentView` z. B. die Ergebnisliste ausblenden
     /// kann, solange dieses Feld aktiv bearbeitet wird (mehr Platz für die Vorschlagsliste).
@@ -39,15 +32,6 @@ struct LocationSearchField: View {
                     .autocorrectionDisabled()
 
                 if selectedPlace != nil {
-                    if let onSaveFavorite {
-                        Button {
-                            onSaveFavorite()
-                        } label: {
-                            Image(systemName: "star")
-                                .foregroundStyle(.secondary)
-                        }
-                        .accessibilityIdentifier("saveFavorite-\(label)")
-                    }
                     Button {
                         clearSelection()
                     } label: {
@@ -58,7 +42,7 @@ struct LocationSearchField: View {
                 }
             }
 
-            if isFocused && (onUseCurrentLocation != nil || onPickOnMap != nil || !favorites.isEmpty || !viewModel.results.isEmpty) {
+            if isFocused && (onUseCurrentLocation != nil || onPickOnMap != nil || !viewModel.results.isEmpty) {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if let onPickOnMap {
@@ -103,31 +87,6 @@ struct LocationSearchField: View {
                             }
                             .disabled(isResolvingCurrentLocation)
                             .accessibilityIdentifier("useCurrentLocation-\(label)")
-                            Divider()
-                        }
-                        ForEach(favorites) { favorite in
-                            Button {
-                                select(favorite)
-                            } label: {
-                                HStack {
-                                    Image(systemName: favorite.icon)
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 20)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(favorite.displayName)
-                                            .font(.body.weight(.semibold))
-                                            .foregroundStyle(.primary)
-                                        if !favorite.title.isEmpty {
-                                            Text(favorite.title)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                                .padding(.vertical, 6)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .accessibilityIdentifier("favorite-\(label)-\(favorite.id)")
                             Divider()
                         }
                         ForEach(viewModel.results, id: \.self) { completion in
@@ -191,18 +150,6 @@ struct LocationSearchField: View {
                 // Auflösung fehlgeschlagen (z. B. kein Treffer) – Auswahl bleibt leer
             }
         }
-    }
-
-    /// Anders als `select(_ completion:)` keine asynchrone Adressauflösung nötig - die Koordinate
-    /// liegt beim Favoriten schon vor.
-    private func select(_ favorite: FavoritePlace) {
-        selectedPlace = SelectedPlace(
-            title: favorite.title,
-            subtitle: favorite.subtitle,
-            coordinate: favorite.clCoordinate
-        )
-        viewModel.queryFragment = favorite.title
-        isFocused = false
     }
 
     private func clearSelection() {
