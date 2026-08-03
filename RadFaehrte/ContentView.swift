@@ -49,6 +49,8 @@ struct ContentView: View {
     var wayGraphStore = WayGraphStore<Bundesland>()
     /// Analog `wayGraphStore`, aber für Länder außerhalb Deutschlands (aktuell nur Niederlande).
     var europaWayGraphStore = WayGraphStore<EuropaLand>()
+    /// Analog `wayGraphStore`, aber für die 21 französischen Regionen (s. `FranceRegion`).
+    var franceWayGraphStore = WayGraphStore<FranceRegion>()
     /// Von `RootTabView` übergeben, um nach dem Speichern einer Fahrt den Verlauf-Tab zum
     /// Neuladen zu bewegen (siehe `HistoryView.refreshTrigger`).
     var onTourSaved: () -> Void = {}
@@ -159,6 +161,7 @@ struct ContentView: View {
 
     @State private var locationManager = LocationManager()
     @State private var voiceAnnouncer = VoiceAnnouncer()
+    @State private var watchSessionManager = WatchSessionManager.shared
     @AppStorage(AppSettingsKey.isVoiceGuidanceEnabled) private var isVoiceGuidanceEnabled = AppSettingsDefaults.isVoiceGuidanceEnabled
     @State private var isNavigating = false
     @State private var showLocationDeniedAlert = false
@@ -527,6 +530,15 @@ struct ContentView: View {
         }
         .onChange(of: locationManager.locationUpdateCount) { handleLocationUpdate() }
         .onChange(of: locationManager.headingUpdateCount) { updateNavigationCamera() }
+        // Watch-App wird erst geöffnet, nachdem die Navigation am iPhone schon läuft: Status kommt
+        // dann zwar sofort korrekt an (s. `WatchSessionManager.send`-Dokumentation), die Routen-
+        // Geometrie aber ggf. erst deutlich verzögert (s. `reachabilityChangeCount`-Dokumentation) -
+        // bei Wechsel zu "erreichbar" beides erneut senden, damit die Watch-Karte sofort erscheint.
+        .onChange(of: watchSessionManager.reachabilityChangeCount) {
+            guard isNavigating else { return }
+            updateWatchNavigationState()
+            sendActiveRouteToWatch()
+        }
         .alert("Standortzugriff benötigt", isPresented: $showLocationDeniedAlert) {
             Button("Einstellungen öffnen") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -632,6 +644,7 @@ struct ContentView: View {
         isNavigating = false
         lastRerouteAt = nil
         WatchSessionManager.shared.send(.idle)
+        WatchSessionManager.shared.sendImmediateIfReachable(.idle)
         if let tourStartTime {
             let tourEndTime = Date()
             let duration = tourEndTime.timeIntervalSince(tourStartTime)
@@ -1303,6 +1316,7 @@ struct ContentView: View {
     private func offlineGraphCandidatePaths() -> [String] {
         Bundesland.allCases.compactMap { wayGraphStore.path(for: $0) }
             + EuropaLand.allCases.compactMap { europaWayGraphStore.path(for: $0) }
+            + FranceRegion.allCases.compactMap { franceWayGraphStore.path(for: $0) }
     }
 
     /// Wie `offlineGraphCandidatePaths()`, aber vorgefiltert auf Regionen, deren grobe Bounding-Box
@@ -1332,8 +1346,12 @@ struct ContentView: View {
         let laender = EuropaLand.allCases.filter {
             $0.boundingBox.contains(start) || $0.boundingBox.contains(ziel)
         }
+        let franceRegionen = FranceRegion.allCases.filter {
+            $0.boundingBox.contains(start) || $0.boundingBox.contains(ziel)
+        }
         return bundeslaender.compactMap { wayGraphStore.path(for: $0) }
             + laender.compactMap { europaWayGraphStore.path(for: $0) }
+            + franceRegionen.compactMap { franceWayGraphStore.path(for: $0) }
     }
 
     /// Ältester `timestamp`, den ein GPS-Fix für "Aktueller Standort" noch haben darf, um sofort
@@ -2215,6 +2233,7 @@ struct ContentView: View {
         let fileName = (path as NSString).lastPathComponent.replacingOccurrences(of: ".sqlite", with: "")
         if let bundesland = Bundesland(rawValue: fileName) { return bundesland.displayName }
         if let land = EuropaLand(rawValue: fileName) { return land.displayName }
+        if let region = FranceRegion(rawValue: fileName) { return region.displayName }
         return "der Nachbarregion"
     }
 

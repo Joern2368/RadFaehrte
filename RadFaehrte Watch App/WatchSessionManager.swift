@@ -143,6 +143,18 @@ final class WatchSessionManager: NSObject, WCSessionDelegate, ObservableObject {
         }
     }
 
+    /// Gegenstück zu `WatchSessionManager.sendImmediateIfReachable` auf der iOS-Seite - sofortige
+    /// Zustellung bei erreichbarer Gegenseite (anders als `didReceiveApplicationContext`, das nur
+    /// "wenn es passt" ankommt). Bewusst dieselbe `apply`-Logik wie beim Kontext-Pfad, damit sich
+    /// Anzeige/Haptik/Trainings-Stop nicht unterscheiden, je nachdem, über welchen Kanal ein
+    /// Zustand ankam.
+    func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        let newState = WatchNavState(dictionary: message)
+        DispatchQueue.main.async {
+            self.apply(newState, playHapticIfChanged: true)
+        }
+    }
+
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
         guard let rawLines = userInfo[WatchRouteTransferKey.lines] as? [[[Double]]] else { return }
         let lines = rawLines.map { line in

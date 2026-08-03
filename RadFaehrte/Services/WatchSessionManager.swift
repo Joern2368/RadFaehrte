@@ -21,8 +21,21 @@ import WatchConnectivity
 /// beim Radfahren mit geschlossener Watch-App normalerweise nicht gegeben ist -
 /// `WatchNavState.hapticTrigger` löst das jetzt, indem die Watch selbst eine Änderung dieses
 /// Zählers im ohnehin zuverlässig ankommenden Kontext erkennt, s. dort).
+@Observable
 final class WatchSessionManager: NSObject, WCSessionDelegate {
     static let shared = WatchSessionManager()
+
+    /// Hochzählender Zähler, der bei jedem Wechsel zu `isReachable == true` erhöht wird - Auslöser
+    /// dafür, dass `ContentView` bei laufender Navigation Status und Routen-Geometrie erneut sendet
+    /// (s. dort, `onChange(of: watchSessionManager.reachabilityChangeCount)`). Nötig, weil
+    /// `sendRoute`/`transferUserInfo` (anders als `send`/`updateApplicationContext`, s. dessen
+    /// Dokumentation) keinen "letzten Stand" kennt, den die Watch beim Start selbst abholen könnte -
+    /// wird die Watch-App erst **nach** Navigationsstart geöffnet, hängt die zu diesem Zeitpunkt
+    /// bereits gequeuete Routen-Übertragung unbestimmt lange in der Zustellwarteschlange
+    /// (Live-Beobachtung Nutzer 2026-08-03: Anweisungen erschienen sofort korrekt, Karte blieb leer,
+    /// bis die Watch-App zuerst geöffnet wurde). `isReachable` wechselt zuverlässig auf `true`, sobald
+    /// die Watch-App in den Vordergrund kommt - der richtige Moment für ein erneutes Senden.
+    private(set) var reachabilityChangeCount = 0
 
     private override init() {
         super.init()
@@ -50,6 +63,25 @@ final class WatchSessionManager: NSObject, WCSessionDelegate {
             Self.appendDebugLog("send: OK hapticTrigger=\(state.hapticTrigger) -> \(state.instructionText) / \(state.distanceText)")
         } catch {
             Self.appendDebugLog("send: FAILED \(error)")
+        }
+    }
+
+    /// Zusätzlich zum zuverlässigen, aber nicht zeitkritischen `send`/`updateApplicationContext`
+    /// (s. Dokumentation oben) ein sofortiger `sendMessage`-Versuch, falls die Watch gerade
+    /// erreichbar ist - rein additiv, `send` bleibt in jedem Fall die verlässliche Quelle (kommt so
+    /// oder so an, ggf. nur etwas verzögert). Bewusst nicht für jedes reguläre Status-Update
+    /// während der Fahrt (s. o., warum `sendMessage` dafür verworfen wurde), sondern nur für das
+    /// einmalige "Navigation beendet"-Ereignis: Live-Beobachtung Nutzer (2026-08-03) - nach Beenden
+    /// am iPhone zeigte die Watch (dort die ganze Fahrt über geöffnet, also erreichbar) noch
+    /// minutenlang die letzte Anweisung/Karte weiter, `updateApplicationContext` liefert laut
+    /// Apple-Doku nur "wenn es passt", nicht sofort. Ein bei erreichbarer Gegenseite sofort
+    /// zustellendes `sendMessage` behebt genau diesen sichtbar störenden Sonderfall, ohne die
+    /// bewusste Entscheidung gegen `sendMessage` als alleinigen Kanal (s. o., Fall "Watch-App im
+    /// Hintergrund während der Fahrt") zurückzunehmen.
+    func sendImmediateIfReachable(_ state: WatchNavState) {
+        guard WCSession.isSupported(), WCSession.default.activationState == .activated, WCSession.default.isReachable else { return }
+        WCSession.default.sendMessage(state.dictionaryRepresentation, replyHandler: nil) { error in
+            Self.appendDebugLog("sendImmediateIfReachable: FAILED \(error)")
         }
     }
 
@@ -86,6 +118,14 @@ final class WatchSessionManager: NSObject, WCSessionDelegate {
     }
 
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {}
+
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        guard session.isReachable else { return }
+        DispatchQueue.main.async {
+            self.reachabilityChangeCount += 1
+        }
+    }
+
     func sessionDidBecomeInactive(_ session: WCSession) {}
     func sessionDidDeactivate(_ session: WCSession) {
         WCSession.default.activate()
