@@ -1058,9 +1058,17 @@ struct ContentView: View {
 
     /// Ab welcher Entfernung zum Ende des aktuellen Schritts auf den nächsten umgeschaltet wird
     /// (Kopfzeilen-Text, Pfeil-Icon, Watch-Anzeige, s. `setActiveStepIndex`) - ursprünglich 30 m,
-    /// nach Live-Test-Feedback ("fühlt sich beim Fahren zu früh an") auf 10 m gesenkt. Auch der
-    /// Auslösepunkt für die "Jetzt"-Sprachansage, s. `advanceDirectRouteStepIfNeeded`.
+    /// nach Live-Test-Feedback ("fühlt sich beim Fahren zu früh an") auf 10 m gesenkt.
     private static let stepAdvanceLeadDistanceMeters: Double = 10
+
+    /// Eigener, früherer Auslösepunkt nur für die "Jetzt"-Sprachansage (s.
+    /// `advanceDirectRouteStepIfNeeded`) - bewusst **nicht** an `stepAdvanceLeadDistanceMeters`
+    /// gekoppelt: Live-Test-Feedback zeigte, dass die Ansage bei 10 m fast immer zu spät kam - der
+    /// gesprochene Satz ("Jetzt rechts abbiegen auf ...") braucht selbst schon rund 2,5-3 Sekunden,
+    /// bei z. B. 20 km/h bleiben bei 10 m aber nur noch ca. 1,8 Sekunden bis zur Abbiegung. 20 m
+    /// ist eine grobe Schätzung für genug Vorlauf bei typischem Renntempo, keine exakte
+    /// Berechnung - ggf. weiter live nachjustieren.
+    private static let voiceNowAnnouncementLeadDistanceMeters: Double = 20
 
     private func advanceDirectRouteStepIfNeeded(_ location: CLLocation) {
         guard let (route, currentIndex) = activeStepRoute else { return }
@@ -1069,12 +1077,16 @@ struct ContentView: View {
 
         let stepEnd = steps[currentIndex].endCoordinate
         let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
-        if location.distance(from: stepEndLocation) < Self.stepAdvanceLeadDistanceMeters {
-            if isVoiceGuidanceEnabled, isTurnInstruction(steps[currentIndex]),
-               lastVoiceNowAnnouncementStepIndex != currentIndex {
-                lastVoiceNowAnnouncementStepIndex = currentIndex
-                voiceAnnouncer.speak("Jetzt \(Self.lowercasingFirstLetter(steps[currentIndex].instructions))")
-            }
+        let distanceToStepEnd = location.distance(from: stepEndLocation)
+
+        if isVoiceGuidanceEnabled, isTurnInstruction(steps[currentIndex]),
+           lastVoiceNowAnnouncementStepIndex != currentIndex,
+           distanceToStepEnd < Self.voiceNowAnnouncementLeadDistanceMeters {
+            lastVoiceNowAnnouncementStepIndex = currentIndex
+            voiceAnnouncer.speak("Jetzt \(Self.lowercasingFirstLetter(steps[currentIndex].instructions))")
+        }
+
+        if distanceToStepEnd < Self.stepAdvanceLeadDistanceMeters {
             setActiveStepIndex(currentIndex + 1)
             return
         }
