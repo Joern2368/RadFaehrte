@@ -24,6 +24,13 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     private(set) var locationUpdateCount = 0
     private(set) var headingUpdateCount = 0
 
+    /// Letzter roher `CMDeviceMotion.heading`-Wert (unkorrigiert) - Grundlage für
+    /// `currentHeading`, s. `magnetometerBiasCorrection` unten.
+    private var rawDeviceHeading: CLLocationDirection?
+    /// Geglätteter Versatz des Magnetometer-Headings gegen den GPS-Kurs (`CLLocation.course`),
+    /// s. `magnetometerBiasCorrection` für die Herleitung.
+    private var magnetometerBiasEstimate: CLLocationDirection?
+
     override init() {
         authorizationStatus = manager.authorizationStatus
         super.init()
@@ -49,6 +56,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         // aktuellen Position, statt sofort dort zu sein - wirkte wie ein andauerndes "Wandern" der
         // Karte, das nie richtig ankommt.
         smoothedCameraCoordinate = nil
+        magnetometerBiasEstimate = nil
         manager.startUpdatingLocation()
         startDeviceMotionHeadingUpdates()
         Self.appendDebugLog("=== Session gestartet \(Date()) ===")
@@ -74,9 +82,67 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         motionManager.deviceMotionUpdateInterval = 1.0 / 20.0
         motionManager.startDeviceMotionUpdates(using: .xTrueNorthZVertical, to: .main) { [weak self] motion, error in
             guard let self, let motion, error == nil, motion.heading >= 0 else { return }
-            currentHeading = motion.heading
+            rawDeviceHeading = motion.heading
+            currentHeading = Self.correctedHeading(rawHeading: motion.heading, bias: magnetometerBiasEstimate)
             headingUpdateCount += 1
         }
+    }
+
+    /// Korrigiert einen dauerhaften Magnetometer-Versatz des `CMDeviceMotion.heading`-Werts gegen
+    /// den GPS-Kurs (`CLLocation.course`) - zweiter Versuch nach dem in der Roadmap dokumentierten
+    /// "Verworfenen Versuch" vom 2026-07-25. Der damalige Live-Test zeigte eine Verschlechterung
+    /// (Kartendrehung blieb bei einer falschen, ungefähr konstanten Nordost-Ausrichtung stehen),
+    /// wurde aber ohne Messdaten wieder zurückgebaut. Diesmal per `heading_debug.log` einer
+    /// tatsächlichen Fahrt (2026-08-03, Bremen Altstadt) ausgewertet, bevor erneut korrigiert wird:
+    /// Bei 15-19 km/h stimmte `course` über mehr als eine Minute durchgehend auf ±10° mit der aus
+    /// den GPS-Rohpositionen berechneten tatsächlichen Bewegungsrichtung überein, während
+    /// `currentHeading` einen stabilen Versatz von ca. 35-45° zeigte (vermutlich Magnetstörung
+    /// durch Halterung/Vorderrad - Nutzer-Beschreibung: Handy zeigte zum Vorderrad, also am Lenker/
+    /// Vorbau montiert). Eine Offline-Simulation dieser Korrektur gegen exakt diese Aufzeichnung
+    /// senkte den mittleren Heading-Fehler von 34° auf 8°. Absicherungen gegen die beim ersten
+    /// Versuch vermutete Ursache (an einer Kreuzung/Rampe war der GPS-Kurs vermutlich selbst durch
+    /// Mehrwegeausbreitung ungenau):
+    /// - Nur bei ausreichender Geschwindigkeit (`minSpeedForBiasKmh`) und einigermaßen
+    ///   vertrauenswürdigem `courseAccuracy` (`maxCourseAccuracyForBias`) wird der Versatz
+    ///   überhaupt neu geschätzt - bei Stillstand/langsamer Fahrt oder unzuverlässigem Kurs bleibt
+    ///   die zuletzt bekannte Schätzung unverändert liegen, statt auf einen einzelnen schlechten
+    ///   Wert zu springen.
+    /// - Starke Glättung (`biasSmoothingAlpha`) verhindert, dass ein einzelner Ausreißer die
+    ///   Schätzung sofort kippt - ein echter Versatz baut sich über mehrere Sekunden auf, ein
+    ///   einzelner falscher Kurswert verschiebt sie nur geringfügig.
+    /// Trotzdem noch nicht erneut live gegengetestet (**Offen**, s. ROADMAP.md) - falls die
+    /// Kartendrehung nach diesem Umbau wieder "hängen bleibt" statt echten Kurven zu folgen, ist
+    /// `heading_debug.log` weiterhin aktiv und liefert die nötigen Rohdaten zur weiteren Diagnose.
+    private static let minSpeedForBiasKmh: Double = 8
+    private static let maxCourseAccuracyForBias: Double = 100
+    private static let biasSmoothingAlpha: Double = 0.15
+
+    private func updateMagnetometerBiasEstimate(for location: CLLocation) {
+        guard let rawDeviceHeading,
+              location.speed * 3.6 >= Self.minSpeedForBiasKmh,
+              location.course >= 0,
+              location.courseAccuracy >= 0, location.courseAccuracy <= Self.maxCourseAccuracyForBias
+        else { return }
+        let observedBias = Self.angularDifference(rawDeviceHeading, location.course)
+        if let previous = magnetometerBiasEstimate {
+            magnetometerBiasEstimate = previous + Self.biasSmoothingAlpha * Self.angularDifference(observedBias, previous)
+        } else {
+            magnetometerBiasEstimate = observedBias
+        }
+        currentHeading = Self.correctedHeading(rawHeading: rawDeviceHeading, bias: magnetometerBiasEstimate)
+    }
+
+    /// Kürzeste Winkeldifferenz `a - b`, auf den Bereich -180..<180 normiert.
+    private static func angularDifference(_ a: CLLocationDirection, _ b: CLLocationDirection) -> CLLocationDirection {
+        let raw = (a - b).truncatingRemainder(dividingBy: 360)
+        if raw < -180 { return raw + 360 }
+        if raw >= 180 { return raw - 360 }
+        return raw
+    }
+
+    private static func correctedHeading(rawHeading: CLLocationDirection, bias: CLLocationDirection?) -> CLLocationDirection {
+        guard let bias else { return rawHeading }
+        return (rawHeading - bias).truncatingRemainder(dividingBy: 360) + (rawHeading - bias < 0 ? 360 : 0)
     }
 
     /// Aktiviert/deaktiviert Standort-Updates im Hintergrund (Bildschirm gesperrt oder App im
@@ -98,6 +164,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         guard let location = locations.last else { return }
         currentLocation = location
         smoothedCameraCoordinate = Self.smoothed(location.coordinate, previous: smoothedCameraCoordinate)
+        updateMagnetometerBiasEstimate(for: location)
         locationUpdateCount += 1
         // TEMP-DEBUG (s. ROADMAP.md "Magnetometer-Bias..."): Schreibt bei jedem GPS-Update eine
         // Zeile mit Heading vs. GPS-Kurs in eine Datei statt auf die Live-Konsole, damit die
@@ -106,7 +173,8 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         Self.appendDebugLog(
             "\(Date().timeIntervalSince1970),lat=\(location.coordinate.latitude),lon=\(location.coordinate.longitude),"
             + "hAcc=\(location.horizontalAccuracy),speedKmh=\(location.speed * 3.6),course=\(location.course),"
-            + "courseAcc=\(location.courseAccuracy),heading=\(currentHeading ?? -1)"
+            + "courseAcc=\(location.courseAccuracy),rawHeading=\(rawDeviceHeading ?? -1),bias=\(magnetometerBiasEstimate ?? -999),"
+            + "heading=\(currentHeading ?? -1)"
         )
     }
 
