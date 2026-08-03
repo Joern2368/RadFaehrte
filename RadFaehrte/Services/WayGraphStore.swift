@@ -142,14 +142,14 @@ nonisolated enum Bundesland: String, CaseIterable, Identifiable, DownloadableReg
 
 /// Weitere europäische Länder außerhalb Deutschlands, für die ein Wege-Graph heruntergeladen werden
 /// kann - bisher Niederlande (Anlass: Rotterdam-Reise 2026-07-27), Polen, Schweden, Dänemark,
-/// Belgien und Luxemburg (s. ROADMAP.md). Eigener Typ statt eines Falls in `Bundesland`, weil es
-/// Länder statt Bundesländer sind (andere Ebene) und die Einstellungen sie in einer eigenen Liste
-/// ("Offline-Karten Europa") getrennt von den deutschen Bundesländern anzeigen. Fallnamen bewusst
-/// auf Englisch (wie bei Geofabrik/den Release-Asset-Dateinamen, z. B. `netherlands_ways.sqlite`)
-/// statt Deutsch wie bei `Bundesland` - dort passt der deutsche Fallname zufällig zum
-/// Geofabrik-Bezeichner (download.geofabrik.de/europe/germany/<bundesland>), hier nicht
-/// (download.geofabrik.de/europe/<land-englisch>). `displayName` liefert trotzdem die deutsche
-/// UI-Bezeichnung.
+/// Belgien, Luxemburg und Schweiz (s. ROADMAP.md). Eigener Typ statt eines Falls in `Bundesland`,
+/// weil es Länder statt Bundesländer sind (andere Ebene) und die Einstellungen sie in einer
+/// eigenen Liste ("Offline-Karten Europa") getrennt von den deutschen Bundesländern anzeigen.
+/// Fallnamen bewusst auf Englisch (wie bei Geofabrik/den Release-Asset-Dateinamen, z. B.
+/// `netherlands_ways.sqlite`) statt Deutsch wie bei `Bundesland` - dort passt der deutsche
+/// Fallname zufällig zum Geofabrik-Bezeichner (download.geofabrik.de/europe/germany/<bundesland>),
+/// hier nicht (download.geofabrik.de/europe/<land-englisch>). `displayName` liefert trotzdem die
+/// deutsche UI-Bezeichnung.
 nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableRegion {
     case belgium
     case denmark
@@ -157,6 +157,7 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
     case netherlands
     case poland
     case sweden
+    case switzerland
 
     var id: String { rawValue }
 
@@ -168,6 +169,7 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
         case .netherlands: return "Niederlande"
         case .poland: return "Polen"
         case .sweden: return "Schweden"
+        case .switzerland: return "Schweiz"
         }
     }
 
@@ -185,6 +187,8 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
             return RegionBoundingBox(minLat: 49.00, maxLat: 54.84, minLon: 14.12, maxLon: 24.15)
         case .sweden:
             return RegionBoundingBox(minLat: 55.34, maxLat: 69.06, minLon: 11.11, maxLon: 24.17)
+        case .switzerland:
+            return RegionBoundingBox(minLat: 45.82, maxLat: 47.81, minLon: 5.95, maxLon: 10.50)
         }
     }
 }
