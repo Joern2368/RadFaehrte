@@ -59,6 +59,7 @@ nonisolated extension EuropaLand {
 
     var approximateSizeMB: Int {
         switch self {
+        case .albania: return 140
         case .austria: return 929
         case .belgium: return 299
         case .czechia: return 495
@@ -66,6 +67,7 @@ nonisolated extension EuropaLand {
         case .luxembourg: return 35
         case .netherlands: return 428
         case .poland: return 1409
+        case .slovakia: return 318
         case .sweden: return 1060
         case .switzerland: return 645
         }
