@@ -310,6 +310,24 @@ struct RadFaehrteTests {
         #expect(euroVelo5?.lines.isEmpty == false)
     }
 
+    @Test func routeRepositoryFindsEuroVeloRouteNearBarcelona() async throws {
+        // Regressionstest für die zusätzliche Spanien-Datenbank (spain.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-/Österreich-/Tschechien-/Slowakei-/Albanien-/
+        // Italien-Tests oben.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 2.12, minLat: 41.33, maxLon: 2.22, maxLat: 41.43
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("EuroVelo 8") == true })
+
+        let euroVelo8 = routes.first { $0.name?.contains("EuroVelo 8") == true }
+        #expect(euroVelo8?.lines.isEmpty == false)
+    }
+
     @Test func routeMatcherFindsWeserRadwegForBremenAchim() async throws {
         let matcher = RouteMatcher(repository: RouteRepository())
 

@@ -16,17 +16,20 @@ struct SettingsView: View {
     let europaWayGraphStore: WayGraphStore<EuropaLand>
     let franceWayGraphStore: WayGraphStore<FranceRegion>
     let italyWayGraphStore: WayGraphStore<ItalyRegion>
+    let spainWayGraphStore: WayGraphStore<SpainRegion>
 
     init(
         wayGraphStore: WayGraphStore<Bundesland> = WayGraphStore(),
         europaWayGraphStore: WayGraphStore<EuropaLand> = WayGraphStore(),
         franceWayGraphStore: WayGraphStore<FranceRegion> = WayGraphStore(),
-        italyWayGraphStore: WayGraphStore<ItalyRegion> = WayGraphStore()
+        italyWayGraphStore: WayGraphStore<ItalyRegion> = WayGraphStore(),
+        spainWayGraphStore: WayGraphStore<SpainRegion> = WayGraphStore()
     ) {
         self.wayGraphStore = wayGraphStore
         self.europaWayGraphStore = europaWayGraphStore
         self.franceWayGraphStore = franceWayGraphStore
         self.italyWayGraphStore = italyWayGraphStore
+        self.spainWayGraphStore = spainWayGraphStore
     }
 
     var body: some View {
@@ -84,7 +87,7 @@ struct SettingsView: View {
                         OfflineMapsView(
                             store: europaWayGraphStore,
                             title: "Offline-Karten Europa",
-                            footer: "Wie bei den Bundesländern: Für ein heruntergeladenes Land nutzt \"Direkte Fahrrad-Route\" dort eine eigene Offline-Engine statt online über Apple zu routen - funktioniert auch ganz ohne Internetverbindung. Frankreich und Italien sind für eine einzelne Datei zu groß und deshalb wie bei den Bundesländern nach Regionen aufgeteilt - die Einträge führen zu deren eigenen Listen.",
+                            footer: "Wie bei den Bundesländern: Für ein heruntergeladenes Land nutzt \"Direkte Fahrrad-Route\" dort eine eigene Offline-Engine statt online über Apple zu routen - funktioniert auch ganz ohne Internetverbindung. Frankreich, Italien und Spanien sind für eine einzelne Datei zu groß und deshalb wie bei den Bundesländern nach Regionen aufgeteilt - die Einträge führen zu deren eigenen Listen.",
                             extraRows: [
                                 OfflineMapsView<EuropaLand>.ExtraRow(label: "Frankreich") {
                                     NavigationLink {
@@ -106,6 +109,17 @@ struct SettingsView: View {
                                         )
                                     } label: {
                                         Text("Italien")
+                                    }
+                                },
+                                OfflineMapsView<EuropaLand>.ExtraRow(label: "Spanien") {
+                                    NavigationLink {
+                                        OfflineMapsView(
+                                            store: spainWayGraphStore,
+                                            title: "Offline-Karten Spanien",
+                                            footer: "Spanien ist für den Wege-Graph-Bau zu groß für eine einzelne Datei - daher in 18 Regionen aufgeteilt. Für heruntergeladene Regionen nutzt \"Direkte Fahrrad-Route\" dieselbe Offline-Engine wie bei Bundesländern/anderen Ländern."
+                                        )
+                                    } label: {
+                                        Text("Spanien")
                                     }
                                 }
                             ]

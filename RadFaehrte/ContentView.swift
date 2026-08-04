@@ -53,6 +53,8 @@ struct ContentView: View {
     var franceWayGraphStore = WayGraphStore<FranceRegion>()
     /// Analog `wayGraphStore`, aber für die 5 italienischen Makro-Regionen (s. `ItalyRegion`).
     var italyWayGraphStore = WayGraphStore<ItalyRegion>()
+    /// Analog `wayGraphStore`, aber für die 18 spanischen Regionen (s. `SpainRegion`).
+    var spainWayGraphStore = WayGraphStore<SpainRegion>()
     /// Von `RootTabView` übergeben, um nach dem Speichern einer Fahrt den Verlauf-Tab zum
     /// Neuladen zu bewegen (siehe `HistoryView.refreshTrigger`).
     var onTourSaved: () -> Void = {}
@@ -1336,6 +1338,7 @@ struct ContentView: View {
             + EuropaLand.allCases.compactMap { europaWayGraphStore.path(for: $0) }
             + FranceRegion.allCases.compactMap { franceWayGraphStore.path(for: $0) }
             + ItalyRegion.allCases.compactMap { italyWayGraphStore.path(for: $0) }
+            + SpainRegion.allCases.compactMap { spainWayGraphStore.path(for: $0) }
     }
 
     /// Wie `offlineGraphCandidatePaths()`, aber vorgefiltert auf Regionen, deren grobe Bounding-Box
@@ -1371,10 +1374,14 @@ struct ContentView: View {
         let italyRegionen = ItalyRegion.allCases.filter {
             $0.boundingBox.contains(start) || $0.boundingBox.contains(ziel)
         }
+        let spainRegionen = SpainRegion.allCases.filter {
+            $0.boundingBox.contains(start) || $0.boundingBox.contains(ziel)
+        }
         return bundeslaender.compactMap { wayGraphStore.path(for: $0) }
             + laender.compactMap { europaWayGraphStore.path(for: $0) }
             + franceRegionen.compactMap { franceWayGraphStore.path(for: $0) }
             + italyRegionen.compactMap { italyWayGraphStore.path(for: $0) }
+            + spainRegionen.compactMap { spainWayGraphStore.path(for: $0) }
     }
 
     /// Ältester `timestamp`, den ein GPS-Fix für "Aktueller Standort" noch haben darf, um sofort
@@ -2258,6 +2265,7 @@ struct ContentView: View {
         if let land = EuropaLand(rawValue: fileName) { return land.displayName }
         if let region = FranceRegion(rawValue: fileName) { return region.displayName }
         if let region = ItalyRegion(rawValue: fileName) { return region.displayName }
+        if let region = SpainRegion(rawValue: fileName) { return region.displayName }
         return "der Nachbarregion"
     }
 

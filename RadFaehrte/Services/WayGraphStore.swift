@@ -370,6 +370,105 @@ nonisolated enum ItalyRegion: String, CaseIterable, Identifiable, DownloadableRe
     }
 }
 
+/// Spanische Regionen (autonome Gemeinschaften, Geofabrik-Einteilung:
+/// download.geofabrik.de/europe/spain/<region>), für die ein Wege-Graph heruntergeladen werden
+/// kann - eigener Typ statt eines Falls in `EuropaLand` (analog zu `FranceRegion`/`ItalyRegion`).
+/// Anders als bei Frankreich/Italien **vorsorglich** aufgeteilt, nicht erst nach einem
+/// gescheiterten Gesamt-Versuch: Spaniens PBF (1,4 GB) läge zwar unter Polens erfolgreich
+/// gebauter Größe, aber Italiens Muster (Ausgabe teils größer als PBF durch dichte Kartierung,
+/// s. ROADMAP.md "Italien als vierzehntes Land") machte das Risiko real genug, direkt
+/// aufzuteilen statt eventuell wieder stundenlang umsonst zu bauen. Geofabrik bietet 18
+/// Regionen (16 "echte" + die Exklaven Ceuta/Melilla), zwischen ~0 MB (Exklaven) und 254 MB
+/// (Cataluña) - deutlich kleiner als selbst Italiens Regionen. Kuratierte Routen
+/// (`spain.sqlite`) sind davon unabhängig bereits vollständig für ganz Spanien vorhanden.
+nonisolated enum SpainRegion: String, CaseIterable, Identifiable, DownloadableRegion {
+    case andalucia
+    case aragon
+    case asturias
+    case cantabria
+    case castillaLaMancha = "castilla-la-mancha"
+    case castillaYLeon = "castilla-y-leon"
+    case cataluna
+    case ceuta
+    case extremadura
+    case galicia
+    case islasBaleares = "islas-baleares"
+    case laRioja = "la-rioja"
+    case madrid
+    case melilla
+    case murcia
+    case navarra
+    case paisVasco = "pais-vasco"
+    case valencia
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .andalucia: return "Andalusien"
+        case .aragon: return "Aragonien"
+        case .asturias: return "Asturien"
+        case .cantabria: return "Kantabrien"
+        case .castillaLaMancha: return "Kastilien-La Mancha"
+        case .castillaYLeon: return "Kastilien und León"
+        case .cataluna: return "Katalonien"
+        case .ceuta: return "Ceuta"
+        case .extremadura: return "Extremadura"
+        case .galicia: return "Galicien"
+        case .islasBaleares: return "Balearen"
+        case .laRioja: return "La Rioja"
+        case .madrid: return "Madrid"
+        case .melilla: return "Melilla"
+        case .murcia: return "Murcia"
+        case .navarra: return "Navarra"
+        case .paisVasco: return "Baskenland"
+        case .valencia: return "Valencia"
+        }
+    }
+
+    /// Aus den PBF-Headern per Range-Request ermittelt (analog `FranceRegion.boundingBox`).
+    var boundingBox: RegionBoundingBox {
+        switch self {
+        case .andalucia:
+            return RegionBoundingBox(minLat: 35.71, maxLat: 38.73, minLon: -7.55, maxLon: -1.33)
+        case .aragon:
+            return RegionBoundingBox(minLat: 39.84, maxLat: 42.93, minLon: -2.18, maxLon: 0.77)
+        case .asturias:
+            return RegionBoundingBox(minLat: 42.88, maxLat: 44.03, minLon: -7.20, maxLon: -4.39)
+        case .cantabria:
+            return RegionBoundingBox(minLat: 42.75, maxLat: 43.89, minLon: -4.86, maxLon: -3.14)
+        case .castillaLaMancha:
+            return RegionBoundingBox(minLat: 38.02, maxLat: 41.33, minLon: -5.41, maxLon: -0.91)
+        case .castillaYLeon:
+            return RegionBoundingBox(minLat: 40.08, maxLat: 43.24, minLon: -7.08, maxLon: -1.77)
+        case .cataluna:
+            return RegionBoundingBox(minLat: 40.21, maxLat: 42.92, minLon: 0.16, maxLon: 4.17)
+        case .ceuta:
+            return RegionBoundingBox(minLat: 35.87, maxLat: 35.96, minLon: -5.39, maxLon: -5.26)
+        case .extremadura:
+            return RegionBoundingBox(minLat: 37.94, maxLat: 40.49, minLon: -7.64, maxLon: -4.64)
+        case .galicia:
+            return RegionBoundingBox(minLat: 41.77, maxLat: 44.31, minLon: -10.36, maxLon: -6.73)
+        case .islasBaleares:
+            return RegionBoundingBox(minLat: 38.06, maxLat: 40.71, minLon: 0.62, maxLon: 4.94)
+        case .laRioja:
+            return RegionBoundingBox(minLat: 41.91, maxLat: 42.65, minLon: -3.14, maxLon: -1.67)
+        case .madrid:
+            return RegionBoundingBox(minLat: 39.88, maxLat: 41.17, minLon: -4.59, maxLon: -3.05)
+        case .melilla:
+            return RegionBoundingBox(minLat: 35.26, maxLat: 35.33, minLon: -2.98, maxLon: -2.91)
+        case .murcia:
+            return RegionBoundingBox(minLat: 37.11, maxLat: 38.76, minLon: -2.35, maxLon: -0.25)
+        case .navarra:
+            return RegionBoundingBox(minLat: 41.91, maxLat: 43.37, minLon: -2.50, maxLon: -0.63)
+        case .paisVasco:
+            return RegionBoundingBox(minLat: 42.47, maxLat: 43.75, minLon: -3.45, maxLon: -1.66)
+        case .valencia:
+            return RegionBoundingBox(minLat: 37.84, maxLat: 40.79, minLon: -1.53, maxLon: 1.69)
+        }
+    }
+}
+
 /// Verwaltet heruntergeladene Wege-Graphen (siehe `WayGraphRepository`) für die
 /// "ruhige Wege"-Offline-Routing-Engine, jeweils eine SQLite-Datei pro Region in
 /// `Documents/WayGraphs/` (read-only gebündelte Ressourcen wie `routes.sqlite` liegen dagegen im
