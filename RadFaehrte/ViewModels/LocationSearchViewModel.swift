@@ -50,14 +50,32 @@ final class LocationSearchViewModel: NSObject, MKLocalSearchCompleterDelegate {
     }
 
     /// Löst einen ausgewählten Vorschlag in eine konkrete Koordinate auf.
+    ///
+    /// `MKLocalSearch.Request(completion:)` liefert manchmal mehrere `mapItems` zurück, deren
+    /// **erster** Treffer nicht der tatsächlich ausgewählten Adresse entspricht (Live-Fund: Auswahl
+    /// von "Bückeburger Straße 9" resolvte auf eine andere, parallel liegende Straße). Deshalb wird
+    /// bevorzugt der Treffer genommen, dessen Name zum Titel des Vorschlags passt, statt blind den
+    /// ersten zu nehmen.
     func resolve(_ completion: MKLocalSearchCompletion) async throws -> CLLocationCoordinate2D {
         let searchRequest = MKLocalSearch.Request(completion: completion)
         let search = MKLocalSearch(request: searchRequest)
         let response = try await search.start()
-        guard let coordinate = response.mapItems.first?.location.coordinate else {
+        guard !response.mapItems.isEmpty else {
             throw ResolveError.noResult
         }
-        return coordinate
+        let bestMatch = response.mapItems.first { matches($0, completionTitle: completion.title) }
+            ?? response.mapItems[0]
+        return bestMatch.location.coordinate
+    }
+
+    private func matches(_ mapItem: MKMapItem, completionTitle: String) -> Bool {
+        guard let name = mapItem.name else { return false }
+        return normalize(name) == normalize(completionTitle)
+    }
+
+    private func normalize(_ text: String) -> String {
+        text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "de_DE"))
+            .trimmingCharacters(in: .whitespaces)
     }
 
     enum ResolveError: Error {
