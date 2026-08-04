@@ -755,18 +755,23 @@ struct ContentView: View {
         Task {
             guard let placemark = try? await CLGeocoder().reverseGeocodeLocation(location).first else { return }
             guard zielPlace?.id == place.id else { return }
-            let title = [placemark.thoroughfare, placemark.subThoroughfare]
-                .compactMap { $0 }
-                .joined(separator: " ")
-            let subtitle = [placemark.postalCode, placemark.locality]
-                .compactMap { $0 }
-                .joined(separator: " ")
-            zielPlace = SelectedPlace(
-                title: title.isEmpty ? (placemark.name ?? place.title) : title,
-                subtitle: subtitle,
-                coordinate: place.coordinate
-            )
+            let (title, subtitle) = Self.addressComponents(from: placemark, fallbackTitle: place.title)
+            zielPlace = SelectedPlace(title: title, subtitle: subtitle, coordinate: place.coordinate)
         }
+    }
+
+    /// Baut aus einem `CLPlacemark` Titel/Untertitel im selben Format wie die Adress-Suchergebnisse
+    /// (Straße + Hausnummer / PLZ + Ort) - gemeinsam genutzt von `reverseGeocodeZielPlace` und
+    /// `saveFavorite` (dort für Favoriten, die von der aktuellen Position statt einer echten
+    /// Adresssuche stammen).
+    private static func addressComponents(from placemark: CLPlacemark, fallbackTitle: String) -> (title: String, subtitle: String) {
+        let title = [placemark.thoroughfare, placemark.subThoroughfare]
+            .compactMap { $0 }
+            .joined(separator: " ")
+        let subtitle = [placemark.postalCode, placemark.locality]
+            .compactMap { $0 }
+            .joined(separator: " ")
+        return (title.isEmpty ? (placemark.name ?? fallbackTitle) : title, subtitle)
     }
 
     /// `LocationSearchField` bindet hierüber statt direkt auf `$startPlace`/`$zielPlace`, damit
@@ -780,13 +785,34 @@ struct ContentView: View {
         Binding(get: { zielPlace }, set: { isImportedRouteMode = false; zielPlace = $0 })
     }
 
+    /// Speichert `place` als Favorit - stammt `place` von der aktuellen Position (Titel noch der
+    /// Platzhalter `Self.currentLocationTitle`, s. `resolveCurrentLocationAsStart`), wird vorher per
+    /// Reverse Geocoding eine echte Adresse aufgelöst, statt sonst wörtlich "Aktueller Standort" als
+    /// Favoritenname zu speichern (Live-Fund 2026-08-04: Nutzer speicherte "Arbeit" während "Aktuelle
+    /// Position" als Start gewählt war, die Favoriten-Zeile zeigte danach dauerhaft "Aktueller
+    /// Standort" statt der echten Adresse).
     private func saveFavorite(kind: FavoritePlace.Kind, customName: String? = nil, for field: FavoriteTargetField) {
         guard let place = field == .start ? startPlace : zielPlace else { return }
-        favoritePlaceStore.save(FavoritePlace(
-            kind: kind, customName: customName,
-            title: place.title, subtitle: place.subtitle, coordinate: place.coordinate
-        ))
-        favoritePlaces = favoritePlaceStore.loadAll()
+        guard place.title == Self.currentLocationTitle else {
+            favoritePlaceStore.save(FavoritePlace(
+                kind: kind, customName: customName,
+                title: place.title, subtitle: place.subtitle, coordinate: place.coordinate
+            ))
+            favoritePlaces = favoritePlaceStore.loadAll()
+            return
+        }
+        let location = CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude)
+        Task {
+            let placemark = try? await CLGeocoder().reverseGeocodeLocation(location).first
+            let (title, subtitle) = placemark.map {
+                Self.addressComponents(from: $0, fallbackTitle: place.title)
+            } ?? (place.title, place.subtitle)
+            favoritePlaceStore.save(FavoritePlace(
+                kind: kind, customName: customName,
+                title: title, subtitle: subtitle, coordinate: place.coordinate
+            ))
+            favoritePlaces = favoritePlaceStore.loadAll()
+        }
     }
 
     private func recordRecent(title: String, subtitle: String, coordinate: CLLocationCoordinate2D) {
@@ -1447,6 +1473,10 @@ struct ContentView: View {
     /// nach dieser Wartezeit wird auch ein älterer Fix akzeptiert, statt "Aktueller Standort"
     /// unbegrenzt hängen zu lassen.
     private static let maxLocationWaitForStart: TimeInterval = 8
+    /// Platzhaltertitel für `startPlace`, solange dieser von der aktuellen GPS-Position stammt statt
+    /// von einer echten Adresssuche - kein sinnvoller Name für einen Favoriten (s. `saveFavorite`,
+    /// das für genau diesen Titel vor dem Speichern per Reverse Geocoding eine echte Adresse holt).
+    private static let currentLocationTitle = "Aktueller Standort"
 
     private func resolveCurrentLocationAsStartIfReady(_ location: CLLocation) {
         let isFreshEnough = Date().timeIntervalSince(location.timestamp) <= Self.maxLocationAgeForStart
@@ -1459,7 +1489,7 @@ struct ContentView: View {
         isResolvingCurrentLocationForStart = false
         resolvingStartLocationDeadline = nil
         locationManager.stopUpdating()
-        startPlace = SelectedPlace(title: "Aktueller Standort", subtitle: "", coordinate: location.coordinate)
+        startPlace = SelectedPlace(title: Self.currentLocationTitle, subtitle: "", coordinate: location.coordinate)
     }
 
     /// Wann zuletzt eine *automatische* Verfolgungs-Aktualisierung gesetzt wurde - siehe
@@ -2204,7 +2234,7 @@ struct ContentView: View {
 
         isImportedRouteMode = true
         startPlace = SelectedPlace(
-            title: usingCurrentLocation ? "Aktueller Standort" : "Streckenanfang",
+            title: usingCurrentLocation ? Self.currentLocationTitle : "Streckenanfang",
             subtitle: "", coordinate: startCoordinate
         )
         zielPlace = SelectedPlace(title: imported.name, subtitle: "", coordinate: endCoordinate)
