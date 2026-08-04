@@ -158,6 +158,7 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
     case czechia
     case denmark
     case luxembourg
+    case malta
     case netherlands
     case poland
     case portugal
@@ -175,6 +176,7 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
         case .czechia: return "Tschechien"
         case .denmark: return "Dänemark"
         case .luxembourg: return "Luxemburg"
+        case .malta: return "Malta"
         case .netherlands: return "Niederlande"
         case .poland: return "Polen"
         case .portugal: return "Portugal"
@@ -198,6 +200,8 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
             return RegionBoundingBox(minLat: 54.44, maxLat: 58.06, minLon: 7.70, maxLon: 15.65)
         case .luxembourg:
             return RegionBoundingBox(minLat: 49.45, maxLat: 50.18, minLon: 5.73, maxLon: 6.53)
+        case .malta:
+            return RegionBoundingBox(minLat: 35.52, maxLat: 36.33, minLon: 13.82, maxLon: 14.86)
         case .netherlands:
             return RegionBoundingBox(minLat: 50.75, maxLat: 53.55, minLon: 3.36, maxLon: 7.23)
         case .poland:
