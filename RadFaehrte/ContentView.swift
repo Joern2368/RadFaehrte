@@ -44,6 +44,12 @@ struct ContentView: View {
     /// Für die App gemeinsame Instanz aus `RootTabView`, damit eine hier beendete Fahrt im
     /// Verlauf-Tab (`HistoryView`) auftaucht.
     var drivenTourStore = DrivenTourStore()
+    /// Für "Zuhause"/"Arbeit" + eigene Favoriten-Orte in den Suchfeldern (s. `favoritePlaces`).
+    private let favoritePlaceStore = FavoritePlaceStore()
+    /// Für die "Zuletzt gesucht"-Zeilen in den Suchfeldern (s. `recentPlaces`) - getrennt von
+    /// `favoritePlaceStore`, da hier automatisch bei jeder Adressauswahl mitgeschrieben wird statt
+    /// bewusst gespeichert.
+    private let recentPlaceStore = RecentPlaceStore()
     /// Für die App gemeinsame Instanz, um heruntergeladene Bundesländer für die
     /// "ruhige Wege"-Offline-Routing-Engine zu finden (siehe `selectDirectRoute`).
     var wayGraphStore = WayGraphStore<Bundesland>()
@@ -68,6 +74,16 @@ struct ContentView: View {
     @State private var startPlace: SelectedPlace?
     @State private var zielPlace: SelectedPlace?
     @State private var cameraPosition: MapCameraPosition = .region(Self.germanyRegion)
+
+    @State private var favoritePlaces: [FavoritePlace] = []
+    @State private var recentPlaces: [RecentPlace] = []
+    /// Welches Feld gerade einen Favoriten speichern will (`.start`/`.ziel`) - steuert sowohl den
+    /// Auswahl-Dialog (`favoriteKindChoiceField`) als auch den Namens-Alert
+    /// (`favoriteCustomNameField`), damit beide wissen, welchen `SelectedPlace` sie sichern.
+    fileprivate enum FavoriteTargetField { case start, ziel }
+    @State private var favoriteKindChoiceField: FavoriteTargetField?
+    @State private var favoriteCustomNameField: FavoriteTargetField?
+    @State private var favoriteCustomNameInput = ""
 
     @State private var matcher = RouteMatcher(repository: RouteRepository())
     @State private var matches: [RouteMatch] = []
@@ -290,6 +306,8 @@ struct ContentView: View {
                             selectedPlace: boundStartPlace,
                             isResolvingCurrentLocation: isResolvingCurrentLocationForStart,
                             onUseCurrentLocation: useCurrentLocationAsStart,
+                            onSaveFavorite: { favoriteKindChoiceField = .start },
+                            onPlaceChosen: recordRecent,
                             biasCoordinate: locationManager.currentLocation?.coordinate,
                             onFocusChange: { isEditingStart = $0 }
                         )
@@ -297,6 +315,11 @@ struct ContentView: View {
                             label: "Ziel",
                             selectedPlace: boundZielPlace,
                             onPickOnMap: { isPickingZielOnMap = true },
+                            favorites: favoritePlaces,
+                            onSaveFavorite: { favoriteKindChoiceField = .ziel },
+                            recents: recentPlaces,
+                            onDeleteRecent: deleteRecent,
+                            onPlaceChosen: recordRecent,
                             biasCoordinate: startPlace?.coordinate ?? locationManager.currentLocation?.coordinate,
                             onFocusChange: { isEditingZiel = $0 }
                         )
@@ -469,6 +492,8 @@ struct ContentView: View {
             default:
                 break
             }
+            favoritePlaces = favoritePlaceStore.loadAll()
+            recentPlaces = recentPlaceStore.loadAll()
         }
         .onChange(of: startPlace) { runMatching(); updateCamera(); loadNearbyMatches() }
         .onChange(of: zielPlace) { runMatching(); updateCamera(); loadNearbyMatches() }
@@ -553,6 +578,12 @@ struct ContentView: View {
         } message: {
             Text("Für den Navigationsmodus wird der Standortzugriff benötigt. Bitte in den Einstellungen erlauben.")
         }
+        .modifier(FavoriteSaveDialogsModifier(
+            kindChoiceField: $favoriteKindChoiceField,
+            customNameField: $favoriteCustomNameField,
+            customNameInput: $favoriteCustomNameInput,
+            onSave: { kind, customName, field in saveFavorite(kind: kind, customName: customName, for: field) }
+        ))
         .confirmationDialog(
             "Navigation pausiert",
             isPresented: $showEndNavigationConfirmation,
@@ -747,6 +778,25 @@ struct ContentView: View {
     }
     private var boundZielPlace: Binding<SelectedPlace?> {
         Binding(get: { zielPlace }, set: { isImportedRouteMode = false; zielPlace = $0 })
+    }
+
+    private func saveFavorite(kind: FavoritePlace.Kind, customName: String? = nil, for field: FavoriteTargetField) {
+        guard let place = field == .start ? startPlace : zielPlace else { return }
+        favoritePlaceStore.save(FavoritePlace(
+            kind: kind, customName: customName,
+            title: place.title, subtitle: place.subtitle, coordinate: place.coordinate
+        ))
+        favoritePlaces = favoritePlaceStore.loadAll()
+    }
+
+    private func recordRecent(title: String, subtitle: String, coordinate: CLLocationCoordinate2D) {
+        recentPlaceStore.record(title: title, subtitle: subtitle, coordinate: coordinate)
+        recentPlaces = recentPlaceStore.loadAll()
+    }
+
+    private func deleteRecent(_ place: RecentPlace) {
+        recentPlaceStore.delete(place)
+        recentPlaces = recentPlaceStore.loadAll()
     }
 
     private func useCurrentLocationAsStart() {
@@ -3532,6 +3582,57 @@ private extension MKPolyline {
         var coords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: pointCount)
         getCoordinates(&coords, range: NSRange(location: 0, length: pointCount))
         return coords
+    }
+}
+
+/// Ausgelagert aus `ContentView.body` (statt zwei weitere inline `.confirmationDialog`/`.alert`-
+/// Modifier anzuhängen), weil die ohnehin schon sehr lange Modifier-Kette dort sonst den
+/// Type-Checker mit "unable to type-check this expression in reasonable time" scheitern ließ -
+/// ein eigener `ViewModifier` bekommt einen eigenen, kleineren Type-Checking-Kontext.
+private struct FavoriteSaveDialogsModifier: ViewModifier {
+    @Binding var kindChoiceField: ContentView.FavoriteTargetField?
+    @Binding var customNameField: ContentView.FavoriteTargetField?
+    @Binding var customNameInput: String
+    let onSave: (FavoritePlace.Kind, String?, ContentView.FavoriteTargetField) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog(
+                "Als Favorit speichern",
+                isPresented: Binding(get: { kindChoiceField != nil }, set: { if !$0 { kindChoiceField = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Als Zuhause speichern") {
+                    if let field = kindChoiceField { onSave(.home, nil, field) }
+                    kindChoiceField = nil
+                }
+                Button("Als Arbeit speichern") {
+                    if let field = kindChoiceField { onSave(.work, nil, field) }
+                    kindChoiceField = nil
+                }
+                Button("Eigener Favorit ...") {
+                    customNameField = kindChoiceField
+                    kindChoiceField = nil
+                }
+                Button("Abbrechen", role: .cancel) { kindChoiceField = nil }
+            }
+            .alert(
+                "Name für den Favoriten",
+                isPresented: Binding(get: { customNameField != nil }, set: { if !$0 { customNameField = nil } })
+            ) {
+                TextField("z. B. Oma, Fähranleger", text: $customNameInput)
+                Button("Speichern") {
+                    if let field = customNameField, !customNameInput.isEmpty {
+                        onSave(.custom, customNameInput, field)
+                    }
+                    customNameField = nil
+                    customNameInput = ""
+                }
+                Button("Abbrechen", role: .cancel) {
+                    customNameField = nil
+                    customNameInput = ""
+                }
+            }
     }
 }
 

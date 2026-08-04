@@ -36,16 +36,13 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    NavigationLink {
-                        NavigationSettingsView()
-                    } label: {
-                        Label("Navigation", systemImage: "location.north.line")
+                    Picker("Erscheinungsbild", selection: $appearanceModeRaw) {
+                        ForEach(AppearanceMode.allCases) { mode in
+                            Text(mode.label).tag(mode.rawValue)
+                        }
                     }
-                } footer: {
-                    Text("Durchschnittsgeschwindigkeit, Sichtweite und Statistik-Leiste während der Navigation.")
-                }
+                    .pickerStyle(.segmented)
 
-                Section {
                     Picker("Kartenstil", selection: $mapStyleRaw) {
                         ForEach(MapStyleOption.allCases) { style in
                             Text(style.label).tag(style.rawValue)
@@ -59,18 +56,21 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 } header: {
-                    Text("Karte")
+                    Text("Darstellung")
                 } footer: {
                     Text("Die Kartenausrichtung gilt als Vorgabe beim Start einer neuen Navigation - während der Fahrt lässt sie sich über den Umschalt-Button jederzeit ändern.")
                 }
 
                 Section {
-                    Picker("Erscheinungsbild", selection: $appearanceModeRaw) {
-                        ForEach(AppearanceMode.allCases) { mode in
-                            Text(mode.label).tag(mode.rawValue)
-                        }
+                    NavigationLink {
+                        NavigationSettingsView()
+                    } label: {
+                        Label("Navigation", systemImage: "location.north.line")
                     }
-                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Navigation")
+                } footer: {
+                    Text("Durchschnittsgeschwindigkeit, Sichtweite und Statistik-Leiste während der Navigation.")
                 }
 
                 Section {
@@ -127,6 +127,8 @@ struct SettingsView: View {
                     } label: {
                         Label("Offline-Karten Europa", systemImage: "arrow.down.circle")
                     }
+                } header: {
+                    Text("Offline-Karten")
                 }
 
                 Section {
@@ -135,8 +137,15 @@ struct SettingsView: View {
                     } label: {
                         Label("Alle Routen", systemImage: "list.bullet")
                     }
+                    NavigationLink {
+                        FavoritePlacesView(store: FavoritePlaceStore())
+                    } label: {
+                        Label("Favoriten", systemImage: "star")
+                    }
+                } header: {
+                    Text("Meine Routen & Orte")
                 } footer: {
-                    Text("Routen nach Ort oder Name durchsuchen - z. B. um zu prüfen, ob ein bekannter Radweg in der App hinterlegt ist.")
+                    Text("Alle Routen: nach Ort oder Name durchsuchen, z. B. um zu prüfen, ob ein bekannter Radweg hinterlegt ist. Favoriten: Zuhause, Arbeit und weitere gespeicherte Orte fürs schnelle Auswählen als Ziel - gespeichert wird direkt im Ziel-Suchfeld über das Stern-Symbol.")
                 }
 
                 Section {
@@ -150,6 +159,8 @@ struct SettingsView: View {
                     } label: {
                         Label("Info", systemImage: "info.circle")
                     }
+                } header: {
+                    Text("Hilfe")
                 }
             }
             .navigationTitle("Einstellungen")

@@ -15,6 +15,20 @@ struct LocationSearchField: View {
     /// die Adresssuche setzen) - aktiviert in `ContentView` den Karten-Auswahlmodus
     /// (`isPickingZielOnMap`), der eigentliche Tap wird dort per `handleMapTap` verarbeitet.
     var onPickOnMap: (() -> Void)? = nil
+    /// Gespeicherte Orte (Zuhause/Arbeit/eigene) - wie `recents` nur sichtbar, solange noch nichts
+    /// eingetippt ist (analog Google Maps: verschwindet zugunsten der Adress-Suchergebnisse, sobald
+    /// eine Eingabe beginnt). Leer, solange keine Favoriten gespeichert sind.
+    var favorites: [FavoritePlace] = []
+    /// Zeigt einen Stern-Button neben dem Lösch-Icon, sobald ein Ort ausgewählt ist - `ContentView`
+    /// öffnet darüber den Dialog zum Speichern als Favorit für genau dieses Feld.
+    var onSaveFavorite: (() -> Void)? = nil
+    /// Zuletzt über dieses oder das andere Suchfeld gewählte Ziele (analog "Zuletzt gesucht" bei
+    /// Google Maps) - wie `favorites` nur bei leerem Suchfeld sichtbar.
+    var recents: [RecentPlace] = []
+    var onDeleteRecent: ((RecentPlace) -> Void)? = nil
+    /// Meldet jede erfolgreiche Adressauswahl (Tipp-Ergebnis oder erneut angetippter Recent-Eintrag)
+    /// nach außen, damit `ContentView` sie in `RecentPlaceStore` festhält bzw. auffrischt.
+    var onPlaceChosen: ((_ title: String, _ subtitle: String, _ coordinate: CLLocationCoordinate2D) -> Void)? = nil
     var biasCoordinate: CLLocationCoordinate2D? = nil
     /// Meldet Fokus-Änderungen nach außen, damit `ContentView` z. B. die Ergebnisliste ausblenden
     /// kann, solange dieses Feld aktiv bearbeitet wird (mehr Platz für die Vorschlagsliste).
@@ -22,6 +36,10 @@ struct LocationSearchField: View {
 
     @State private var viewModel = LocationSearchViewModel()
     @FocusState private var isFocused: Bool
+
+    private var showsFavoritesAndRecents: Bool {
+        viewModel.queryFragment.isEmpty && (!favorites.isEmpty || !recents.isEmpty)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -32,6 +50,15 @@ struct LocationSearchField: View {
                     .autocorrectionDisabled()
 
                 if selectedPlace != nil {
+                    if let onSaveFavorite {
+                        Button {
+                            onSaveFavorite()
+                        } label: {
+                            Image(systemName: "star")
+                                .foregroundStyle(.secondary)
+                        }
+                        .accessibilityIdentifier("saveFavorite-\(label)")
+                    }
                     Button {
                         clearSelection()
                     } label: {
@@ -42,7 +69,7 @@ struct LocationSearchField: View {
                 }
             }
 
-            if isFocused && (onUseCurrentLocation != nil || onPickOnMap != nil || !viewModel.results.isEmpty) {
+            if isFocused && (onUseCurrentLocation != nil || onPickOnMap != nil || showsFavoritesAndRecents || !viewModel.results.isEmpty) {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if let onPickOnMap {
@@ -88,6 +115,85 @@ struct LocationSearchField: View {
                             .disabled(isResolvingCurrentLocation)
                             .accessibilityIdentifier("useCurrentLocation-\(label)")
                             Divider()
+                        }
+                        if showsFavoritesAndRecents {
+                            if !favorites.isEmpty {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(alignment: .top, spacing: 0) {
+                                        ForEach(Array(favorites.enumerated()), id: \.element.id) { index, favorite in
+                                            if index > 0 {
+                                                Divider().frame(height: 36)
+                                            }
+                                            Button {
+                                                select(favorite)
+                                            } label: {
+                                                HStack(spacing: 8) {
+                                                    Image(systemName: favorite.icon)
+                                                        .foregroundStyle(.secondary)
+                                                    VStack(alignment: .leading, spacing: 1) {
+                                                        Text(favorite.displayName)
+                                                            .font(.body.weight(.semibold))
+                                                            .foregroundStyle(.primary)
+                                                            .lineLimit(1)
+                                                        if !favorite.title.isEmpty {
+                                                            Text(favorite.title)
+                                                                .font(.caption)
+                                                                .foregroundStyle(.secondary)
+                                                                .lineLimit(1)
+                                                        }
+                                                    }
+                                                }
+                                                .padding(.horizontal, 12)
+                                            }
+                                            .accessibilityIdentifier("favorite-\(label)-\(favorite.id)")
+                                        }
+                                    }
+                                    .padding(.vertical, 8)
+                                }
+                                Divider()
+                            }
+                            if !recents.isEmpty {
+                                Text("Zuletzt gesucht")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, favorites.isEmpty ? 0 : 4)
+                                ForEach(recents) { recent in
+                                    HStack {
+                                        Button {
+                                            select(recent)
+                                        } label: {
+                                            HStack {
+                                                Image(systemName: "clock.arrow.circlepath")
+                                                    .foregroundStyle(.secondary)
+                                                    .frame(width: 20)
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text(recent.title)
+                                                        .foregroundStyle(.primary)
+                                                    if !recent.subtitle.isEmpty {
+                                                        Text(recent.subtitle)
+                                                            .font(.caption)
+                                                            .foregroundStyle(.secondary)
+                                                    }
+                                                }
+                                            }
+                                            .padding(.vertical, 6)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                        if let onDeleteRecent {
+                                            Button {
+                                                onDeleteRecent(recent)
+                                            } label: {
+                                                Image(systemName: "xmark")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            .accessibilityIdentifier("deleteRecent-\(label)-\(recent.id)")
+                                        }
+                                    }
+                                    .accessibilityIdentifier("recent-\(label)-\(recent.id)")
+                                    Divider()
+                                }
+                            }
                         }
                         ForEach(viewModel.results, id: \.self) { completion in
                             Button {
@@ -146,10 +252,36 @@ struct LocationSearchField: View {
                 )
                 viewModel.queryFragment = completion.title
                 isFocused = false
+                onPlaceChosen?(completion.title, completion.subtitle, coordinate)
             } catch {
                 // Auflösung fehlgeschlagen (z. B. kein Treffer) – Auswahl bleibt leer
             }
         }
+    }
+
+    /// Anders als `select(_ completion:)` keine asynchrone Adressauflösung nötig - die Koordinate
+    /// liegt beim Favoriten schon vor.
+    private func select(_ favorite: FavoritePlace) {
+        selectedPlace = SelectedPlace(
+            title: favorite.title,
+            subtitle: favorite.subtitle,
+            coordinate: favorite.clCoordinate
+        )
+        viewModel.queryFragment = favorite.title
+        isFocused = false
+    }
+
+    /// Wie `select(_ favorite:)` ohne erneute Adressauflösung - meldet die Auswahl zusätzlich über
+    /// `onPlaceChosen`, damit der Eintrag in `RecentPlaceStore` an die erste Stelle rückt.
+    private func select(_ recent: RecentPlace) {
+        selectedPlace = SelectedPlace(
+            title: recent.title,
+            subtitle: recent.subtitle,
+            coordinate: recent.clCoordinate
+        )
+        viewModel.queryFragment = recent.title
+        isFocused = false
+        onPlaceChosen?(recent.title, recent.subtitle, recent.clCoordinate)
     }
 
     private func clearSelection() {
