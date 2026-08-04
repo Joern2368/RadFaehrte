@@ -325,6 +325,51 @@ nonisolated enum FranceRegion: String, CaseIterable, Identifiable, DownloadableR
     }
 }
 
+/// Italienische Makro-Regionen (Geofabrik-Einteilung: download.geofabrik.de/europe/italy/<region>),
+/// für die ein Wege-Graph heruntergeladen werden kann - eigener Typ statt eines Falls in
+/// `EuropaLand` (analog zu `FranceRegion`), weil Italien als Ganzes für einen einzelnen
+/// Wege-Graphen zu groß ist: 2,06 GB PBF ergaben einen 2,67 GB großen Wege-Graphen, der
+/// GitHubs 2-GiB-Asset-Limit überschritt (Upload schlug fehl, s. ROADMAP.md "Italien als
+/// vierzehntes Land"). Nur 5 Makro-Regionen statt vieler kleiner Regionen wie bei Frankreich -
+/// Geofabrik bietet für Italien keine feinere Einteilung an. Jede liegt zwischen 203 MB (Isole)
+/// und 592 MB (Nord-Est), deutlich unter dem Limit. Kuratierte Routen (`italy.sqlite`) sind
+/// davon unabhängig bereits vollständig für ganz Italien vorhanden.
+nonisolated enum ItalyRegion: String, CaseIterable, Identifiable, DownloadableRegion {
+    case centro
+    case isole
+    case nordEst = "nord-est"
+    case nordOvest = "nord-ovest"
+    case sud
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .centro: return "Mittelitalien"
+        case .isole: return "Inseln (Sizilien, Sardinien)"
+        case .nordEst: return "Nordostitalien"
+        case .nordOvest: return "Nordwestitalien"
+        case .sud: return "Süditalien"
+        }
+    }
+
+    /// Aus den PBF-Headern per Range-Request ermittelt (analog `FranceRegion.boundingBox`).
+    var boundingBox: RegionBoundingBox {
+        switch self {
+        case .centro:
+            return RegionBoundingBox(minLat: 40.21, maxLat: 44.48, minLon: 8.61, maxLon: 14.98)
+        case .isole:
+            return RegionBoundingBox(minLat: 34.38, maxLat: 41.52, minLon: 7.42, maxLon: 15.71)
+        case .nordEst:
+            return RegionBoundingBox(minLat: 43.73, maxLat: 47.31, minLon: 9.20, maxLon: 14.83)
+        case .nordOvest:
+            return RegionBoundingBox(minLat: 43.44, maxLat: 47.06, minLon: 5.53, maxLon: 11.43)
+        case .sud:
+            return RegionBoundingBox(minLat: 37.80, maxLat: 42.91, minLon: 13.00, maxLon: 20.00)
+        }
+    }
+}
+
 /// Verwaltet heruntergeladene Wege-Graphen (siehe `WayGraphRepository`) für die
 /// "ruhige Wege"-Offline-Routing-Engine, jeweils eine SQLite-Datei pro Region in
 /// `Documents/WayGraphs/` (read-only gebündelte Ressourcen wie `routes.sqlite` liegen dagegen im

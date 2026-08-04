@@ -40,6 +40,9 @@ struct RootTabView: View {
     /// Analog `wayGraphStore`, aber für die 21 französischen Regionen (Frankreich als Ganzes ist
     /// für den Wege-Graph-Bau zu groß, s. `FranceRegion`-Doc-Kommentar).
     private let franceWayGraphStore = WayGraphStore<FranceRegion>()
+    /// Analog `franceWayGraphStore`, aber für die 5 italienischen Makro-Regionen (s.
+    /// `ItalyRegion`-Doc-Kommentar).
+    private let italyWayGraphStore = WayGraphStore<ItalyRegion>()
 
     var body: some View {
         ZStack {
@@ -51,6 +54,7 @@ struct RootTabView: View {
                         wayGraphStore: wayGraphStore,
                         europaWayGraphStore: europaWayGraphStore,
                         franceWayGraphStore: franceWayGraphStore,
+                        italyWayGraphStore: italyWayGraphStore,
                         onTourSaved: { drivenToursVersion += 1 }
                     )
                 }
@@ -71,7 +75,8 @@ struct RootTabView: View {
                     SettingsView(
                         wayGraphStore: wayGraphStore,
                         europaWayGraphStore: europaWayGraphStore,
-                        franceWayGraphStore: franceWayGraphStore
+                        franceWayGraphStore: franceWayGraphStore,
+                        italyWayGraphStore: italyWayGraphStore
                     )
                 }
             }
@@ -114,6 +119,7 @@ struct RootTabView: View {
         let paths = Bundesland.allCases.compactMap { wayGraphStore.path(for: $0) }
             + EuropaLand.allCases.compactMap { europaWayGraphStore.path(for: $0) }
             + FranceRegion.allCases.compactMap { franceWayGraphStore.path(for: $0) }
+            + ItalyRegion.allCases.compactMap { italyWayGraphStore.path(for: $0) }
         guard !paths.isEmpty else { return }
         Task.detached(priority: .background) {
             for path in paths {

@@ -111,9 +111,28 @@ nonisolated extension FranceRegion {
     }
 }
 
+/// GitHub-Release-Adresse und tatsächliche Downloadgröße der Wege-Graphen für die 5
+/// italienischen Makro-Regionen - eigener Release-Tag (`way-graphs-it-v1`), analog
+/// `way-graphs-fr-v1`.
+nonisolated extension ItalyRegion {
+    var downloadURL: URL {
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/way-graphs-it-v1/\(rawValue)_ways.sqlite")!
+    }
+
+    var approximateSizeMB: Int {
+        switch self {
+        case .centro: return 527
+        case .isole: return 343
+        case .nordEst: return 616
+        case .nordOvest: return 697
+        case .sud: return 516
+        }
+    }
+}
+
 /// Lädt Wege-Graphen für die "ruhige Wege"-Offline-Routing-Engine herunter (siehe
 /// `WayGraphStore`, `BikeRoutingEngine`) und meldet den Fortschritt für die Einstellungen-UI.
-/// Generisch über `Region` (`Bundesland`, `EuropaLand` oder `FranceRegion`), analog `WayGraphStore`.
+/// Generisch über `Region` (`Bundesland`, `EuropaLand`, `FranceRegion` oder `ItalyRegion`), analog `WayGraphStore`.
 @Observable
 final class WayGraphDownloadManager<Region: DownloadableRegion> {
     private let store: WayGraphStore<Region>

@@ -17,18 +17,31 @@ import SwiftUI
 /// (Fallnamen dort schon alphabetisch angelegt), bei `EuropaLand`/`FranceRegion` nicht (Fallnamen
 /// dort englisch/französisch, `displayName` aber Deutsch, s. z. B. `.austria` vs. "Österreich").
 ///
-/// `trailingLabel`/`trailingContent` (optional, Standard leer) hängen eine zusätzliche Zeile in
-/// die alphabetisch einsortierte Regionsliste ein - genutzt in der Europa-Liste für einen
-/// "Frankreich"-Eintrag, der (statt selbst herunterladbar zu sein) zur separaten
-/// `FranceRegion`-Liste weiterleitet, da Frankreich als Ganzes für den Wege-Graph-Bau zu groß ist
-/// und stattdessen in 21 Regionen aufgeteilt wurde (Nutzerwunsch, s. ROADMAP.md).
-/// `trailingLabel` bestimmt dabei nur die Einsortierungs-Position (Vergleich mit den
-/// `displayName`s), nicht die tatsächliche Darstellung - die liefert `trailingContent`.
-struct OfflineMapsView<Region: DownloadableRegion, TrailingContent: View>: View where Region.ID == String {
+/// `extraRows` (optional, Standard leer) hängt zusätzliche Zeilen in die alphabetisch
+/// einsortierte Regionsliste ein - genutzt in der Europa-Liste für "Frankreich"/"Italien", die
+/// (statt selbst herunterladbar zu sein) zu den separaten `FranceRegion`-/`ItalyRegion`-Listen
+/// weiterleiten, da beide Länder als Ganzes für den Wege-Graph-Bau zu groß sind und stattdessen
+/// in Regionen aufgeteilt wurden (Nutzerwunsch, s. ROADMAP.md). `AnyView` statt eines generischen
+/// Parameters, da es potenziell mehrere unterschiedlich aussehende Extra-Zeilen gleichzeitig sein
+/// können (anders als der frühere Einzel-`trailingContent`-Versuch, der nur "Frankreich" allein
+/// korrekt einsortieren konnte) - bei einer Handvoll Zeilen in einer Einstellungen-Liste keine
+/// spürbare Kostenfrage. Jede Zeile trägt ein `label` nur für die Einsortierungs-Position
+/// (Vergleich mit den `displayName`s), nicht für die tatsächliche Darstellung.
+struct OfflineMapsView<Region: DownloadableRegion>: View where Region.ID == String {
+    struct ExtraRow {
+        let label: String
+        let content: AnyView
+
+        init(label: String, @ViewBuilder content: () -> some View) {
+            self.label = label
+            self.content = AnyView(content())
+        }
+    }
+
     private struct Row: Identifiable {
         enum Kind {
             case region(Region)
-            case trailing
+            case extra(AnyView)
         }
         let id: String
         let kind: Kind
@@ -37,31 +50,28 @@ struct OfflineMapsView<Region: DownloadableRegion, TrailingContent: View>: View 
     @State private var downloadManager: WayGraphDownloadManager<Region>
     private let title: String
     private let footer: String
-    private let trailingLabel: String?
-    private let trailingContent: TrailingContent
+    private let extraRows: [ExtraRow]
 
     init(
         store: WayGraphStore<Region>, title: String, footer: String,
-        trailingLabel: String? = nil,
-        @ViewBuilder trailingContent: () -> TrailingContent = { EmptyView() }
+        extraRows: [ExtraRow] = []
     ) {
         _downloadManager = State(initialValue: WayGraphDownloadManager(store: store))
         self.title = title
         self.footer = footer
-        self.trailingLabel = trailingLabel
-        self.trailingContent = trailingContent()
+        self.extraRows = extraRows
     }
 
     private var rows: [Row] {
         var result = Region.allCases
             .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
             .map { Row(id: $0.id, kind: .region($0)) }
-        if let trailingLabel {
+        for (index, extra) in extraRows.enumerated() {
             let insertIndex = result.firstIndex {
                 guard case let .region(region) = $0.kind else { return false }
-                return trailingLabel.localizedStandardCompare(region.displayName) == .orderedAscending
+                return extra.label.localizedStandardCompare(region.displayName) == .orderedAscending
             } ?? result.count
-            result.insert(Row(id: "trailing", kind: .trailing), at: insertIndex)
+            result.insert(Row(id: "extra-\(index)", kind: .extra(extra.content)), at: insertIndex)
         }
         return result
     }
@@ -73,8 +83,8 @@ struct OfflineMapsView<Region: DownloadableRegion, TrailingContent: View>: View 
                     switch row.kind {
                     case .region(let region):
                         regionRow(region)
-                    case .trailing:
-                        trailingContent
+                    case .extra(let view):
+                        view
                     }
                 }
             } footer: {
