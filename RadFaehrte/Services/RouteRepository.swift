@@ -4,6 +4,7 @@
 //
 
 import CoreLocation
+import Foundation
 import SQLite3
 
 /// Liest die im App-Bundle mitgelieferten Radrouten-Datenbanken (read-only). Deutschland
@@ -20,6 +21,16 @@ nonisolated final class RouteRepository {
     private static let bundledResourceNames = ["routes", "netherlands", "poland", "sweden", "denmark", "belgium", "luxembourg", "switzerland", "france", "austria", "czechia", "slovakia", "albania", "italy"]
 
     private var databases: [OpaquePointer] = []
+
+    /// Schützt alle SQLite-Zugriffe unten vor gleichzeitiger Nutzung durch mehrere Threads.
+    /// Live-Crash gefunden (2026-08-03): `ContentView` startet die Kombinationssuche über
+    /// `Task.detached` (mehrfach überlappend möglich, da eine zuvor als veraltet erkannte Suche
+    /// erst nach ihrem synchronen SQLite-Teil auf `Task.isCancelled` prüft) - zwei Threads, die
+    /// gleichzeitig dieselbe `OpaquePointer`-Verbindung verwenden, führten zu einem
+    /// `EXC_BAD_ACCESS` mitten in `libsqlite3.dylib`. Ein einfaches `NSLock` um jede öffentliche
+    /// Methode serialisiert den Zugriff, unabhängig davon, in welchem SQLite-Threading-Modus die
+    /// Systembibliothek tatsächlich läuft.
+    private let lock = NSLock()
 
     /// Separate, optionale Sidecar-DB mit Anschlussstellen zwischen benannten Fernwegen
     /// (`Scripts/find_route_junctions.py`), fürs Kombinieren mehrerer Routen. Anderes Schema als
@@ -66,6 +77,8 @@ nonisolated final class RouteRepository {
     func routesOverlapping(
         minLon: Double, minLat: Double, maxLon: Double, maxLat: Double
     ) -> [BikeRoute] {
+        lock.lock()
+        defer { lock.unlock() }
         var seenIds: Set<Int64> = []
         var results: [BikeRoute] = []
         for db in databases {
@@ -125,6 +138,8 @@ nonisolated final class RouteRepository {
     func routeSummaries(
         minLon: Double, minLat: Double, maxLon: Double, maxLat: Double, limit: Int
     ) -> [RouteSummary] {
+        lock.lock()
+        defer { lock.unlock() }
         var seenIds: Set<Int64> = []
         var results: [RouteSummary] = []
         for db in databases {
@@ -177,6 +192,8 @@ nonisolated final class RouteRepository {
     /// ~50.000 Zeilen ist für eine gedebouncte Texteingabe (kein Query pro Tastendruck) aber
     /// unproblematisch; `limit` deckelt zusätzlich die Laufzeit.
     func routeSummaries(matchingName query: String, limit: Int) -> [RouteSummary] {
+        lock.lock()
+        defer { lock.unlock() }
         var seenIds: Set<Int64> = []
         var results: [RouteSummary] = []
         for db in databases {
@@ -253,6 +270,8 @@ nonisolated final class RouteRepository {
     /// für Aufrufer, die selbst anhand eines geografischen Kontexts die passende Kopie auswählen
     /// müssen, stattdessen `allRoutes(withId:)` verwenden (s. `RouteMatcher.findCombinedMatches`).
     func route(withId id: Int64) -> BikeRoute? {
+        lock.lock()
+        defer { lock.unlock() }
         for db in databases {
             if let route = route(withId: id, in: db) {
                 return route
@@ -268,7 +287,9 @@ nonisolated final class RouteRepository {
     /// die Kombinationssuche, die dieselbe ID aus unterschiedlichen Richtungen/Ländern erreichen
     /// kann und je nach Einstiegspunkt eine andere Kopie braucht.
     func allRoutes(withId id: Int64) -> [BikeRoute] {
-        databases.compactMap { route(withId: id, in: $0) }
+        lock.lock()
+        defer { lock.unlock() }
+        return databases.compactMap { route(withId: id, in: $0) }
     }
 
     private func route(withId id: Int64, in db: OpaquePointer) -> BikeRoute? {
@@ -299,6 +320,8 @@ nonisolated final class RouteRepository {
     /// braucht - die wird ohnehin erst bei tatsächlichem Besuch über `route(withId:)` geladen und
     /// gecacht. `nil`, wenn die ID in keiner Datenbank existiert oder kein `ref`-Tag gesetzt ist.
     func ref(forRouteId id: Int64) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
         for db in databases {
             let sql = "SELECT ref FROM routes WHERE id = ?"
             var statement: OpaquePointer?
@@ -319,6 +342,8 @@ nonisolated final class RouteRepository {
     /// `Scripts/find_route_junctions.py` vorab berechneten Sidecar-DB). Leeres Array, wenn die
     /// Sidecar-Datei fehlt oder die Route keine Anschlüsse hat - kein Crash in beiden Fällen.
     func junctions(forRouteId id: Int64) -> [(partnerRouteId: Int64, coordinate: CLLocationCoordinate2D)] {
+        lock.lock()
+        defer { lock.unlock() }
         guard let junctionsDatabase else { return [] }
 
         let sql = "SELECT route_b, lon, lat FROM junctions WHERE route_a = ?"
