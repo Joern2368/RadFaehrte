@@ -364,6 +364,25 @@ struct RadFaehrteTests {
         #expect(euroVelo7?.lines.isEmpty == false)
     }
 
+    @Test func routeRepositoryFindsRouteNearAndorraLaVella() async throws {
+        // Regressionstest für die zusätzliche Andorra-Datenbank (andorra.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-/Österreich-/Tschechien-/Slowakei-/Albanien-/
+        // Italien-/Spanien-/Portugal-/Malta-Tests oben. Andorra hat keine EuroVelo-Route (kleiner
+        // Bergstaat), stattdessen lokale "CIMA"-Bergradrouten.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 1.51, minLat: 42.51, maxLon: 1.55, maxLat: 42.54
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("Andorra la Vella") == true })
+
+        let route = routes.first { $0.name?.contains("Andorra la Vella") == true }
+        #expect(route?.lines.isEmpty == false)
+    }
+
     @Test func routeMatcherFindsWeserRadwegForBremenAchim() async throws {
         let matcher = RouteMatcher(repository: RouteRepository())
 

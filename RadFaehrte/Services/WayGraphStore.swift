@@ -153,6 +153,7 @@ nonisolated enum Bundesland: String, CaseIterable, Identifiable, DownloadableReg
 /// UI-Bezeichnung.
 nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableRegion {
     case albania
+    case andorra
     case austria
     case belgium
     case czechia
@@ -171,6 +172,7 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
     var displayName: String {
         switch self {
         case .albania: return "Albanien"
+        case .andorra: return "Andorra"
         case .austria: return "Österreich"
         case .belgium: return "Belgien"
         case .czechia: return "Tschechien"
@@ -190,6 +192,8 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
         switch self {
         case .albania:
             return RegionBoundingBox(minLat: 39.63, maxLat: 42.66, minLon: 18.90, maxLon: 21.06)
+        case .andorra:
+            return RegionBoundingBox(minLat: 42.43, maxLat: 42.66, minLon: 1.41, maxLon: 1.79)
         case .austria:
             return RegionBoundingBox(minLat: 46.37, maxLat: 49.02, minLon: 9.53, maxLon: 17.16)
         case .belgium:
