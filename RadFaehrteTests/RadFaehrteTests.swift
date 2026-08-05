@@ -458,6 +458,26 @@ struct RadFaehrteTests {
         #expect(euroVelo8?.lines.isEmpty == false)
     }
 
+    @Test func routeRepositoryFindsRouteNearSarajevo() async throws {
+        // Regressionstest für die zusätzliche Bosnien-und-Herzegowina-Datenbank
+        // (bosnia-herzegovina.sqlite, s. ROADMAP.md) - analog zu den Niederlande-/Polen-/
+        // Schweden-/Dänemark-/Belgien-/Luxemburg-/Schweiz-/Frankreich-/Österreich-/Tschechien-/
+        // Slowakei-/Albanien-/Italien-/Spanien-/Portugal-/Malta-/Andorra-/Liechtenstein-/
+        // Nordmazedonien-/Kosovo-/Montenegro-Tests oben. Keine durchgehende EuroVelo-Route,
+        // stattdessen eine lokale Route bei Baščaršija (Sarajevos Altstadt).
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 18.42, minLat: 43.84, maxLon: 18.47, maxLat: 43.87
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("Baščaršija") == true })
+
+        let route = routes.first { $0.name?.contains("Baščaršija") == true }
+        #expect(route?.lines.isEmpty == false)
+    }
+
     @Test func routeMatcherFindsWeserRadwegForBremenAchim() async throws {
         let matcher = RouteMatcher(repository: RouteRepository())
 
