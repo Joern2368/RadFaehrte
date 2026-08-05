@@ -419,6 +419,26 @@ struct RadFaehrteTests {
         #expect(euroVelo11?.lines.isEmpty == false)
     }
 
+    @Test func routeRepositoryFindsRouteNearPeja() async throws {
+        // Regressionstest für die zusätzliche Kosovo-Datenbank (kosovo.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-/Österreich-/Tschechien-/Slowakei-/Albanien-/
+        // Italien-/Spanien-/Portugal-/Malta-/Andorra-/Liechtenstein-/Nordmazedonien-Tests oben.
+        // Kosovo hat keine EuroVelo-Route, stattdessen lokale Radwanderwege im Rugova-Gebirge bei
+        // Peja.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 20.05, minLat: 42.55, maxLon: 20.15, maxLat: 42.65
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("Thematic Trail") == true })
+
+        let route = routes.first { $0.name?.contains("Thematic Trail") == true }
+        #expect(route?.lines.isEmpty == false)
+    }
+
     @Test func routeMatcherFindsWeserRadwegForBremenAchim() async throws {
         let matcher = RouteMatcher(repository: RouteRepository())
 
