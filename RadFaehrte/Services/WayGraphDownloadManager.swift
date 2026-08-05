@@ -65,6 +65,7 @@ nonisolated extension EuropaLand {
         case .belgium: return 299
         case .czechia: return 495
         case .denmark: return 286
+        case .liechtenstein: return 4
         case .luxembourg: return 35
         case .malta: return 8
         case .netherlands: return 428
