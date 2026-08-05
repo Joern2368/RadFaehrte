@@ -11,9 +11,21 @@ import Observation
 final class LocationManager: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private let motionManager = CMMotionManager()
+    private let altimeter = CMAltimeter()
 
     var authorizationStatus: CLAuthorizationStatus
     var currentLocation: CLLocation?
+    /// Barometer statt `CLLocation.altitude` (GPS-Höhe) für Höhenmeter bergauf/-ab: Nutzer-Meldung
+    /// 2026-08-05 zeigte auf einer komplett flachen Fahrt in Bremen 80 Höhenmeter - GPS-Höhe ist
+    /// ohne Barometer stark verrauscht (Fehler im zweistelligen Meterbereich), was sich bei
+    /// Punkt-zu-Punkt-Summation (wie bei `tourDistanceMeters`) in beide Richtungen zu deutlich
+    /// falschen Werten aufsummiert, selbst wenn die Nettohöhe sich kaum ändert. `CMAltimeter`
+    /// liefert die relative Höhenänderung aus dem Luftdrucksensor, den praktisch jedes iPhone seit
+    /// dem 6er verbaut hat - genau der Ansatz, den auch Komoot/Strava für Höhenmeter nutzen.
+    let isBarometerAvailable = CMAltimeter.isRelativeAltitudeAvailable()
+    private(set) var elevationGainMeters: Double = 0
+    private(set) var elevationLossMeters: Double = 0
+    private var lastRelativeAltitudeMeters: Double?
     /// Für die Navigationskamera geglättete Position (exponentieller Tiefpassfilter) - dämpft
     /// GPS-Rauschen, das sonst als sichtbares Ruckeln auffiel (Nutzer-Vergleich mit Komoot).
     /// Bewusst getrennt von `currentLocation`: Distanzsummierung, Abweichungserkennung und
@@ -59,12 +71,41 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         magnetometerBiasEstimate = nil
         manager.startUpdatingLocation()
         startDeviceMotionHeadingUpdates()
+        startBarometerUpdates()
         Self.appendDebugLog("=== Session gestartet \(Date()) ===")
     }
 
     func stopUpdating() {
         manager.stopUpdatingLocation()
         motionManager.stopDeviceMotionUpdates()
+        altimeter.stopRelativeAltitudeUpdates()
+    }
+
+    /// Setzt die Höhenmeter-Zählung auf 0 - separat von `startUpdating()`, da Letzteres auch
+    /// zwischenzeitlich (z. B. nach Neuberechnung) erneut aufgerufen werden kann, ohne dass dabei
+    /// eine laufende Tour ihre bisherigen Höhenmeter verlieren soll. Wird stattdessen gezielt bei
+    /// Tour-Start gerufen (analog zum Zurücksetzen von `tourDistanceMeters` in `ContentView`).
+    func resetElevationTracking() {
+        elevationGainMeters = 0
+        elevationLossMeters = 0
+        lastRelativeAltitudeMeters = nil
+    }
+
+    private func startBarometerUpdates() {
+        guard isBarometerAvailable else { return }
+        altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, error in
+            guard let self, let data, error == nil else { return }
+            let altitude = data.relativeAltitude.doubleValue
+            if let lastRelativeAltitudeMeters {
+                let delta = altitude - lastRelativeAltitudeMeters
+                if delta > 0 {
+                    elevationGainMeters += delta
+                } else {
+                    elevationLossMeters += -delta
+                }
+            }
+            lastRelativeAltitudeMeters = altitude
+        }
     }
 
     /// Nutzt CoreMotion (Gyroskop + Beschleunigungssensor + Magnetometer fusioniert über

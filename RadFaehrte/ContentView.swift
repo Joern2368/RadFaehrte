@@ -253,8 +253,10 @@ struct ContentView: View {
     @State private var tourStartTime: Date?
     @State private var tourDistanceMeters: Double = 0
     /// Aufsummierte positive/negative Höhenänderung seit Navigationsstart (siehe
-    /// `accumulateTourDistance`). Naive Punkt-zu-Punkt-Summe wie bei `tourDistanceMeters` - ohne
-    /// Barometer entsprechend GPS-rauschanfällig, aber für eine grobe Anzeige ausreichend.
+    /// `accumulateTourDistance`). Wird von `locationManager.elevationGainMeters`/
+    /// `elevationLossMeters` gespiegelt, sobald ein Barometer verfügbar ist (s. dort) - nur auf
+    /// Geräten ganz ohne Barometer fällt dies auf die alte, GPS-rauschanfällige Punkt-zu-Punkt-Summe
+    /// aus `CLLocation.altitude` zurück.
     @State private var tourElevationGainMeters: Double = 0
     @State private var tourElevationLossMeters: Double = 0
     @State private var tourMaxSpeedKmh: Double = 0
@@ -626,6 +628,9 @@ struct ContentView: View {
         locationManager.requestAuthorization()
         locationManager.startUpdating()
         locationManager.setBackgroundUpdatesEnabled(true)
+        if isVoiceGuidanceEnabled {
+            voiceAnnouncer.prepare()
+        }
         UIApplication.shared.isIdleTimerDisabled = true
         isNavigating = true
         isFollowingUser = true
@@ -635,6 +640,7 @@ struct ContentView: View {
         tourDistanceMeters = 0
         tourElevationGainMeters = 0
         tourElevationLossMeters = 0
+        locationManager.resetElevationTracking()
         tourMaxSpeedKmh = 0
         tourMovingSeconds = 0
         lastMovingUpdateTimestamp = nil
@@ -1071,7 +1077,10 @@ struct ContentView: View {
         guard isMoving else { return }
         if let lastTourLocation {
             tourDistanceMeters += location.distance(from: lastTourLocation)
-            if location.verticalAccuracy >= 0, lastTourLocation.verticalAccuracy >= 0 {
+            if locationManager.isBarometerAvailable {
+                tourElevationGainMeters = locationManager.elevationGainMeters
+                tourElevationLossMeters = locationManager.elevationLossMeters
+            } else if location.verticalAccuracy >= 0, lastTourLocation.verticalAccuracy >= 0 {
                 let elevationDelta = location.altitude - lastTourLocation.altitude
                 if elevationDelta > 0 {
                     tourElevationGainMeters += elevationDelta
@@ -1144,11 +1153,33 @@ struct ContentView: View {
     /// Eigener, früherer Auslösepunkt nur für die "Jetzt"-Sprachansage (s.
     /// `advanceDirectRouteStepIfNeeded`) - bewusst **nicht** an `stepAdvanceLeadDistanceMeters`
     /// gekoppelt: Live-Test-Feedback zeigte, dass die Ansage bei 10 m fast immer zu spät kam - der
-    /// gesprochene Satz ("Jetzt rechts abbiegen auf ...") braucht selbst schon rund 2,5-3 Sekunden,
-    /// bei z. B. 20 km/h bleiben bei 10 m aber nur noch ca. 1,8 Sekunden bis zur Abbiegung. 20 m
-    /// ist eine grobe Schätzung für genug Vorlauf bei typischem Renntempo, keine exakte
-    /// Berechnung - ggf. weiter live nachjustieren.
-    private static let voiceNowAnnouncementLeadDistanceMeters: Double = 20
+    /// gesprochene Satz ("Jetzt rechts abbiegen auf ...") braucht selbst schon rund 2,5-3 Sekunden.
+    /// Ein fester Meter-Wert kann das nicht für jedes Tempo richtig treffen (bei z. B. 20 km/h
+    /// bleiben bei 10 m nur noch ca. 1,8 Sekunden bis zur Abbiegung, bei höherem Tempo reicht selbst
+    /// ein größerer fester Wert nicht mehr) - deshalb stattdessen tempoabhängig über
+    /// `voiceNowAnnouncementLeadDistance(for:)` berechnet: aktuelles Tempo (`location.speed`) mal
+    /// geschätzter Sprechdauer, damit der Satz unabhängig vom Tempo kurz vor der Abbiegung fertig
+    /// gesprochen ist, mit Unter-/Obergrenze für Stillstand bzw. unplausibel hohe Werte. Nach
+    /// Live-Test-Feedback ("kann noch 5 m früher kommen", 2026-08-05) zusätzlich
+    /// `voiceNowAnnouncementSafetyMarginMeters` - pauschaler Aufschlag statt nur höherer
+    /// Sprechdauer-Schätzung, damit sich der Effekt nicht mit dem Tempo verwässert (ein
+    /// Sprechdauer-Aufschlag würde bei niedrigem Tempo kaum etwas bewirken, da dort ohnehin die
+    /// Untergrenze greift) - Unter-/Obergrenze deshalb ebenfalls um 5 m angehoben, damit der
+    /// Vorlauf über den ganzen Tempobereich einheitlich 5 m früher liegt.
+    private static let voiceNowAnnouncementSpeechDurationEstimate: TimeInterval = 3.5
+    private static let voiceNowAnnouncementSafetyMarginMeters: Double = 5
+    private static let voiceNowAnnouncementMinLeadDistanceMeters: Double = 20
+    private static let voiceNowAnnouncementMaxLeadDistanceMeters: Double = 50
+
+    private func voiceNowAnnouncementLeadDistance(for location: CLLocation) -> Double {
+        let speed = max(location.speed, 0)
+        let speedBasedLead = speed * Self.voiceNowAnnouncementSpeechDurationEstimate
+            + Self.voiceNowAnnouncementSafetyMarginMeters
+        return min(
+            max(speedBasedLead, Self.voiceNowAnnouncementMinLeadDistanceMeters),
+            Self.voiceNowAnnouncementMaxLeadDistanceMeters
+        )
+    }
 
     private func advanceDirectRouteStepIfNeeded(_ location: CLLocation) {
         guard let (route, currentIndex) = activeStepRoute else { return }
@@ -1161,7 +1192,7 @@ struct ContentView: View {
 
         if isVoiceGuidanceEnabled, isTurnInstruction(steps[currentIndex]),
            lastVoiceNowAnnouncementStepIndex != currentIndex,
-           distanceToStepEnd < Self.voiceNowAnnouncementLeadDistanceMeters {
+           distanceToStepEnd < voiceNowAnnouncementLeadDistance(for: location) {
             lastVoiceNowAnnouncementStepIndex = currentIndex
             voiceAnnouncer.speak("Jetzt \(Self.lowercasingFirstLetter(steps[currentIndex].instructions))")
         }
