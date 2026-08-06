@@ -64,6 +64,7 @@ nonisolated extension EuropaLand {
         case .austria: return 929
         case .belgium: return 299
         case .bosniaHerzegovina: return 223
+        case .croatia: return 244
         case .czechia: return 495
         case .denmark: return 286
         case .kosovo: return 58

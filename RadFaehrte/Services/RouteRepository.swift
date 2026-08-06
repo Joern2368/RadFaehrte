@@ -18,7 +18,7 @@ import SQLite3
 /// `route(withId:)`).
 nonisolated final class RouteRepository {
 
-    private static let bundledResourceNames = ["routes", "netherlands", "poland", "sweden", "denmark", "belgium", "luxembourg", "switzerland", "france", "austria", "czechia", "slovakia", "albania", "italy", "spain", "portugal", "malta", "andorra", "liechtenstein", "macedonia", "kosovo", "montenegro", "bosnia-herzegovina", "serbia"]
+    private static let bundledResourceNames = ["routes", "netherlands", "poland", "sweden", "denmark", "belgium", "luxembourg", "switzerland", "france", "austria", "czechia", "slovakia", "albania", "italy", "spain", "portugal", "malta", "andorra", "liechtenstein", "macedonia", "kosovo", "montenegro", "bosnia-herzegovina", "serbia", "croatia"]
 
     private var databases: [OpaquePointer] = []
 
