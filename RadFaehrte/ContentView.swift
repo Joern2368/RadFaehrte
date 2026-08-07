@@ -172,6 +172,11 @@ struct ContentView: View {
     /// Wird proaktiv bei jeder Auswahl geladen (`.onChange(of: selectedMatch)`), nicht erst beim
     /// Start der Navigation, damit die Anzeige nicht erst nach "Los" nachzieht.
     @State private var curatedRoute: DirectRoute?
+    /// Ob `curatedRoute` gerade für die aktuelle Auswahl (`selectedMatch`/`combinedMatch`) im
+    /// Hintergrund geladen wird - steuert, ob der "Los"-Button (s. `isPreparingSelectedRouteForStart`)
+    /// blass/deaktiviert dargestellt wird, damit die Navigation nicht ohne die kuratierten
+    /// Abbiege-Hinweise startet.
+    @State private var isPreparingCuratedRouteForNavigation = false
     @State private var currentCuratedStepIndex = 0
     /// Straßennamen/Abbiege-Hinweise für die kombinierte Kette in `combinedRouteDetail` (On-Demand-
     /// Vorschau, analog `curatedRouteStepsResult` für Einzeltreffer) - über alle Etappen
@@ -298,6 +303,22 @@ struct ContentView: View {
         isNavigating && !isNavigationBannerVisible
     }
 
+    /// Ob für die aktuell gewählte Route (`isDirectRouteMode`/`selectedMatch`/`combinedMatch`) noch
+    /// Daten im Hintergrund nachgeladen werden, die für die Turn-by-Turn-Navigation gebraucht werden
+    /// (Alternativrouten bei der direkten Fahrrad-Route bzw. `curatedRoute` bei kuratierten
+    /// Treffern) - lässt den "Los"-Button so lange blass/deaktiviert erscheinen, damit die Navigation
+    /// nicht mit noch unvollständigen Routendaten startet. Zusätzlich bleibt der Button auch blass,
+    /// solange `isSearchingCombinedMatch` noch läuft (Nutzer-Beobachtung 2026-08-07: Button stand
+    /// schon aktiv/blau da, während im Hintergrund noch nach einer Routen-Kombination gesucht wurde
+    /// - ohne diese Bedingung konnte man mit "Los" losfahren, bevor die eigentlich passendere
+    /// Kombination überhaupt zur Auswahl stand).
+    private var isPreparingSelectedRouteForStart: Bool {
+        if isSearchingCombinedMatch { return true }
+        if isDirectRouteMode { return isLoadingDirectRoute }
+        if selectedMatch != nil || combinedMatch != nil { return isPreparingCuratedRouteForNavigation }
+        return false
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             if !isNavigating {
@@ -354,6 +375,7 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(isPreparingSelectedRouteForStart)
 
                         if exportableRoute != nil {
                             Button {
@@ -527,6 +549,7 @@ struct ContentView: View {
             } else {
                 curatedRoute = nil
                 currentCuratedStepIndex = 0
+                isPreparingCuratedRouteForNavigation = false
             }
         }
         .onChange(of: combinedMatch) { _, newValue in
@@ -551,6 +574,7 @@ struct ContentView: View {
             } else {
                 curatedRoute = nil
                 currentCuratedStepIndex = 0
+                isPreparingCuratedRouteForNavigation = false
             }
         }
         .onChange(of: routeToStart) { _, newValue in
@@ -1152,34 +1176,11 @@ struct ContentView: View {
 
     /// Eigener, früherer Auslösepunkt nur für die "Jetzt"-Sprachansage (s.
     /// `advanceDirectRouteStepIfNeeded`) - bewusst **nicht** an `stepAdvanceLeadDistanceMeters`
-    /// gekoppelt: Live-Test-Feedback zeigte, dass die Ansage bei 10 m fast immer zu spät kam - der
-    /// gesprochene Satz ("Jetzt rechts abbiegen auf ...") braucht selbst schon rund 2,5-3 Sekunden.
-    /// Ein fester Meter-Wert kann das nicht für jedes Tempo richtig treffen (bei z. B. 20 km/h
-    /// bleiben bei 10 m nur noch ca. 1,8 Sekunden bis zur Abbiegung, bei höherem Tempo reicht selbst
-    /// ein größerer fester Wert nicht mehr) - deshalb stattdessen tempoabhängig über
-    /// `voiceNowAnnouncementLeadDistance(for:)` berechnet: aktuelles Tempo (`location.speed`) mal
-    /// geschätzter Sprechdauer, damit der Satz unabhängig vom Tempo kurz vor der Abbiegung fertig
-    /// gesprochen ist, mit Unter-/Obergrenze für Stillstand bzw. unplausibel hohe Werte. Nach
-    /// Live-Test-Feedback ("kann noch 5 m früher kommen", 2026-08-05) zusätzlich
-    /// `voiceNowAnnouncementSafetyMarginMeters` - pauschaler Aufschlag statt nur höherer
-    /// Sprechdauer-Schätzung, damit sich der Effekt nicht mit dem Tempo verwässert (ein
-    /// Sprechdauer-Aufschlag würde bei niedrigem Tempo kaum etwas bewirken, da dort ohnehin die
-    /// Untergrenze greift) - Unter-/Obergrenze deshalb ebenfalls um 5 m angehoben, damit der
-    /// Vorlauf über den ganzen Tempobereich einheitlich 5 m früher liegt.
-    private static let voiceNowAnnouncementSpeechDurationEstimate: TimeInterval = 3.5
-    private static let voiceNowAnnouncementSafetyMarginMeters: Double = 5
-    private static let voiceNowAnnouncementMinLeadDistanceMeters: Double = 20
-    private static let voiceNowAnnouncementMaxLeadDistanceMeters: Double = 50
-
-    private func voiceNowAnnouncementLeadDistance(for location: CLLocation) -> Double {
-        let speed = max(location.speed, 0)
-        let speedBasedLead = speed * Self.voiceNowAnnouncementSpeechDurationEstimate
-            + Self.voiceNowAnnouncementSafetyMarginMeters
-        return min(
-            max(speedBasedLead, Self.voiceNowAnnouncementMinLeadDistanceMeters),
-            Self.voiceNowAnnouncementMaxLeadDistanceMeters
-        )
-    }
+    /// gekoppelt: Live-Test-Feedback zeigte, dass die Ansage bei 10 m fast immer zu spät kam.
+    /// Ursprünglich tempoabhängig berechnet (Tempo × geschätzte Sprechdauer), das funktionierte
+    /// laut Nutzer-Feedback (2026-08-06) aber in der Praxis nicht gut - deshalb zurück auf einen
+    /// festen Wert.
+    private static let voiceNowAnnouncementLeadDistanceMeters: Double = 40
 
     private func advanceDirectRouteStepIfNeeded(_ location: CLLocation) {
         guard let (route, currentIndex) = activeStepRoute else { return }
@@ -1190,11 +1191,17 @@ struct ContentView: View {
         let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
         let distanceToStepEnd = location.distance(from: stepEndLocation)
 
-        if isVoiceGuidanceEnabled, isTurnInstruction(steps[currentIndex]),
+        // `steps[currentIndex]` beschreibt die Anweisung, mit der man den *aktuellen* Schritt
+        // betreten hat (s. `previewedStep`) - für die "Jetzt"-Ansage über das *bevorstehende*
+        // Manöver am Ende des aktuellen Schritts ist deshalb `steps[currentIndex + 1]` richtig
+        // (analog `previewedStep`/Kopfzeile), sonst wird die bereits erledigte Abbiegung erneut
+        // vorgelesen statt der kommenden (Nutzer-Meldung 2026-08-06: falscher Straßenname).
+        let nextStep = steps[currentIndex + 1]
+        if isVoiceGuidanceEnabled, isTurnInstruction(nextStep),
            lastVoiceNowAnnouncementStepIndex != currentIndex,
-           distanceToStepEnd < voiceNowAnnouncementLeadDistance(for: location) {
+           distanceToStepEnd < Self.voiceNowAnnouncementLeadDistanceMeters {
             lastVoiceNowAnnouncementStepIndex = currentIndex
-            voiceAnnouncer.speak("Jetzt \(Self.lowercasingFirstLetter(steps[currentIndex].instructions))")
+            voiceAnnouncer.speak("Jetzt \(Self.lowercasingFirstLetter(nextStep.instructions))")
         }
 
         if distanceToStepEnd < Self.stepAdvanceLeadDistanceMeters {
@@ -1317,8 +1324,8 @@ struct ContentView: View {
     }
 
     /// Für Sprachansagen, die den fertigen (großgeschrieben stehenden) `instructions`-Text mitten
-    /// im Satz einbetten ("In 100 Metern \(...)", "Jetzt \(...)") - ohne das läse sich das
-    /// grammatisch falsch vorgelesen vor ("In 100 Metern Rechts abbiegen...").
+    /// im Satz einbetten ("Jetzt \(...)") - ohne das läse sich das grammatisch falsch vorgelesen
+    /// vor ("Jetzt Rechts abbiegen...").
     private static func lowercasingFirstLetter(_ text: String) -> String {
         guard let first = text.first else { return text }
         return first.lowercased() + text.dropFirst()
@@ -1345,14 +1352,15 @@ struct ContentView: View {
     /// Sekunden Vorlauf).
     private static let watchHapticLeadDistanceMeters: Double = 100
 
-    /// Löst ein kurzes Haptik-Signal auf der Apple Watch und (falls aktiviert, s.
-    /// `isVoiceGuidanceEnabled`) die frühe "In X Metern ..."-Sprachansage aus, kurz bevor eine
-    /// Abbiegung der "Direkten Fahrrad-Route" ansteht (< `watchHapticLeadDistanceMeters`, deutlich
-    /// großzügiger als `stepAdvanceLeadDistanceMeters` in `advanceDirectRouteStepIfNeeded`, das dort
-    /// zusätzlich die späte "Jetzt ..."-Ansage auslöst). Nur bei echten Abbiegungen
+    /// Löst ein kurzes Haptik-Signal auf der Apple Watch aus, kurz bevor eine Abbiegung der
+    /// "Direkten Fahrrad-Route" ansteht (< `watchHapticLeadDistanceMeters`, deutlich großzügiger
+    /// als `stepAdvanceLeadDistanceMeters` in `advanceDirectRouteStepIfNeeded`, das dort
+    /// zusätzlich die "Jetzt ..."-Sprachansage auslöst). Nur bei echten Abbiegungen
     /// (`isTurnInstruction`) - bei reinem Geradeausfahren (bzw. kuratierten Radrouten ohne
     /// Schritt-Daten) gibt es nichts anzukündigen. `lastWatchHapticStepIndex` verhindert
-    /// wiederholtes Auslösen für denselben Schritt.
+    /// wiederholtes Auslösen für denselben Schritt. Früher gab es hier zusätzlich eine frühe
+    /// "In X Metern ..."-Sprachansage - auf Nutzerwunsch entfernt (2026-08-07), die "Jetzt
+    /// ..."-Ansage kurz vor der Abbiegung reicht.
     private func checkTurnAnnouncementTrigger(_ location: CLLocation) {
         guard let (route, currentIndex) = activeStepRoute else { return }
         guard let previewedStep else {
@@ -1379,10 +1387,6 @@ struct ContentView: View {
         WatchSessionManager.appendDebugLog("checkTurnAnnouncementTrigger: AUSLÖSEN bei \(Int(distance)) m für '\(previewedStep.instructions)'")
         lastWatchHapticStepIndex = currentIndex
         watchHapticTriggerCounter += 1
-        if isVoiceGuidanceEnabled {
-            let leadMeters = Int(Self.watchHapticLeadDistanceMeters)
-            voiceAnnouncer.speak("In \(leadMeters) Metern \(Self.lowercasingFirstLetter(previewedStep.instructions))")
-        }
     }
 
     private func checkDirectRouteDeviation(_ location: CLLocation) {
@@ -2550,9 +2554,32 @@ struct ContentView: View {
     /// Wisch-Pager für eine Liste von Treffern (verwendet sowohl für `matches` als auch
     /// `nearbyMatches`, mit jeweils passendem Untertitel-Text - Swipen wählt die angezeigte
     /// Seite direkt aus, zeigt sie also sofort auf der Karte.
+    ///
+    /// **Bugfix 2026-08-06** (Nutzer-Beobachtung Bremen -> Hannover, per Screenshot): Die
+    /// Live-Auswahl hing bisher an `.onChange(of: pagedMatchIndex) { selectedMatch =
+    /// items[pagedMatchIndex] }` - das feuert nicht nur bei einem echten Wisch, sondern auch, wenn
+    /// `resultsSection.onChange(of: matches) { pagedMatchIndex = 0 }` den Index programmatisch
+    /// zurücksetzt, *falls* `pagedMatchIndex` von einer früheren Suche in derselben App-Sitzung noch
+    /// auf einer anderen Seite als 0 stand (z. B. weil zuvor durch den Pager einer anderen Suche
+    /// gewischt wurde) - dann sieht der Reset für SwiftUI wie ein echter Seitenwechsel aus und
+    /// überschreibt eine gerade erst getroffene Auswahl (Direkte Fahrrad-Route/Kombination) mit
+    /// `items[0]`, selbst wenn der - oft kilometerweit entfernte - erste Treffer nie angetippt oder
+    /// bewusst angewischt wurde. Fix: eigenes `Binding`, dessen `set` (nur bei echter
+    /// Nutzerinteraktion über die TabView aufgerufen) zusätzlich zur Seite auch die Auswahl setzt;
+    /// der programmatische Reset schreibt dagegen direkt auf den rohen `@State`-Wert und läuft nie
+    /// durch dieses `Binding` - berührt `selectedMatch` also nicht mehr.
     @ViewBuilder
     private func matchesPager(_ items: [RouteMatch], subtitle: @escaping (RouteMatch) -> String) -> some View {
-        TabView(selection: $pagedMatchIndex) {
+        let selectingPageBinding = Binding<Int>(
+            get: { pagedMatchIndex },
+            set: { newIndex in
+                pagedMatchIndex = newIndex
+                if items.indices.contains(newIndex) {
+                    selectedMatch = items[newIndex]
+                }
+            }
+        )
+        TabView(selection: selectingPageBinding) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, match in
                 Button {
                     selectedMatch = match
@@ -2567,11 +2594,6 @@ struct ContentView: View {
         .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .automatic : .never))
         .indexViewStyle(.page(backgroundDisplayMode: .always))
         .frame(height: 102)
-        .onChange(of: pagedMatchIndex) {
-            if items.indices.contains(pagedMatchIndex) {
-                selectedMatch = items[pagedMatchIndex]
-            }
-        }
     }
 
     @ViewBuilder
@@ -2997,15 +3019,22 @@ struct ContentView: View {
     /// verspätet eintreffendes Ergebnis, falls der Nutzer zwischenzeitlich einen anderen Treffer
     /// gewählt hat.
     private func loadCuratedRouteForNavigation(_ match: RouteMatch) {
+        isPreparingCuratedRouteForNavigation = true
         guard let start = startPlace?.coordinate, let end = zielPlace?.coordinate,
               let path = RouteMatcher.routeSegmentPath(along: match.route.lines, from: start, to: end)
-        else { return }
+        else {
+            isPreparingCuratedRouteForNavigation = false
+            return
+        }
 
         let candidatePaths = offlineGraphCandidatePaths()
         Task {
             let result = await Self.matchCuratedRouteSteps(along: path, candidatePaths: candidatePaths)
-            guard selectedMatch?.id == match.id, let result else { return }
-            curatedRoute = DirectRoute(offlineResult: result)
+            guard selectedMatch?.id == match.id else { return }
+            isPreparingCuratedRouteForNavigation = false
+            if let result {
+                curatedRoute = DirectRoute(offlineResult: result)
+            }
         }
     }
 
@@ -3077,20 +3106,38 @@ struct ContentView: View {
     /// ausschließen und der abschließende Identitäts-Check ein verspätetes Ergebnis nach einem
     /// zwischenzeitlichen Moduswechsel verwirft.
     private func loadCuratedRouteForNavigation(forCombined match: RouteMatcher.CombinedRouteMatch) {
+        isPreparingCuratedRouteForNavigation = true
         let candidatePaths = offlineGraphCandidatePaths()
         Task {
             let result = await Self.matchCuratedRouteSteps(forLegs: match.legs, candidatePaths: candidatePaths)
-            guard combinedMatch?.id == match.id, let result else { return }
-            curatedRoute = DirectRoute(offlineResult: result)
+            guard combinedMatch?.id == match.id else { return }
+            isPreparingCuratedRouteForNavigation = false
+            if let result {
+                curatedRoute = DirectRoute(offlineResult: result)
+            }
         }
     }
 
     /// Wisch-Pager für mehrere von `findCombinedMatches` gefundene Alternativen (Nutzer-Wunsch
     /// 2026-07-30, s. `combinedMatches`) - analog zu `matchesPager` für einzelne Treffer. Wischen
     /// wählt die angezeigte Seite sofort aus (zeigt sie direkt auf der Karte), nicht erst nach
-    /// Antippen.
+    /// Antippen. Nutzt denselben `Binding`-Trick wie `matchesPager` (s. dessen Bugfix-Doku
+    /// 2026-08-06) aus identischem Grund - derselbe stale-Index-Kaskaden-Fehler war hier ebenso
+    /// möglich.
     private func combinedMatchesPager(_ items: [RouteMatcher.CombinedRouteMatch]) -> some View {
-        TabView(selection: $pagedCombinedMatchIndex) {
+        let selectingPageBinding = Binding<Int>(
+            get: { pagedCombinedMatchIndex },
+            set: { newIndex in
+                pagedCombinedMatchIndex = newIndex
+                if items.indices.contains(newIndex) {
+                    selectedMatch = nil
+                    isDirectRouteMode = false
+                    directRoutes = []
+                    combinedMatch = items[newIndex]
+                }
+            }
+        )
+        return TabView(selection: selectingPageBinding) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, match in
                 Button {
                     selectedMatch = nil
@@ -3108,11 +3155,6 @@ struct ContentView: View {
         .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .automatic : .never))
         .indexViewStyle(.page(backgroundDisplayMode: .always))
         .frame(height: 102)
-        .onChange(of: pagedCombinedMatchIndex) {
-            if items.indices.contains(pagedCombinedMatchIndex) {
-                combinedMatch = items[pagedCombinedMatchIndex]
-            }
-        }
     }
 
     private func combinedMatchSubtitle(for match: RouteMatcher.CombinedRouteMatch) -> String {
@@ -3268,7 +3310,29 @@ struct ContentView: View {
                 var usedRefs: Set<String> = []
                 if !combined.isEmpty {
                     combinedMatches = combined
-                    combinedMatch = combined.first
+                    // Bewusst NICHT `combinedMatch = combined.first` (anders bis 2026-08-06) - das
+                    // überschrieb die per `runMatching()` bereits synchron gesetzte "Direkte
+                    // Fahrrad-Route"-Vorauswahl (Nutzer-Entscheidung 2026-08-01) sofort wieder,
+                    // sobald die Kombinationssuche fertig wurde. Schlimmer noch: die direkt danach
+                    // laufende `appendNearbyWellKnownMatches` füllt `matches` - deren eigener
+                    // Wisch-Pager-Reset (`resultsSection.onChange(of: matches)` →
+                    // `pagedMatchIndex = 0` → `matchesPager.onChange(of: pagedMatchIndex)` →
+                    // `selectedMatch = items[0]`) kaskadierte über die zentrale
+                    // Gegenseitige-Ausschließlichkeit (s. `onChange(of: selectedMatch)` oben) direkt
+                    // danach nochmal drüber und nilte die gerade gesetzte `combinedMatch` wieder -
+                    // Ergebnis war am Ende nicht die Kombination, sondern der erstbeste (oft
+                    // kilometerweit entfernte) `nearbyWellKnownRouteMatches`-Treffer aktiv
+                    // ausgewählt. Nutzer-Beobachtung 2026-08-06 (Bremen -> Hannover): "D7
+                    // Pilgerroute" (~96 km entfernt, Richtung Osnabrück/Rheinland, also am Ziel
+                    // vorbei) stand mit Häkchen da, während die eigentlich brauchbare Kette
+                    // "StadtLandFluss → Weser-Romantische Straße → Energieroute Radweg →
+                    // Aller-Radweg" (~156 km, plausible Größenordnung für diese echte Strecke)
+                    // unmarkiert blieb. `attemptCombinedSearchAsAdditionalOption` (Geschwister-
+                    // Funktion für den Fall, dass bereits Einzeltreffer vorliegen) macht genau das
+                    // schon seit 2026-07-30 richtig, aus demselben Grund (s. deren Doku oben) - hier
+                    // fehlte die gleiche Zurückhaltung. `combinedMatches` bleibt trotzdem befüllt
+                    // und damit im Wisch-Pager sicht- und wählbar, nur eben nicht mehr automatisch
+                    // aktiv.
                     pagedCombinedMatchIndex = 0
                     usedRefs = Set(combined.flatMap { $0.legs.compactMap(\.route.ref) })
                 } else {

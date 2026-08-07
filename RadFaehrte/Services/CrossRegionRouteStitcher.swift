@@ -70,7 +70,14 @@ nonisolated enum CrossRegionRouteStitcher {
     /// sein (z. B. Bremen → Osnabrück: ~97 km allein im Niedersachsen-Abschnitt) und dabei mehr
     /// Knoten berühren als der Standard erlaubt - live auf dem Gerät als stiller Fehlschlag der
     /// zweiten Teilstrecke beobachtet (2026-07-31), obwohl ein Pfad existierte.
-    private static let legMaxVisitedNodes = 1_500_000
+    ///
+    /// Von 1.500.000 auf 3.000.000 angehoben (Live-Fund 2026-08-06, Bremen → Neumünster über
+    /// Niedersachsen → Schleswig-Holstein): Per Debug-Ausgabe bestätigt, dass die längere der beiden
+    /// `chainedRoute`-Teilstrecken (durch einen Großteil Niedersachsens, 6,5 Mio. Knoten insgesamt)
+    /// exakt am alten Limit abbrach (`SearchOutcome.nodeLimitExceeded`, nicht die zunächst vermutete
+    /// Graph-Insel - deren BFS-Verifikation stand bereits vorher fest, s. ROADMAP.md "Isolierte
+    /// Graph-Inseln... beheben").
+    private static let legMaxVisitedNodes = 3_000_000
 
     /// Findet näherungsweise die Koordinate, an der die Luftlinie von `start` nach `end` erstmals von
     /// "Start-Region ist näher" zu "Ziel-Region ist näher" wechselt. `startRegionDistanceMeters`/
@@ -242,8 +249,17 @@ nonisolated enum CrossRegionRouteStitcher {
             .distance(from: CLLocation(latitude: handoverInEnd.latitude, longitude: handoverInEnd.longitude))
         guard gap < maxHandoverGapMeters else { return nil }
 
-        guard let leg1 = BikeRoutingEngine(repository: startRepository).route(from: start, to: handoverInStart, maxVisitedNodes: legMaxVisitedNodes),
-              let leg2 = BikeRoutingEngine(repository: endRepository).route(from: handoverInEnd, to: end, maxVisitedNodes: legMaxVisitedNodes)
+        // `endMaxDistanceMeters`/`startMaxDistanceMeters` auf `handoverSnapMeters` statt dem engeren
+        // Standard: Der Übergangspunkt ist nur eine grobe geometrische Näherung, keine reale
+        // Adresse, und darf deshalb weiter zu einem tatsächlich gut angebundenen Knoten wandern (s.
+        // Doku an `BikeRoutingEngine.defaultEndpointMaxDistanceMeters`) - `start`/`end` selbst
+        // bleiben beim engen Standardradius.
+        guard let leg1 = BikeRoutingEngine(repository: startRepository).route(
+                from: start, to: handoverInStart, maxVisitedNodes: legMaxVisitedNodes,
+                endMaxDistanceMeters: handoverSnapMeters),
+              let leg2 = BikeRoutingEngine(repository: endRepository).route(
+                from: handoverInEnd, to: end, maxVisitedNodes: legMaxVisitedNodes,
+                startMaxDistanceMeters: handoverSnapMeters)
         else { return nil }
 
         let transitionStep = BikeRoutingEngine.Result.Step(
@@ -325,8 +341,14 @@ nonisolated enum CrossRegionRouteStitcher {
         var totalDistanceMeters = 0.0
         for i in 0..<chain.count {
             let repository = candidates[chain[i]].repository
+            // Wie bei `combinedRoute`: nur die echten Start-/Zielpunkte (erstes/letztes Leg) bleiben
+            // beim engen Standardradius, alle dazwischenliegenden Übergangspunkte dürfen weiter zu
+            // einem tatsächlich gut angebundenen Knoten wandern (`handoverSnapMeters`).
+            let startMaxDistanceMeters = i == 0 ? BikeRoutingEngine.defaultEndpointMaxDistanceMeters : Self.handoverSnapMeters
+            let endMaxDistanceMeters = i == chain.count - 1 ? BikeRoutingEngine.defaultEndpointMaxDistanceMeters : Self.handoverSnapMeters
             guard let leg = BikeRoutingEngine(repository: repository).route(
-                from: legStarts[i], to: legEnds[i], maxVisitedNodes: legMaxVisitedNodes
+                from: legStarts[i], to: legEnds[i], maxVisitedNodes: legMaxVisitedNodes,
+                startMaxDistanceMeters: startMaxDistanceMeters, endMaxDistanceMeters: endMaxDistanceMeters
             ) else { return nil }
 
             coordinates.append(contentsOf: leg.coordinates)

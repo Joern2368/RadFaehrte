@@ -319,14 +319,35 @@ nonisolated final class WayGraphRepository {
     }
 
     /// Nächstgelegener Graph-Knoten (als dichter Index, siehe oben) zu einer Koordinate, oder
-    /// `nil`, wenn keiner innerhalb von `maxDistanceMeters` liegt. Rechnet lokal in einer ebenen
-    /// Näherung um `coordinate` (analog `RouteMatcher.nearestPoint`) statt mit
-    /// `CLLocation.distance(from:)`. Durchsucht dank `spatialGrid` nur die Zellen, die
-    /// `maxDistanceMeters` überhaupt abdecken können, statt aller Knoten - vergleicht außerdem nur
-    /// quadrierte Distanzen (kein `sqrt` pro Knoten nötig, da nur die Reihenfolge zählt).
+    /// `nil`, wenn keiner innerhalb von `maxDistanceMeters` liegt. Kurzform von
+    /// `nearestNodes(to:maxDistanceMeters:limit:1)` für die (deutlich häufigeren) Aufrufer, die nur
+    /// den einen nächsten Knoten brauchen (z. B. `CrossRegionRouteStitcher`s
+    /// Luftlinien-Abtastung).
     func nearestNode(
         to coordinate: CLLocationCoordinate2D, maxDistanceMeters: Double = 2000
     ) -> Int? {
+        nearestNodes(to: coordinate, maxDistanceMeters: maxDistanceMeters, limit: 1).first
+    }
+
+    /// Die bis zu `limit` nächstgelegenen Graph-Knoten zu einer Koordinate, aufsteigend nach
+    /// Distanz sortiert (leeres Array, wenn keiner innerhalb von `maxDistanceMeters` liegt).
+    /// Rechnet lokal in einer ebenen Näherung um `coordinate` (analog `RouteMatcher.nearestPoint`)
+    /// statt mit `CLLocation.distance(from:)`. Durchsucht dank `spatialGrid` nur die Zellen, die
+    /// `maxDistanceMeters` überhaupt abdecken können, statt aller Knoten - vergleicht außerdem nur
+    /// quadrierte Distanzen (kein `sqrt` pro Knoten nötig, da nur die Reihenfolge zählt).
+    ///
+    /// `limit > 1` existiert für `BikeRoutingEngine.routes(from:to:)`: reale Wege-Graphen enthalten
+    /// durch echte OSM-Lücken (Sackgassen, private Zufahrten, Inseln) immer einen kleinen Anteil
+    /// Knoten, die zwar existieren, aber vom übrigen, großen Netz abgeschnitten sind (Live-Fund
+    /// 2026-08-02/06, Cuxhaven in Niedersachsen und Stuttgart in Baden-Württemberg - beide Male kein
+    /// Bug in der Wege-Graph-Erstellung selbst, sondern eine per BFS bestätigte, winzige echte
+    /// Graph-Insel um genau den nächstgelegenen Knoten). Snappt die einfache `nearestNode`-Variante
+    /// zufällig auf so einen Insel-Knoten, scheitert die A*-Suche fast sofort und die App fällt
+    /// still auf Online-Routing zurück, obwohl der nur wenige Meter entfernte, tatsächlich verbundene
+    /// Knoten problemlos gereicht hätte.
+    func nearestNodes(
+        to coordinate: CLLocationCoordinate2D, maxDistanceMeters: Double = 2000, limit: Int = 1
+    ) -> [Int] {
         let metersPerDegreeLat = 111_320.0
         let metersPerDegreeLon = metersPerDegreeLat * max(cos(coordinate.latitude * .pi / 180), 0.1)
 
@@ -336,8 +357,11 @@ nonisolated final class WayGraphRepository {
         let lonRadius = Int32(ceil(maxDistanceMeters / lonCellMeters)) + 1
 
         let center = Self.gridCell(for: coordinate)
-        var bestIndex: Int?
-        var bestDistanceSquared = maxDistanceMeters * maxDistanceMeters
+        let maxDistanceSquared = maxDistanceMeters * maxDistanceMeters
+        // Kleine, nach Distanz sortierte Kandidatenliste (Länge <= `limit`) statt eines echten
+        // Sortier-Schritts am Ende - bei den hier verwendeten `limit`-Größen (einstellig) schneller
+        // und einfacher als jeden Kandidaten erst zu sammeln und dann zu sortieren.
+        var best: [(index: Int, distanceSquared: Double)] = []
 
         for latOffset in -latRadius...latRadius {
             for lonOffset in -lonRadius...lonRadius {
@@ -348,13 +372,15 @@ nonisolated final class WayGraphRepository {
                     let dy = (location.latitude - coordinate.latitude) * metersPerDegreeLat
                     let dx = (location.longitude - coordinate.longitude) * metersPerDegreeLon
                     let distanceSquared = dx * dx + dy * dy
-                    if distanceSquared < bestDistanceSquared {
-                        bestDistanceSquared = distanceSquared
-                        bestIndex = Int(candidate)
-                    }
+                    guard distanceSquared < maxDistanceSquared else { continue }
+                    guard best.count < limit || distanceSquared < best[best.count - 1].distanceSquared
+                    else { continue }
+                    let insertAt = best.firstIndex { distanceSquared < $0.distanceSquared } ?? best.count
+                    best.insert((Int(candidate), distanceSquared), at: insertAt)
+                    if best.count > limit { best.removeLast() }
                 }
             }
         }
-        return bestIndex
+        return best.map(\.index)
     }
 }

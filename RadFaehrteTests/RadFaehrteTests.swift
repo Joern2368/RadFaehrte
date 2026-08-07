@@ -1107,11 +1107,33 @@ struct RadFaehrteTests {
             matches.first { $0.route.ref == "EV3" },
             "Erwartete einen Treffer mit ref \"EV3\" (EuroVelo 3) in der Nähe von Münster"
         )
-        // Ein noch so großer Wert ist besser als gar keiner - der Nutzer soll die reale Entfernung
-        // selbst einschätzen können (analog `findClosestMatches`), statt die Route zu verstecken.
+        // Beide Anschlusspunkte liegen hier plausibel auf der Route (echte Kartenlücke dazwischen,
+        // kein Fall von "kommt in die Gegend gar nicht") - die reale Distanz darf trotzdem groß
+        // sein, der Nutzer soll sie selbst einschätzen können (analog `findClosestMatches`), nur
+        // eben nicht *beliebig* groß (s. `nearbyWellKnownMatchesExcludesRoutesFarFromTheOtherEnd`
+        // unten für den Gegenfall).
         #expect(ev3.distanceToStartKm < 8)
         #expect(ev3.distanceToStartKm >= 0)
         #expect(ev3.distanceToEndKm >= 0)
+    }
+
+    /// Regressionstest für einen Nutzer-Fund (2026-08-06, Bremen -> Hannover, per Screenshot):
+    /// "EuroVelo 3"/"D7 Pilgerroute" liegen nur bei Bremen in Reichweite, verlaufen von dort aber
+    /// Richtung Osnabrück/Rheinland - nie in Hannovers Nähe (~94 km entfernt) - erschienen aber
+    /// trotzdem als vollwertiger, wählbarer Treffer ("das sind Routen, mit denen ich nichts anfangen
+    /// kann"). Anders als beim Münster -> Köln-Fall oben (echte Kartenlücke, beide Enden nah) kommt
+    /// die Route hier an einem Ende schlicht nicht in die Gegend - `nearbyWellKnownRouteMatches`
+    /// muss solche Kandidaten jetzt herausfiltern (s. `maxPlausibleAnchorDistanceKm`).
+    @Test func nearbyWellKnownMatchesExcludesRoutesFarFromTheOtherEnd() async throws {
+        let matcher = RouteMatcher(repository: RouteRepository())
+        let bremen = CLLocationCoordinate2D(latitude: 53.0793, longitude: 8.8017)
+        let hannover = CLLocationCoordinate2D(latitude: 52.3759, longitude: 9.7320)
+
+        let matches = matcher.nearbyWellKnownRouteMatches(start: bremen, end: hannover)
+        #expect(
+            !matches.contains { $0.route.ref == "EV3" || $0.route.ref == "D7" },
+            "EuroVelo 3/D7 Pilgerroute kommen Hannover nie nahe (~94 km) - sollten als Vorschlag für Bremen -> Hannover nicht mehr erscheinen"
+        )
     }
 
     /// Regressionstest für einen Nutzer-Fund (2026-07-31): Bremen und Niedersachsen heruntergeladen,

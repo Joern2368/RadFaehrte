@@ -767,6 +767,20 @@ final class RouteMatcher {
     /// lückenhaft"-Hinweis (`routeSegmentDistance`, `ContentView.subtitle(for:)`) statt einer
     /// km-Angabe - die Route bleibt trotzdem sicht- und wählbar. Dedupliziert nach `ref`, da z. B.
     /// "Europaroute (D-Route 3)" und "D-Netz Route 3" denselben `ref` tragen können.
+    ///
+    /// **Obergrenze für die andere Seite ergänzt (2026-08-06)**: Die ursprüngliche "beliebig weit
+    /// weg ist besser als gar nicht anzeigen"-Haltung (s. o., damals am Fall Münster -> Köln
+    /// bestätigt, wo EuroVelo 3 an *beiden* Enden plausibel nahe liegt, nur mit einer echten
+    /// Kartenlücke dazwischen) führte bei Bremen -> Hannover zu einem Fehlvorschlag: "EuroVelo 3"/
+    /// "D7 Pilgerroute" liegen nur bei Bremen in Reichweite, verlaufen von dort aber Richtung
+    /// Osnabrück/Rheinland - nie in Hannovers Nähe (~94 km entfernt) - und erschienen trotzdem als
+    /// vollwertiger, wählbarer Treffer ("das sind Routen, mit denen ich nichts anfangen kann",
+    /// Nutzer-Feedback). Unterscheidung wie bei `routeSegmentPathAllowingGap` (s.
+    /// `maxPlausibleAnchorDistanceKm`): eine Route mit echter Kartenlücke hat beide Anschlusspunkte
+    /// plausibel auf der Route (≤ `maxPlausibleAnchorDistanceKm`), eine Route, die einen der beiden
+    /// Punkte gar nicht anläuft, nicht - nur der erste Fall ist ein sinnvoller Vorschlag. Deshalb
+    /// jetzt zusätzliche Prüfung: die *andere* (weiter entfernte) Seite darf höchstens
+    /// `maxPlausibleAnchorDistanceKm` entfernt sein, nicht mehr unbegrenzt.
     nonisolated func nearbyWellKnownRouteMatches(
         start: CLLocationCoordinate2D, end: CLLocationCoordinate2D, searchRadiusKm: Double = 8
     ) -> [RouteMatch] {
@@ -780,6 +794,9 @@ final class RouteMatcher {
             else { continue }
             guard let toStart = Self.nearestPoint(from: start, toLines: candidate.route.lines),
                   let toEnd = Self.nearestPoint(from: end, toLines: candidate.route.lines)
+            else { continue }
+            guard toStart.distanceKm <= Self.maxPlausibleAnchorDistanceKm,
+                  toEnd.distanceKm <= Self.maxPlausibleAnchorDistanceKm
             else { continue }
             results.append(RouteMatch(
                 route: candidate.route,
@@ -861,6 +878,13 @@ final class RouteMatcher {
     /// ausufernde Suchen: maximal `maxVisitedRoutes` besuchte Routen, und ein Abbruch für Pfade,
     /// die bereits das `maxDistanceMultiplier`-fache der Luftlinie Start-Ziel überschreiten (eine
     /// so uneffiziente Kette wäre ohnehin kein sinnvoller Vorschlag).
+    /// `maxDistanceMultiplier` von 3 auf 1.7 gesenkt (2026-08-06): Nutzer-Beispiel Stuttgart ->
+    /// Konstanz (~130 km Luftlinie) fand als Kombination eine über den Remstal-Radweg (Richtung
+    /// Waiblingen, also zunächst vom Ziel weg) verkettete 272-km-Route - bei Faktor 3 (bis 390 km
+    /// erlaubt) blieb dieser klare Umweg unterhalb der Abbruchgrenze, obwohl er praktisch
+    /// unbrauchbar war. Faktor 1.7 lässt weiterhin natürlich verwinkelte Ketten zu (Flusstal-/
+    /// Gebirgsführung), verwirft aber Ketten, die deutlich mehr als anderthalbmal so lang wie die
+    /// Luftlinie sind.
     /// `maxVisitedRoutes` ursprünglich 500, auf 2000 angehoben (2026-07-29): Nach Bereinigung der
     /// fälschlich als Fernweg getaggten Knotenpunkt-Netz-Fragmente (s. `isNodeToNodeSegment`)
     /// brauchte der Live-Test Berlin -> Den Haag (echte grenzüberschreitende EuroVelo-2-Kette)
@@ -880,7 +904,7 @@ final class RouteMatcher {
     /// der Aufrufer das abseits des Main-Threads laufen lassen kann (s. `ContentView`).
     nonisolated func findCombinedMatches(
         start: CLLocationCoordinate2D, end: CLLocationCoordinate2D,
-        maxVisitedRoutes: Int = 2000, maxDistanceMultiplier: Double = 3, maxAlternatives: Int = 3
+        maxVisitedRoutes: Int = 2000, maxDistanceMultiplier: Double = 1.7, maxAlternatives: Int = 3
     ) -> [CombinedRouteMatch] {
         let startCandidates = combinableRoutes(near: start, searchRadiusKm: thresholdKm)
         let endCandidates = combinableRoutes(near: end, searchRadiusKm: thresholdKm)
