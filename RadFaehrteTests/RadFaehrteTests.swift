@@ -614,6 +614,26 @@ struct RadFaehrteTests {
         #expect(euroVelo11?.lines.isEmpty == false)
     }
 
+    @Test func routeRepositoryFindsEuroVeloRouteNearNicosia() async throws {
+        // Regressionstest für die zusätzliche Zypern-Datenbank (cyprus.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-/Österreich-/Tschechien-/Slowakei-/Albanien-/
+        // Italien-/Spanien-/Portugal-/Malta-/Andorra-/Liechtenstein-/Nordmazedonien-/Kosovo-/
+        // Montenegro-/Bosnien-und-Herzegowina-/Serbien-/Kroatien-/Slowenien-/Bulgarien-/
+        // Ungarn-/Rumänien-/Griechenland-Tests oben.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 33.30, minLat: 35.10, maxLon: 33.40, maxLat: 35.20
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("EuroVelo 8") == true })
+
+        let euroVelo8Cyprus = routes.first { $0.name?.contains("EuroVelo 8") == true }
+        #expect(euroVelo8Cyprus?.lines.isEmpty == false)
+    }
+
     @Test func routeMatcherFindsWeserRadwegForBremenAchim() async throws {
         let matcher = RouteMatcher(repository: RouteRepository())
 
