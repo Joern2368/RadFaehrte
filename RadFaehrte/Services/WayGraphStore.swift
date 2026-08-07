@@ -172,6 +172,7 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
     case netherlands
     case poland
     case portugal
+    case romania
     case serbia
     case slovakia
     case slovenia
@@ -202,6 +203,7 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
         case .netherlands: return "Niederlande"
         case .poland: return "Polen"
         case .portugal: return "Portugal"
+        case .romania: return "Rumänien"
         case .serbia: return "Serbien"
         case .slovakia: return "Slowakei"
         case .slovenia: return "Slowenien"
@@ -254,6 +256,8 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
             // Umfasst neben dem Festland auch Azoren und Madeira (Geofabrik-Extrakt deckt beide
             // Archipele mit ab), deshalb deutlich breiter als das Festland allein.
             return RegionBoundingBox(minLat: 29.25, maxLat: 42.16, minLon: -33.62, maxLon: -6.18)
+        case .romania:
+            return RegionBoundingBox(minLat: 43.61, maxLat: 48.27, minLon: 20.24, maxLon: 30.28)
         case .serbia:
             return RegionBoundingBox(minLat: 42.23, maxLat: 46.19, minLon: 18.81, maxLon: 23.01)
         case .slovakia:

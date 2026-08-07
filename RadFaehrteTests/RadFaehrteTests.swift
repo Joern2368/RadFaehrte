@@ -574,6 +574,26 @@ struct RadFaehrteTests {
         #expect(euroVelo6?.lines.isEmpty == false)
     }
 
+    @Test func routeRepositoryFindsEuroVeloRouteNearBucharest() async throws {
+        // Regressionstest für die zusätzliche Rumänien-Datenbank (romania.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-/Österreich-/Tschechien-/Slowakei-/Albanien-/
+        // Italien-/Spanien-/Portugal-/Malta-/Andorra-/Liechtenstein-/Nordmazedonien-/Kosovo-/
+        // Montenegro-/Bosnien-und-Herzegowina-/Serbien-/Kroatien-/Slowenien-/Bulgarien-/
+        // Ungarn-Tests oben.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 26.05, minLat: 44.38, maxLon: 26.15, maxLat: 44.48
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("EuroVelo 6") == true })
+
+        let euroVelo6Bucharest = routes.first { $0.name?.contains("EuroVelo 6") == true }
+        #expect(euroVelo6Bucharest?.lines.isEmpty == false)
+    }
+
     @Test func routeMatcherFindsWeserRadwegForBremenAchim() async throws {
         let matcher = RouteMatcher(repository: RouteRepository())
 
