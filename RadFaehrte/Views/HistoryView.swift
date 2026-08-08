@@ -14,10 +14,15 @@ struct HistoryView: View {
     /// Von `ContentView` hochgezählt, sobald eine Fahrt beendet und gespeichert wurde - lädt die
     /// Liste neu, auch wenn dieser Tab schon sichtbar ist/bleibt (analog `OwnRoutesView`).
     let refreshTrigger: Int
+    /// Macht die Tour im Route-Tab zur aktiven Route, analog `OwnRoutesView.onStart` - `RootTabView`
+    /// wandelt die Tour dafür in eine `ImportedRoute` um und nutzt denselben Mechanismus.
+    var onStart: (DrivenTour) -> Void
 
     @State private var tours: [DrivenTour] = []
     @State private var selectedTour: DrivenTour?
     @State private var exportFile: GPXExportFile?
+    @State private var renamingTour: DrivenTour?
+    @State private var newTourName = ""
     private let snapshotCache = TourMapSnapshotCache()
 
     /// Feste deutsche Locale, da die App-Oberfläche nicht lokalisiert ist und `.formatted()`
@@ -72,12 +77,15 @@ struct HistoryView: View {
                         ForEach(monthGroups) { group in
                             Section {
                                 ForEach(group.tours) { tour in
-                                    Button {
-                                        selectedTour = tour
-                                    } label: {
-                                        tourRow(tour)
-                                    }
-                                    .buttonStyle(.plain)
+                                    tourRow(tour)
+                                        .swipeActions(edge: .leading) {
+                                            Button {
+                                                startRename(tour)
+                                            } label: {
+                                                Label("Umbenennen", systemImage: "pencil")
+                                            }
+                                            .tint(.blue)
+                                        }
                                 }
                                 .onDelete { offsets in delete(group.tours, at: offsets) }
                             } header: {
@@ -98,24 +106,82 @@ struct HistoryView: View {
         .sheet(item: $selectedTour) { tour in
             tourDetail(tour)
         }
+        .alert(
+            "Tour umbenennen",
+            isPresented: Binding(get: { renamingTour != nil }, set: { if !$0 { renamingTour = nil } })
+        ) {
+            TextField("Name", text: $newTourName)
+            Button("Speichern") { commitRename() }
+            Button("Abbrechen", role: .cancel) { renamingTour = nil }
+        } message: {
+            Text("Gib der Tour einen Namen, um sie im Verlauf leichter wiederzufinden.")
+        }
+    }
+
+    private func startRename(_ tour: DrivenTour) {
+        newTourName = tour.name ?? ""
+        renamingTour = tour
+    }
+
+    /// Speichert den neuen Namen über `store.save` (überschreibt die bestehende JSON-Datei anhand
+    /// der `id`, s. `DrivenTourStore.fileURL`) und hält `tours`/`selectedTour` synchron, damit
+    /// Liste und ggf. offenes Detail-Sheet sofort den neuen Namen zeigen.
+    private func commitRename() {
+        guard let tour = renamingTour else { return }
+        var updated = tour
+        let trimmed = newTourName.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.name = trimmed.isEmpty ? nil : trimmed
+        store.save(updated)
+        if let index = tours.firstIndex(where: { $0.id == tour.id }) {
+            tours[index] = updated
+        }
+        if selectedTour?.id == tour.id {
+            selectedTour = updated
+        }
+        renamingTour = nil
     }
 
     private func tourRow(_ tour: DrivenTour) -> some View {
         HStack(spacing: 12) {
-            TourThumbnailView(tour: tour, cache: snapshotCache)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(Self.dateFormat.format(tour.date))
-                    .font(.subheadline.weight(.medium))
+            Button {
+                selectedTour = tour
+            } label: {
                 HStack(spacing: 12) {
-                    statLabel(systemImage: "ruler", text: "\(String(format: "%.1f", tour.distanceKm)) km")
-                    statLabel(systemImage: "clock", text: formattedTourDuration(tour.duration))
-                    statLabel(systemImage: "speedometer", text: "\(String(format: "%.1f", tour.averageSpeedKmh)) km/h")
+                    TourThumbnailView(tour: tour, cache: snapshotCache)
+                    VStack(alignment: .leading, spacing: 3) {
+                        if let name = tour.name, !name.isEmpty {
+                            Text(name)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.primary)
+                            Text(Self.dateFormat.format(tour.date))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(Self.dateFormat.format(tour.date))
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.primary)
+                        }
+                        HStack(spacing: 12) {
+                            statLabel(systemImage: "ruler", text: "\(String(format: "%.1f", tour.distanceKm)) km")
+                            statLabel(systemImage: "clock", text: formattedTourDuration(tour.duration))
+                            statLabel(systemImage: "speedometer", text: "\(String(format: "%.1f", tour.averageSpeedKmh)) km/h")
+                        }
+                    }
+                    Spacer(minLength: 0)
                 }
+                .contentShape(Rectangle())
             }
-            Spacer()
+            .buttonStyle(.plain)
+
+            if tour.clCoordinates.count >= 2 {
+                Button("Starten") {
+                    onStart(tour)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("startDrivenTour-\(tour.id.uuidString)")
+            }
         }
         .padding(.vertical, 4)
-        .contentShape(Rectangle())
     }
 
     private func statLabel(systemImage: String, text: String) -> some View {
@@ -148,19 +214,37 @@ struct HistoryView: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 8) {
+                    detailRow(label: "Datum", value: Self.dateFormat.format(tour.date))
                     detailRow(label: "Distanz", value: "\(String(format: "%.1f", tour.distanceKm)) km")
                     detailRow(label: "Dauer", value: formattedTourDuration(tour.duration))
                     detailRow(label: "Ø Tempo", value: "\(String(format: "%.1f", tour.averageSpeedKmh)) km/h")
                 }
                 .padding()
             }
-            .navigationTitle(Self.dateFormat.format(tour.date))
+            .navigationTitle(tour.name?.isEmpty == false ? tour.name! : Self.dateFormat.format(tour.date))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Fertig") { selectedTour = nil }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        startRename(tour)
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .accessibilityLabel("Tour umbenennen")
+                }
                 if tour.clCoordinates.count >= 2 {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            selectedTour = nil
+                            onStart(tour)
+                        } label: {
+                            Image(systemName: "play.fill")
+                        }
+                        .accessibilityLabel("Tour starten")
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             exportTour(tour)
@@ -178,7 +262,7 @@ struct HistoryView: View {
     }
 
     private func exportTour(_ tour: DrivenTour) {
-        let name = "RadFährte Tour \(Self.dateFormat.format(tour.date))"
+        let name = tour.name?.isEmpty == false ? tour.name! : "RadFährte Tour \(Self.dateFormat.format(tour.date))"
         guard let url = GPXWriter.writeTemporaryFile(name: name, lines: [tour.clCoordinates]) else { return }
         exportFile = GPXExportFile(url: url)
     }
@@ -222,5 +306,5 @@ private struct TourThumbnailView: View {
 }
 
 #Preview {
-    HistoryView(store: DrivenTourStore(), refreshTrigger: 0)
+    HistoryView(store: DrivenTourStore(), refreshTrigger: 0, onStart: { _ in })
 }

@@ -12,6 +12,10 @@ import MapKit
 struct DrivenTour: Identifiable, Codable, Equatable {
     let id: UUID
     let date: Date
+    /// Vom Nutzer vergebener Name (Umbenennen im Verlauf-Tab), `nil` solange keiner gesetzt wurde -
+    /// dann zeigt die UI stattdessen das Datum an. Optional statt mit Default-Wert, damit ältere,
+    /// bereits gespeicherte Touren (JSON ohne dieses Feld) weiterhin klaglos decodiert werden.
+    var name: String?
     let distanceKm: Double
     let duration: TimeInterval
     let averageSpeedKmh: Double
@@ -27,11 +31,12 @@ struct DrivenTour: Identifiable, Codable, Equatable {
     }
 
     init(
-        id: UUID = UUID(), date: Date = Date(), distanceKm: Double, duration: TimeInterval,
+        id: UUID = UUID(), date: Date = Date(), name: String? = nil, distanceKm: Double, duration: TimeInterval,
         averageSpeedKmh: Double, coordinates: [CLLocationCoordinate2D]
     ) {
         self.id = id
         self.date = date
+        self.name = name
         self.distanceKm = distanceKm
         self.duration = duration
         self.averageSpeedKmh = averageSpeedKmh
@@ -40,6 +45,16 @@ struct DrivenTour: Identifiable, Codable, Equatable {
 
     var clCoordinates: [CLLocationCoordinate2D] {
         coordinates.map { $0.clLocationCoordinate }
+    }
+
+    private static let fallbackNameDateFormat = Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Locale(identifier: "de_DE"))
+
+    /// Name für Kontexte, die zwingend einen (nicht-leeren) Titel brauchen - z. B. das Ziel-Feld
+    /// beim Direkt-Starten aus dem Verlauf. Fällt auf einen datumsbasierten Titel zurück, falls
+    /// der Nutzer die Tour nicht umbenannt hat.
+    var displayName: String {
+        if let name, !name.isEmpty { return name }
+        return "Fahrt vom \(Self.fallbackNameDateFormat.format(date))"
     }
 
     /// Kartenregion, die die komplette aufgezeichnete Strecke mit etwas Rand umfasst - genutzt

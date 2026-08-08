@@ -2287,13 +2287,17 @@ struct ContentView: View {
                 MapPolyline(coordinates: slot.coordinates)
                     .stroke(.blue, lineWidth: 4)
             }
+            // Grau gepunktet statt (vorher) orange gestrichelt - angelehnt an Apple Maps' eigene
+            // Konvention für Fußweg-/Zubringer-Abschnitte in Transit-Wegbeschreibungen, damit die
+            // reine Anfahrt zum Streckenanfang nicht wie eine zweite, konkurrierende Route wirkt
+            // oder alarmierend auffällt (Nutzer-Feedback 2026-08-08).
             if let connectorRouteToStart {
                 MapPolyline(connectorRouteToStart.polyline)
-                    .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
+                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
             }
             if let connectorRouteToEnd {
                 MapPolyline(connectorRouteToEnd.polyline)
-                    .stroke(.orange, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
+                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
             }
         }
     }

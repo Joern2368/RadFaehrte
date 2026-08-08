@@ -63,7 +63,14 @@ struct RootTabView: View {
                     )
                 }
                 Tab("Verlauf", systemImage: "clock.arrow.circlepath", value: AppTab.history) {
-                    HistoryView(store: drivenTourStore, refreshTrigger: drivenToursVersion)
+                    HistoryView(
+                        store: drivenTourStore,
+                        refreshTrigger: drivenToursVersion,
+                        onStart: { tour in
+                            routeToStart = importedRoute(from: tour)
+                            selectedTab = .route
+                        }
+                    )
                 }
                 Tab("Eigene Routen", systemImage: "square.and.arrow.down.on.square", value: AppTab.ownRoutes) {
                     OwnRoutesView(
@@ -92,7 +99,7 @@ struct RootTabView: View {
             }
         }
         .task {
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: .seconds(1.5))
             withAnimation(.easeOut(duration: 0.3)) {
                 showSplash = false
             }
@@ -132,6 +139,15 @@ struct RootTabView: View {
                 _ = WayGraphCache.shared.repository(for: path)
             }
         }
+    }
+
+    /// Wandelt eine Verlaufs-Tour in eine `ImportedRoute` um, um beim Direkt-Starten aus dem
+    /// Verlauf-Tab denselben Mechanismus wie bei Eigenen Routen wiederzuverwenden
+    /// (`routeToStart`/`ContentView.startImportedRoute`) - beide sind für die Navigation
+    /// gleichwertig: eine feste Punktreihenfolge ohne DB-Match. `displayName` liefert bei Touren
+    /// ohne eigenen Namen einen datumsbasierten Titel fürs Ziel-Feld.
+    private func importedRoute(from tour: DrivenTour) -> ImportedRoute {
+        ImportedRoute(name: tour.displayName, coordinates: tour.clCoordinates)
     }
 
     /// Wird aufgerufen, wenn eine GPX-Datei über das Teilen-Menü/"Öffnen mit" an die App
