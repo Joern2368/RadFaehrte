@@ -1,0 +1,9 @@
+# Python-Pipeline: venv und heruntergeladene/generierte Rohdaten nicht versionieren
+# (nur die Skripte selbst und die fertigen .sqlite-Ergebnisse in Resources/ gehören ins Repo)
+Scripts/venv/
+Scripts/data/
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate

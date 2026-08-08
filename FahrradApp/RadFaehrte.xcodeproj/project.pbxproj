@@ -1,0 +1,820 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0AC8671102DD4020CCBCD558 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 74203D39670D2F01DEDE5D2A /* Foundation.framework */; };
+		204E6C73D4A466401881C3E1 /* WatchNavState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A06B3DE0117F68D2DBE75584 /* WatchNavState.swift */; };
+		3D184419E75E692C6E48FE21 /* RadFaehrteWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950B194F43878E754C2170B0 /* RadFaehrteWatchApp.swift */; };
+		41EFAC853B1D19D65B96FA0E /* WatchContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 268CD28DEF5C686EA215D2FE /* WatchContentView.swift */; };
+		724BEDB676164A49B66C4034 /* WatchNavState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A06B3DE0117F68D2DBE75584 /* WatchNavState.swift */; };
+		953D769EFD7220C214F02F84 /* WorkoutSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3F1265D2840D9B6CB94DB2 /* WorkoutSessionManager.swift */; };
+		D1DBBAEA8278262048B84277 /* WatchSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E7EE77802AE0B8C52C30E5 /* WatchSessionManager.swift */; };
+		F7A87BD9F7CE12D63C2C5006 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3DED7B1BEFE46BE12311D7A5 /* Assets.xcassets */; };
+		F90A9052034ED0F9C3AEA340 /* RadFaehrte Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = C2375F41AB536759EFA0F0E9 /* RadFaehrte Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0A9E87AECC7C7AFBA69B37D4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 80314EA4300A52A100FF6910 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CD4F0F91E323DF77E34478B3;
+			remoteInfo = "RadFaehrte Watch App";
+		};
+		80314EBA300A52A300FF6910 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 80314EA4300A52A100FF6910 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 80314EAB300A52A100FF6910;
+			remoteInfo = RadFaehrte;
+		};
+		80314EC4300A52A300FF6910 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 80314EA4300A52A100FF6910 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 80314EAB300A52A100FF6910;
+			remoteInfo = RadFaehrte;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AA25F77F523C3A3060C15694 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				F90A9052034ED0F9C3AEA340 /* RadFaehrte Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		20CC45454783EC1055ED263A /* RadFaehrte Watch App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = "RadFaehrte Watch App.entitlements"; sourceTree = "<group>"; };
+		22E7EE77802AE0B8C52C30E5 /* WatchSessionManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchSessionManager.swift; sourceTree = "<group>"; };
+		268CD28DEF5C686EA215D2FE /* WatchContentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchContentView.swift; sourceTree = "<group>"; };
+		3DED7B1BEFE46BE12311D7A5 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		74203D39670D2F01DEDE5D2A /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		80314EAC300A52A100FF6910 /* RadFaehrte.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RadFaehrte.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		80314EB9300A52A300FF6910 /* RadFaehrteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RadFaehrteTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		80314EC3300A52A300FF6910 /* RadFaehrteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RadFaehrteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		950B194F43878E754C2170B0 /* RadFaehrteWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RadFaehrteWatchApp.swift; sourceTree = "<group>"; };
+		A06B3DE0117F68D2DBE75584 /* WatchNavState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchNavState.swift; sourceTree = "<group>"; };
+		AE3F1265D2840D9B6CB94DB2 /* WorkoutSessionManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkoutSessionManager.swift; sourceTree = "<group>"; };
+		C2375F41AB536759EFA0F0E9 /* RadFaehrte Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "RadFaehrte Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		80314ED9300A52A300FF6900 /* Exceptions for "RadFaehrte" folder in "RadFaehrte" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Supplemental-Info.plist",
+				RadFaehrte.entitlements,
+			);
+			target = 80314EAB300A52A100FF6910 /* RadFaehrte */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		80314EAE300A52A100FF6910 /* RadFaehrte */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				80314ED9300A52A300FF6900 /* Exceptions for "RadFaehrte" folder in "RadFaehrte" target */,
+			);
+			path = RadFaehrte;
+			sourceTree = "<group>";
+		};
+		80314EBC300A52A300FF6910 /* RadFaehrteTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = RadFaehrteTests;
+			sourceTree = "<group>";
+		};
+		80314EC6300A52A300FF6910 /* RadFaehrteUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = RadFaehrteUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		80314EA9300A52A100FF6910 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		80314EB6300A52A300FF6910 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		80314EC0300A52A300FF6910 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		900C16F78C3D3577EBB687DE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0AC8671102DD4020CCBCD558 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1B9A9CD2F93E8A891B203EE9 /* RadFaehrteShared */ = {
+			isa = PBXGroup;
+			children = (
+				A06B3DE0117F68D2DBE75584 /* WatchNavState.swift */,
+			);
+			path = RadFaehrteShared;
+			sourceTree = "<group>";
+		};
+		684145F640AC5A69217E9A78 /* RadFaehrte Watch App */ = {
+			isa = PBXGroup;
+			children = (
+				950B194F43878E754C2170B0 /* RadFaehrteWatchApp.swift */,
+				268CD28DEF5C686EA215D2FE /* WatchContentView.swift */,
+				22E7EE77802AE0B8C52C30E5 /* WatchSessionManager.swift */,
+				3DED7B1BEFE46BE12311D7A5 /* Assets.xcassets */,
+				20CC45454783EC1055ED263A /* RadFaehrte Watch App.entitlements */,
+				AE3F1265D2840D9B6CB94DB2 /* WorkoutSessionManager.swift */,
+			);
+			path = "RadFaehrte Watch App";
+			sourceTree = "<group>";
+		};
+		80314EA3300A52A100FF6910 = {
+			isa = PBXGroup;
+			children = (
+				80314EAE300A52A100FF6910 /* RadFaehrte */,
+				80314EBC300A52A300FF6910 /* RadFaehrteTests */,
+				80314EC6300A52A300FF6910 /* RadFaehrteUITests */,
+				80314EAD300A52A100FF6910 /* Products */,
+				1B9A9CD2F93E8A891B203EE9 /* RadFaehrteShared */,
+				9582431BF213264FEB9BAA5B /* Frameworks */,
+				684145F640AC5A69217E9A78 /* RadFaehrte Watch App */,
+			);
+			sourceTree = "<group>";
+		};
+		80314EAD300A52A100FF6910 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				80314EAC300A52A100FF6910 /* RadFaehrte.app */,
+				80314EB9300A52A300FF6910 /* RadFaehrteTests.xctest */,
+				80314EC3300A52A300FF6910 /* RadFaehrteUITests.xctest */,
+				C2375F41AB536759EFA0F0E9 /* RadFaehrte Watch App.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		9582431BF213264FEB9BAA5B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A77628F0E34B487BAB6F3153 /* watchOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		A77628F0E34B487BAB6F3153 /* watchOS */ = {
+			isa = PBXGroup;
+			children = (
+				74203D39670D2F01DEDE5D2A /* Foundation.framework */,
+			);
+			name = watchOS;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		80314EAB300A52A100FF6910 /* RadFaehrte */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 80314ECD300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrte" */;
+			buildPhases = (
+				80314EA8300A52A100FF6910 /* Sources */,
+				80314EA9300A52A100FF6910 /* Frameworks */,
+				80314EAA300A52A100FF6910 /* Resources */,
+				AA25F77F523C3A3060C15694 /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				29A6B8F95D9EE95CB6B6C67F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				80314EAE300A52A100FF6910 /* RadFaehrte */,
+			);
+			name = RadFaehrte;
+			productName = RadFaehrte;
+			productReference = 80314EAC300A52A100FF6910 /* RadFaehrte.app */;
+			productType = "com.apple.product-type.application";
+		};
+		80314EB8300A52A300FF6910 /* RadFaehrteTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 80314ED0300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrteTests" */;
+			buildPhases = (
+				80314EB5300A52A300FF6910 /* Sources */,
+				80314EB6300A52A300FF6910 /* Frameworks */,
+				80314EB7300A52A300FF6910 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				80314EBB300A52A300FF6910 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				80314EBC300A52A300FF6910 /* RadFaehrteTests */,
+			);
+			name = RadFaehrteTests;
+			productName = RadFaehrteTests;
+			productReference = 80314EB9300A52A300FF6910 /* RadFaehrteTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		80314EC2300A52A300FF6910 /* RadFaehrteUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 80314ED3300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrteUITests" */;
+			buildPhases = (
+				80314EBF300A52A300FF6910 /* Sources */,
+				80314EC0300A52A300FF6910 /* Frameworks */,
+				80314EC1300A52A300FF6910 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				80314EC5300A52A300FF6910 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				80314EC6300A52A300FF6910 /* RadFaehrteUITests */,
+			);
+			name = RadFaehrteUITests;
+			productName = RadFaehrteUITests;
+			productReference = 80314EC3300A52A300FF6910 /* RadFaehrteUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		CD4F0F91E323DF77E34478B3 /* RadFaehrte Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AD8D9028C32428206CC0F9AF /* Build configuration list for PBXNativeTarget "RadFaehrte Watch App" */;
+			buildPhases = (
+				523C47F09FE3D67A7D722AEE /* Sources */,
+				900C16F78C3D3577EBB687DE /* Frameworks */,
+				569A83E9D72F3982C5D0DBCD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "RadFaehrte Watch App";
+			productName = "RadFaehrte Watch App";
+			productReference = C2375F41AB536759EFA0F0E9 /* RadFaehrte Watch App.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		80314EA4300A52A100FF6910 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					80314EAB300A52A100FF6910 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					80314EB8300A52A300FF6910 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 80314EAB300A52A100FF6910;
+					};
+					80314EC2300A52A300FF6910 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 80314EAB300A52A100FF6910;
+					};
+					CD4F0F91E323DF77E34478B3 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+				};
+			};
+			buildConfigurationList = 80314EA7300A52A100FF6910 /* Build configuration list for PBXProject "RadFaehrte" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 80314EA3300A52A100FF6910;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 80314EAD300A52A100FF6910 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				80314EAB300A52A100FF6910 /* RadFaehrte */,
+				80314EB8300A52A300FF6910 /* RadFaehrteTests */,
+				80314EC2300A52A300FF6910 /* RadFaehrteUITests */,
+				CD4F0F91E323DF77E34478B3 /* RadFaehrte Watch App */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		569A83E9D72F3982C5D0DBCD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F7A87BD9F7CE12D63C2C5006 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		80314EAA300A52A100FF6910 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		80314EB7300A52A300FF6910 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		80314EC1300A52A300FF6910 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		523C47F09FE3D67A7D722AEE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3D184419E75E692C6E48FE21 /* RadFaehrteWatchApp.swift in Sources */,
+				41EFAC853B1D19D65B96FA0E /* WatchContentView.swift in Sources */,
+				D1DBBAEA8278262048B84277 /* WatchSessionManager.swift in Sources */,
+				724BEDB676164A49B66C4034 /* WatchNavState.swift in Sources */,
+				953D769EFD7220C214F02F84 /* WorkoutSessionManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		80314EA8300A52A100FF6910 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				204E6C73D4A466401881C3E1 /* WatchNavState.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		80314EB5300A52A300FF6910 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		80314EBF300A52A300FF6910 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		29A6B8F95D9EE95CB6B6C67F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = "RadFaehrte Watch App";
+			target = CD4F0F91E323DF77E34478B3 /* RadFaehrte Watch App */;
+			targetProxy = 0A9E87AECC7C7AFBA69B37D4 /* PBXContainerItemProxy */;
+		};
+		80314EBB300A52A300FF6910 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 80314EAB300A52A100FF6910 /* RadFaehrte */;
+			targetProxy = 80314EBA300A52A300FF6910 /* PBXContainerItemProxy */;
+		};
+		80314EC5300A52A300FF6910 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 80314EAB300A52A100FF6910 /* RadFaehrte */;
+			targetProxy = 80314EC4300A52A300FF6910 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		80314ECB300A52A300FF6910 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		80314ECC300A52A300FF6910 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		80314ECE300A52A300FF6910 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = RadFaehrte/RadFaehrte.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "RadFaehrte/Supplemental-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wird verwendet, um deine Fahrten als Radfahr-Training in Health zu speichern.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wird verwendet, um deine Fahrten (Dauer, Distanz) als Radfahr-Training in Health zu speichern.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Der Standort wird verwendet, um deine Position während der Fahrt auf der Karte anzuzeigen.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrte;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		80314ECF300A52A300FF6910 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = RadFaehrte/RadFaehrte.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "RadFaehrte/Supplemental-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wird verwendet, um deine Fahrten als Radfahr-Training in Health zu speichern.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wird verwendet, um deine Fahrten (Dauer, Distanz) als Radfahr-Training in Health zu speichern.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Der Standort wird verwendet, um deine Position während der Fahrt auf der Karte anzuzeigen.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrte;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		80314ED1300A52A300FF6910 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrteTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RadFaehrte.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/RadFaehrte";
+			};
+			name = Debug;
+		};
+		80314ED2300A52A300FF6910 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrteTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/RadFaehrte.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/RadFaehrte";
+			};
+			name = Release;
+		};
+		80314ED4300A52A300FF6910 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrteUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = RadFaehrte;
+			};
+			name = Debug;
+		};
+		80314ED5300A52A300FF6910 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrteUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = RadFaehrte;
+			};
+			name = Release;
+		};
+		D2DDE0D919BCE07F1B08D871 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "RadFaehrte Watch App/RadFaehrte Watch App.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wird verwendet, um während der Navigation ein Radfahr-Training zu starten - das hält die App im Hintergrund zuverlässig aktiv, damit Anweisungen und Vibrationsfeedback nicht ausbleiben.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wird verwendet, um während der Navigation ein Training zu starten - das hält die App zuverlässig im Hintergrund aktiv. Die Fahrt selbst wird nicht über die Watch in Health gespeichert (das übernimmt die iPhone-App).";
+				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.frankenfeld.RadFaehrte;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrte.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
+		ED58DDEAD585527F64D1F2F3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "RadFaehrte Watch App/RadFaehrte Watch App.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 8WNRX5RP7M;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "RadFährte";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Wird verwendet, um während der Navigation ein Radfahr-Training zu starten - das hält die App im Hintergrund zuverlässig aktiv, damit Anweisungen und Vibrationsfeedback nicht ausbleiben.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Wird verwendet, um während der Navigation ein Training zu starten - das hält die App zuverlässig im Hintergrund aktiv. Die Fahrt selbst wird nicht über die Watch in Health gespeichert (das übernimmt die iPhone-App).";
+				INFOPLIST_KEY_WKBackgroundModes = "workout-processing";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.frankenfeld.RadFaehrte;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.frankenfeld.RadFaehrte.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		80314EA7300A52A100FF6910 /* Build configuration list for PBXProject "RadFaehrte" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				80314ECB300A52A300FF6910 /* Debug */,
+				80314ECC300A52A300FF6910 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		80314ECD300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrte" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				80314ECE300A52A300FF6910 /* Debug */,
+				80314ECF300A52A300FF6910 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		80314ED0300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrteTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				80314ED1300A52A300FF6910 /* Debug */,
+				80314ED2300A52A300FF6910 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		80314ED3300A52A300FF6910 /* Build configuration list for PBXNativeTarget "RadFaehrteUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				80314ED4300A52A300FF6910 /* Debug */,
+				80314ED5300A52A300FF6910 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AD8D9028C32428206CC0F9AF /* Build configuration list for PBXNativeTarget "RadFaehrte Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D2DDE0D919BCE07F1B08D871 /* Release */,
+				ED58DDEAD585527F64D1F2F3 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 80314EA4300A52A100FF6910 /* Project object */;
+}
