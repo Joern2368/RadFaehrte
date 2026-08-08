@@ -25,7 +25,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     let isBarometerAvailable = CMAltimeter.isRelativeAltitudeAvailable()
     private(set) var elevationGainMeters: Double = 0
     private(set) var elevationLossMeters: Double = 0
-    private var lastRelativeAltitudeMeters: Double?
+    /// Letzte rohe relative Höhe aus dem Barometer seit Sitzungsstart (nicht die kumulierte
+    /// Gewinn-/Verlust-Summe) - Rohwert für z. B. die aktuelle Steigungsberechnung in `ContentView`
+    /// (`currentGradePercent`), die eine Höhendifferenz über ein gleitendes Distanzfenster statt
+    /// nur die Gesamtsumme braucht.
+    private(set) var relativeAltitudeMeters: Double?
     /// Für die Navigationskamera geglättete Position (exponentieller Tiefpassfilter) - dämpft
     /// GPS-Rauschen, das sonst als sichtbares Ruckeln auffiel (Nutzer-Vergleich mit Komoot).
     /// Bewusst getrennt von `currentLocation`: Distanzsummierung, Abweichungserkennung und
@@ -88,7 +92,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     func resetElevationTracking() {
         elevationGainMeters = 0
         elevationLossMeters = 0
-        lastRelativeAltitudeMeters = nil
+        relativeAltitudeMeters = nil
     }
 
     private func startBarometerUpdates() {
@@ -96,15 +100,15 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, error in
             guard let self, let data, error == nil else { return }
             let altitude = data.relativeAltitude.doubleValue
-            if let lastRelativeAltitudeMeters {
-                let delta = altitude - lastRelativeAltitudeMeters
+            if let relativeAltitudeMeters {
+                let delta = altitude - relativeAltitudeMeters
                 if delta > 0 {
                     elevationGainMeters += delta
                 } else {
                     elevationLossMeters += -delta
                 }
             }
-            lastRelativeAltitudeMeters = altitude
+            relativeAltitudeMeters = altitude
         }
     }
 

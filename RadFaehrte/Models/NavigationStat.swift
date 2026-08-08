@@ -24,6 +24,9 @@ enum NavigationStatKind: String, CaseIterable, Identifiable, Codable {
     case remainingTimeSetSpeed
     case remainingTimeAverageSpeed
     case currentAltitude
+    case currentGrade
+    case maxAltitude
+    case pausedTime
 
     var id: String { rawValue }
 
@@ -44,6 +47,9 @@ enum NavigationStatKind: String, CaseIterable, Identifiable, Codable {
         case .remainingTimeSetSpeed: return "Restzeit"
         case .remainingTimeAverageSpeed: return "Restzeit"
         case .currentAltitude: return "Höhe"
+        case .currentGrade: return "Steigung"
+        case .maxAltitude: return "Max. Höhe"
+        case .pausedTime: return "Pause"
         }
     }
 
@@ -65,6 +71,9 @@ enum NavigationStatKind: String, CaseIterable, Identifiable, Codable {
         case .remainingTimeSetSpeed: return "Restzeit bis Ziel (eingestellte Ø-Geschwindigkeit)"
         case .remainingTimeAverageSpeed: return "Restzeit bis Ziel (bisheriges Ø-Tempo der Fahrt)"
         case .currentAltitude: return "Aktuelle Höhe über NN"
+        case .currentGrade: return "Aktuelle Steigung/Gefälle (%, über die letzten Meter geglättet)"
+        case .maxAltitude: return "Höchste erreichte Höhe über NN (seit Start)"
+        case .pausedTime: return "Pausenzeit (Fahrtzeit ohne Bewegungszeit)"
         }
     }
 }

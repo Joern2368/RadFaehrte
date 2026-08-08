@@ -265,6 +265,14 @@ struct ContentView: View {
     @State private var tourElevationGainMeters: Double = 0
     @State private var tourElevationLossMeters: Double = 0
     @State private var tourMaxSpeedKmh: Double = 0
+    /// Höchste erreichte Höhe (GPS, `CLLocation.altitude`) seit Start - `nil` bis der erste Fix
+    /// mit gültiger `verticalAccuracy` eintrifft (s. `accumulateTourDistance`), analog zum
+    /// optionalen `currentAltitudeMeters`.
+    @State private var tourMaxAltitudeMeters: Double?
+    /// Distanz-/Höhen-Stichproben der letzten `gradeWindowMeters` gefahrenen Meter für
+    /// `currentGradePercent` - eine reine Punkt-zu-Punkt-Ableitung wäre bei GPS-/Barometer-Rauschen
+    /// unbrauchbar sprunghaft, s. `updateGradeSamples`.
+    @State private var gradeSamples: [(distanceMeters: Double, altitudeMeters: Double)] = []
     /// Reine Bewegungszeit seit Start, ohne Stillstand (Ampeln, Pausen) - siehe
     /// `accumulateTourDistance` (`isMoving`/`lastMovingUpdateTimestamp`). Im Gegensatz zu
     /// `tourStartTime`, aus dem die "Fahrtzeit" (inkl. Pausen) abgeleitet wird.
@@ -666,6 +674,8 @@ struct ContentView: View {
         tourElevationLossMeters = 0
         locationManager.resetElevationTracking()
         tourMaxSpeedKmh = 0
+        tourMaxAltitudeMeters = nil
+        gradeSamples = []
         tourMovingSeconds = 0
         lastMovingUpdateTimestamp = nil
         lastTourLocation = locationManager.currentLocation
@@ -1076,6 +1086,9 @@ struct ContentView: View {
         if location.speed >= 0 {
             tourMaxSpeedKmh = max(tourMaxSpeedKmh, location.speed * 3.6)
         }
+        if location.verticalAccuracy >= 0 {
+            tourMaxAltitudeMeters = max(tourMaxAltitudeMeters ?? -.infinity, location.altitude)
+        }
 
         // Bei verlässlich niedriger gemeldeter Geschwindigkeit (`speed >= 0` heißt gültig) gilt
         // die Position als Stillstand; bei unbekannter Geschwindigkeit (`< 0`) wie bisher als
@@ -1112,6 +1125,10 @@ struct ContentView: View {
                     tourElevationLossMeters += -elevationDelta
                 }
             }
+            let gradeAltitude: Double? = locationManager.isBarometerAvailable
+                ? locationManager.relativeAltitudeMeters
+                : (location.verticalAccuracy >= 0 ? location.altitude : nil)
+            updateGradeSamples(distanceMeters: tourDistanceMeters, altitudeMeters: gradeAltitude)
         }
         lastTourLocation = location
         tourRouteLocations.append(location)
@@ -1896,6 +1913,15 @@ struct ContentView: View {
         case .currentAltitude:
             guard let currentAltitudeMeters else { return ("–", "") }
             return (String(format: "%.0f", currentAltitudeMeters), "m")
+        case .currentGrade:
+            guard let currentGradePercent else { return ("–", "") }
+            let rounded = currentGradePercent.rounded()
+            return (rounded == 0 ? "0" : String(format: "%+.0f", rounded), "%")
+        case .maxAltitude:
+            guard let tourMaxAltitudeMeters else { return ("–", "") }
+            return (String(format: "%.0f", tourMaxAltitudeMeters), "m")
+        case .pausedTime:
+            return pausedTimeDisplay
         }
     }
 
@@ -1913,9 +1939,46 @@ struct ContentView: View {
         return location.altitude
     }
 
+    /// Distanzfenster für `currentGradePercent` - lang genug, dass GPS-/Barometer-Rauschen sich
+    /// nicht als sprunghaft wechselnde Steigung bemerkbar macht, kurz genug, um bei einer
+    /// tatsächlichen Steigungsänderung (Kuppe, Rampe) zeitnah zu reagieren.
+    private static let gradeWindowMeters: Double = 30
+
+    /// Verwirft Stichproben, die weiter als `gradeWindowMeters` hinter der aktuellen Distanz
+    /// liegen - hält `gradeSamples` als gleitendes Fenster statt einer unbegrenzt wachsenden Liste.
+    private func updateGradeSamples(distanceMeters: Double, altitudeMeters: Double?) {
+        guard let altitudeMeters else { return }
+        gradeSamples.append((distanceMeters, altitudeMeters))
+        while let first = gradeSamples.first, distanceMeters - first.distanceMeters > Self.gradeWindowMeters {
+            gradeSamples.removeFirst()
+        }
+    }
+
+    /// Aktuelle Steigung/Gefälle in Prozent, aus der Höhenänderung über die letzten
+    /// `gradeWindowMeters` gefahrenen Meter (Barometer wenn verfügbar, sonst GPS-Höhe - s.
+    /// `accumulateTourDistance`). Auf ±30 % gekappt (unplausible Ausreißer statt einer erfundenen
+    /// Extremsteigung); `nil` ohne genug Strecke im Fenster (z. B. gerade erst losgefahren oder im
+    /// Stillstand).
+    private var currentGradePercent: Double? {
+        guard let first = gradeSamples.first, let last = gradeSamples.last else { return nil }
+        let horizontalMeters = last.distanceMeters - first.distanceMeters
+        guard horizontalMeters >= Self.gradeWindowMeters / 2 else { return nil }
+        let grade = (last.altitudeMeters - first.altitudeMeters) / horizontalMeters * 100
+        return min(max(grade, -30), 30)
+    }
+
     private var elapsedTimeDisplay: (value: String, unit: String) {
         guard let tourStartTime else { return ("–", "") }
         return durationDisplay(seconds: Int(Date().timeIntervalSince(tourStartTime)))
+    }
+
+    /// Fahrtzeit minus Bewegungszeit (`tourMovingSeconds`) - beide bereits vorhanden für
+    /// `elapsedTimeDisplay`/`movingTimeDisplay`. `max(0, ...)` gegen einen minimal negativen Wert
+    /// durch das Zusammenspiel von rundenden Sekunden und dem 10-s-Cap in `accumulateTourDistance`.
+    private var pausedTimeDisplay: (value: String, unit: String) {
+        guard let tourStartTime else { return ("–", "") }
+        let pausedSeconds = max(0, Date().timeIntervalSince(tourStartTime) - tourMovingSeconds)
+        return durationDisplay(seconds: Int(pausedSeconds))
     }
 
     private var movingTimeDisplay: (value: String, unit: String) {
