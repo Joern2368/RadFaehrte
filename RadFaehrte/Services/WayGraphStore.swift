@@ -162,10 +162,16 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
     case cyprus
     case czechia
     case denmark
+    case estonia
+    case finland
     case greece
     case hungary
+    case iceland
+    case ireland
     case kosovo
+    case latvia
     case liechtenstein
+    case lithuania
     case luxembourg
     case macedonia
     case malta
@@ -195,10 +201,16 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
         case .cyprus: return "Zypern"
         case .czechia: return "Tschechien"
         case .denmark: return "Dänemark"
+        case .estonia: return "Estland"
+        case .finland: return "Finnland"
         case .greece: return "Griechenland"
         case .hungary: return "Ungarn"
+        case .iceland: return "Island"
+        case .ireland: return "Irland"
         case .kosovo: return "Kosovo"
+        case .latvia: return "Lettland"
         case .liechtenstein: return "Liechtenstein"
+        case .lithuania: return "Litauen"
         case .luxembourg: return "Luxemburg"
         case .macedonia: return "Nordmazedonien"
         case .malta: return "Malta"
@@ -238,14 +250,26 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
             return RegionBoundingBox(minLat: 48.54, maxLat: 51.06, minLon: 12.08, maxLon: 18.86)
         case .denmark:
             return RegionBoundingBox(minLat: 54.44, maxLat: 58.06, minLon: 7.70, maxLon: 15.65)
+        case .estonia:
+            return RegionBoundingBox(minLat: 57.50, maxLat: 60.00, minLon: 20.85, maxLon: 28.21)
+        case .finland:
+            return RegionBoundingBox(minLat: 59.29, maxLat: 70.10, minLon: 19.02, maxLon: 31.62)
         case .greece:
             return RegionBoundingBox(minLat: 34.59, maxLat: 41.75, minLon: 18.97, maxLon: 29.66)
         case .hungary:
             return RegionBoundingBox(minLat: 45.73, maxLat: 48.59, minLon: 16.11, maxLon: 22.91)
+        case .iceland:
+            return RegionBoundingBox(minLat: 62.85, maxLat: 67.50, minLon: -25.74, maxLon: -12.42)
+        case .ireland:
+            return RegionBoundingBox(minLat: 47.96, maxLat: 56.87, minLon: -16.31, maxLon: -5.06)
         case .kosovo:
             return RegionBoundingBox(minLat: 41.85, maxLat: 43.28, minLon: 20.01, maxLon: 21.79)
+        case .latvia:
+            return RegionBoundingBox(minLat: 55.66, maxLat: 58.09, minLon: 19.73, maxLon: 28.26)
         case .liechtenstein:
             return RegionBoundingBox(minLat: 47.05, maxLat: 47.27, minLon: 9.47, maxLon: 9.64)
+        case .lithuania:
+            return RegionBoundingBox(minLat: 53.89, maxLat: 56.45, minLon: 20.62, maxLon: 26.84)
         case .luxembourg:
             return RegionBoundingBox(minLat: 49.45, maxLat: 50.18, minLon: 5.73, maxLon: 6.53)
         case .macedonia:

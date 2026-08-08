@@ -634,6 +634,130 @@ struct RadFaehrteTests {
         #expect(euroVelo8Cyprus?.lines.isEmpty == false)
     }
 
+    @Test func routeRepositoryFindsEuroVeloRouteNearTallinn() async throws {
+        // Regressionstest für die zusätzliche Estland-Datenbank (estonia.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-/Österreich-/Tschechien-/Slowakei-/Albanien-/
+        // Italien-/Spanien-/Portugal-/Malta-/Andorra-/Liechtenstein-/Nordmazedonien-/Kosovo-/
+        // Montenegro-/Bosnien-und-Herzegowina-/Serbien-/Kroatien-/Slowenien-/Bulgarien-/
+        // Ungarn-/Rumänien-/Griechenland-/Zypern-Tests oben.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 24.70, minLat: 59.40, maxLon: 24.80, maxLat: 59.50
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("EuroVelo 10") == true })
+
+        let euroVelo10 = routes.first { $0.name?.contains("EuroVelo 10") == true }
+        #expect(euroVelo10?.lines.isEmpty == false)
+    }
+
+    @Test func routeRepositoryFindsEuroVeloRouteNearRiga() async throws {
+        // Regressionstest für die zusätzliche Lettland-Datenbank (latvia.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-/Österreich-/Tschechien-/Slowakei-/Albanien-/
+        // Italien-/Spanien-/Portugal-/Malta-/Andorra-/Liechtenstein-/Nordmazedonien-/Kosovo-/
+        // Montenegro-/Bosnien-und-Herzegowina-/Serbien-/Kroatien-/Slowenien-/Bulgarien-/
+        // Ungarn-/Rumänien-/Griechenland-/Zypern-/Estland-Tests oben.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 23.90, minLat: 56.90, maxLon: 24.00, maxLat: 57.00
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("EuroVelo 10") == true })
+
+        let euroVelo10Latvia = routes.first { $0.name?.contains("EuroVelo 10") == true }
+        #expect(euroVelo10Latvia?.lines.isEmpty == false)
+    }
+
+    @Test func routeRepositoryFindsEuroVeloRouteNearVilnius() async throws {
+        // Regressionstest für die zusätzliche Litauen-Datenbank (lithuania.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-/Österreich-/Tschechien-/Slowakei-/Albanien-/
+        // Italien-/Spanien-/Portugal-/Malta-/Andorra-/Liechtenstein-/Nordmazedonien-/Kosovo-/
+        // Montenegro-/Bosnien-und-Herzegowina-/Serbien-/Kroatien-/Slowenien-/Bulgarien-/
+        // Ungarn-/Rumänien-/Griechenland-/Zypern-/Estland-/Lettland-Tests oben.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 25.25, minLat: 54.65, maxLon: 25.35, maxLat: 54.75
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("EuroVelo 11") == true })
+
+        let euroVelo11Lithuania = routes.first { $0.name?.contains("EuroVelo 11") == true }
+        #expect(euroVelo11Lithuania?.lines.isEmpty == false)
+    }
+
+    @Test func routeRepositoryFindsRouteNearReykjavik() async throws {
+        // Regressionstest für die zusätzliche Island-Datenbank (iceland.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-/Österreich-/Tschechien-/Slowakei-/Albanien-/
+        // Italien-/Spanien-/Portugal-/Malta-/Andorra-/Liechtenstein-/Nordmazedonien-/Kosovo-/
+        // Montenegro-/Bosnien-und-Herzegowina-/Serbien-/Kroatien-/Slowenien-/Bulgarien-/
+        // Ungarn-/Rumänien-/Griechenland-/Zypern-/Estland-/Lettland-/Litauen-Tests oben. Island
+        // hat keine EuroVelo-Route im Datensatz, deshalb hier stattdessen das signierte
+        // Reykjavíker Radwegenetz ("Fjólublá leið" - eine der farbig benannten Hauptrouten).
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: -21.90, minLat: 64.10, maxLon: -21.85, maxLat: 64.13
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name == "Fjólublá leið" })
+
+        let fjolublaLeid = routes.first { $0.name == "Fjólublá leið" }
+        #expect(fjolublaLeid?.lines.isEmpty == false)
+    }
+
+    @Test func routeRepositoryFindsEuroVeloRouteNearDublin() async throws {
+        // Regressionstest für die zusätzliche Irland-Datenbank (ireland.sqlite, s.
+        // ROADMAP.md - gemeinsamer Geofabrik-Extrakt für Irland + Nordirland) - analog zu den
+        // Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/Luxemburg-/Schweiz-/Frankreich-/
+        // Österreich-/Tschechien-/Slowakei-/Albanien-/Italien-/Spanien-/Portugal-/Malta-/
+        // Andorra-/Liechtenstein-/Nordmazedonien-/Kosovo-/Montenegro-/Bosnien-und-Herzegowina-/
+        // Serbien-/Kroatien-/Slowenien-/Bulgarien-/Ungarn-/Rumänien-/Griechenland-/Zypern-/
+        // Estland-/Lettland-/Litauen-/Island-Tests oben.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: -6.25, minLat: 53.34, maxLon: -6.20, maxLat: 53.36
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("EuroVelo 2") == true })
+
+        let euroVelo2 = routes.first { $0.name?.contains("EuroVelo 2") == true }
+        #expect(euroVelo2?.lines.isEmpty == false)
+    }
+
+    @Test func routeRepositoryFindsEuroVeloRouteNearHelsinki() async throws {
+        // Regressionstest für die zusätzliche Finnland-Datenbank (finland.sqlite, s.
+        // ROADMAP.md) - analog zu den Niederlande-/Polen-/Schweden-/Dänemark-/Belgien-/
+        // Luxemburg-/Schweiz-/Frankreich-/Österreich-/Tschechien-/Slowakei-/Albanien-/
+        // Italien-/Spanien-/Portugal-/Malta-/Andorra-/Liechtenstein-/Nordmazedonien-/Kosovo-/
+        // Montenegro-/Bosnien-und-Herzegowina-/Serbien-/Kroatien-/Slowenien-/Bulgarien-/
+        // Ungarn-/Rumänien-/Griechenland-/Zypern-/Estland-/Lettland-/Litauen-/Island-/
+        // Irland-Tests oben.
+        let repository = RouteRepository()
+
+        let routes = repository.routesOverlapping(
+            minLon: 24.90, minLat: 60.15, maxLon: 25.00, maxLat: 60.20
+        )
+
+        #expect(!routes.isEmpty)
+        #expect(routes.contains { $0.name?.contains("EuroVelo 10") == true })
+
+        let euroVelo10Finland = routes.first { $0.name?.contains("EuroVelo 10") == true }
+        #expect(euroVelo10Finland?.lines.isEmpty == false)
+    }
+
     @Test func routeMatcherFindsWeserRadwegForBremenAchim() async throws {
         let matcher = RouteMatcher(repository: RouteRepository())
 

@@ -69,10 +69,16 @@ nonisolated extension EuropaLand {
         case .cyprus: return 75
         case .czechia: return 495
         case .denmark: return 286
+        case .estonia: return 100
+        case .finland: return 908
         case .greece: return 971
         case .hungary: return 309
+        case .iceland: return 54
+        case .ireland: return 413
         case .kosovo: return 58
+        case .latvia: return 133
         case .liechtenstein: return 4
+        case .lithuania: return 168
         case .luxembourg: return 35
         case .macedonia: return 63
         case .malta: return 8
