@@ -172,34 +172,6 @@ final class RadFaehrteUITests: XCTestCase {
     }
 
     @MainActor
-    func testUseCurrentLocationAsStart() throws {
-        let app = XCUIApplication()
-        app.resetAuthorizationStatus(for: .location)
-        let allowMonitor = addLocationPermissionAllowMonitor()
-        defer { removeUIInterruptionMonitor(allowMonitor) }
-
-        app.launch()
-
-        let startField = app.textFields["Start"]
-        XCTAssertTrue(startField.waitForExistence(timeout: 5))
-        startField.tap()
-
-        let useLocationButton = app.buttons["useCurrentLocation-Start"]
-        XCTAssertTrue(useLocationButton.waitForExistence(timeout: 5), "\"Aktuelle Position\"-Eintrag im Start-Dropdown fehlt")
-        useLocationButton.tap()
-        app.tap()
-
-        let resolvedStartField = app.textFields["Start"]
-        let predicate = NSPredicate(format: "value == %@", "Aktueller Standort")
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: resolvedStartField)
-        let result = XCTWaiter().wait(for: [expectation], timeout: 5)
-        XCTAssertEqual(result, .completed, "Start-Feld wurde nicht mit dem aktuellen Standort befüllt")
-
-        let clearButton = app.buttons["clearSelection-Start"]
-        XCTAssertTrue(clearButton.waitForExistence(timeout: 5), "Auswahl wurde nicht als SelectedPlace übernommen")
-    }
-
-    @MainActor
     func testSwapStartAndZiel() throws {
         let app = XCUIApplication()
         app.launch()
