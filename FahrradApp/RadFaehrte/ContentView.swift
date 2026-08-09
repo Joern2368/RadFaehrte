@@ -178,6 +178,12 @@ struct ContentView: View {
     /// Abbiege-Hinweise startet.
     @State private var isPreparingCuratedRouteForNavigation = false
     @State private var currentCuratedStepIndex = 0
+    /// Schritt-Index für die graue "Anfahrt"-Linie (`connectorRouteToStart`), solange sie während
+    /// der Navigation zu einer kuratierten Route/Tour noch aktiv ist - eigener Zustand analog
+    /// `currentDirectRouteStepIndex`/`currentCuratedStepIndex` (s. `activeStepRoute`), da alle drei
+    /// Quellen sich gegenseitig ausschließen, aber unabhängig weiterlaufen, sobald eine andere
+    /// wieder aktiv wird.
+    @State private var currentConnectorStepIndex = 0
     /// Straßennamen/Abbiege-Hinweise für die kombinierte Kette in `combinedRouteDetail` (On-Demand-
     /// Vorschau, analog `curatedRouteStepsResult` für Einzeltreffer) - über alle Etappen
     /// zusammengeführt, s. `matchCuratedRouteSteps(forLegs:candidatePaths:)`.
@@ -709,6 +715,7 @@ struct ContentView: View {
         snappedUserLocationCoordinate = locationManager.currentLocation?.coordinate
         currentDirectRouteStepIndex = 0
         currentCuratedStepIndex = 0
+        currentConnectorStepIndex = 0
         lastWatchHapticStepIndex = nil
         lastVoiceNowAnnouncementStepIndex = nil
         updateWatchNavigationState()
@@ -1199,6 +1206,14 @@ struct ContentView: View {
         if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
             return (directRoutes[selectedDirectRouteIndex], currentDirectRouteStepIndex)
         }
+        // Solange die graue "Anfahrt"-Linie zur kuratierten Route noch aktiv ist (`connectorRouteToStart`,
+        // von `checkCuratedConnectorDeviation` erst genullt, wenn die Route erreicht ist), zeigt die
+        // Kopfzeile deren echte MKDirections-Anweisungen mit Straßennamen statt des generischen
+        // "Route folgen" - die Anfahrt kommt bereits als vollwertige `MKRoute` mit `instructions`,
+        // bisher wurde sie nur fürs graue Kartenoverlay genutzt, nie für die Navigations-Anzeige.
+        if !isDirectRouteMode, (selectedMatch != nil || combinedMatch != nil), let connectorRouteToStart {
+            return (DirectRoute(route: connectorRouteToStart), currentConnectorStepIndex)
+        }
         if (selectedMatch != nil || combinedMatch != nil), let curatedRoute, !curatedRoute.steps.isEmpty {
             return (curatedRoute, currentCuratedStepIndex)
         }
@@ -1208,6 +1223,8 @@ struct ContentView: View {
     private func setActiveStepIndex(_ index: Int) {
         if isDirectRouteMode {
             currentDirectRouteStepIndex = index
+        } else if connectorRouteToStart != nil {
+            currentConnectorStepIndex = index
         } else {
             currentCuratedStepIndex = index
         }
@@ -1488,6 +1505,9 @@ struct ContentView: View {
             guard let route = await Self.directions(from: start, to: target).first else { return }
             guard selectedMatch?.id == matchID, combinedMatch?.id == combinedMatchID else { return }
             connectorRouteToStart = route
+            currentConnectorStepIndex = 0
+            lastWatchHapticStepIndex = nil
+            lastVoiceNowAnnouncementStepIndex = nil
         }
     }
 
@@ -2665,7 +2685,10 @@ struct ContentView: View {
         if let start = startPlace?.coordinate, match.distanceToStartKm > 0.05 {
             Task {
                 if let route = await Self.directions(from: start, to: match.nearestPointToStart).first {
-                    if match.id == selectedMatch?.id { connectorRouteToStart = route }
+                    if match.id == selectedMatch?.id {
+                        connectorRouteToStart = route
+                        currentConnectorStepIndex = 0
+                    }
                 }
             }
         }
@@ -2731,7 +2754,10 @@ struct ContentView: View {
         if let start = startPlace?.coordinate, match.distanceToStartKm > 0.05 {
             Task {
                 if let route = await Self.directions(from: start, to: firstLeg.entryPoint).first {
-                    if match.id == combinedMatch?.id { connectorRouteToStart = route }
+                    if match.id == combinedMatch?.id {
+                        connectorRouteToStart = route
+                        currentConnectorStepIndex = 0
+                    }
                 }
             }
         }

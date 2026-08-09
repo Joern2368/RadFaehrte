@@ -25,7 +25,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "location.north.line.fill",
             title: "Navigation",
-            text: "Mit \"Los\" startest du die Navigation. Die Karte folgt deiner Position und Fahrtrichtung, die gefahrene Strecke wird rot eingezeichnet. Bei der direkten Route wird bei Abweichung automatisch neu berechnet; bei kuratierten Radrouten mit heruntergeladenem Wege-Graph zeigt die Kopfzeile ebenfalls Abbiege-Hinweise mit Straßennamen statt nur \"Route folgen\", allerdings ohne automatische Neuberechnung. Kurz vor einer Abbiegung liest die App den Hinweis zusätzlich laut vor - abschaltbar unter Einstellungen > Navigation."
+            text: "Mit \"Los\" startest du die Navigation. Die Karte folgt deiner Position und Fahrtrichtung, die gefahrene Strecke wird rot eingezeichnet. Bei der direkten Route wird bei Abweichung automatisch neu berechnet; bei kuratierten Radrouten mit heruntergeladenem Wege-Graph zeigt die Kopfzeile ebenfalls Abbiege-Hinweise mit Straßennamen statt nur \"Route folgen\", allerdings ohne automatische Neuberechnung - \"Route folgen\" bedeutet dort schlicht, dass der aktuelle Wegabschnitt in den Kartendaten keinen Namen hat. Führt eine graue \"Anfahrt\"-Linie erst zum Beginn der kuratierten Route, zeigt die Kopfzeile auch dort schon echte Abbiege-Hinweise mit Straßennamen und wechselt automatisch, sobald du die eigentliche Route erreichst. Kurz vor einer Abbiegung liest die App den Hinweis zusätzlich laut vor - abschaltbar unter Einstellungen > Navigation."
         ),
         Topic(
             icon: "square.and.arrow.up",

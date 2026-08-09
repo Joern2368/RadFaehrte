@@ -5469,12 +5469,29 @@ Diese Punkte brauchen zusätzliche Informationen, die die aktuelle `routes.sqlit
         zusammen, matcht jeden Abschnitt einzeln und reiht die Ergebnisse mit einem "Weiter in
         <Region>"-Übergangsschritt aneinander. Live auf dem iPhone bestätigt (Bremen → Achim,
         Weser Radweg Alternative Route).
+      - **Graue "Anfahrt"-Linie zeigt jetzt ebenfalls Straßennamen** (2026-08-09, Nutzer-
+        Beobachtung im Anschluss an den Grenzüberquerungs-Fix oben, live an derselben Stelle:
+        Weser-Querung Bremen → Hemelingen): Direkt nach "Los" zeigte die Kopfzeile weiterhin
+        "Route folgen", weil `activeStepRoute` nur `directRoutes`/`curatedRoute` kannte, nicht
+        aber `connectorRouteToStart` - die graue Anfahrt-Linie vom Nutzer-Standort zum
+        Einstiegspunkt der kuratierten Route. Dabei liegt dafür (via `loadConnectorRoute`/
+        `loadCombinedConnectorRoute`/`checkCuratedConnectorDeviation`) längst eine echte
+        `MKRoute` mit von Apple formulierten `instructions`-Texten inkl. Straßennamen vor -
+        bisher nur fürs graue Kartenoverlay genutzt, nie für die Navigations-Anzeige. Neuer
+        dritter Zweig in `activeStepRoute` (zwischen `directRoutes` und `curatedRoute`, mit
+        eigenem `currentConnectorStepIndex`, analog zu den beiden bestehenden Indizes): Solange
+        `connectorRouteToStart` gesetzt ist, wickelt er es in `DirectRoute(route:)` (bestehender
+        MKRoute-Initializer, unverändert) und liefert dessen Schritte an Kopfzeile, Sprachausgabe
+        und Watch-Haptik - alle drei nutzen bereits einheitlich `activeStepRoute`/`previewedStep`,
+        keine Änderung an ihnen nötig. Sobald `checkCuratedConnectorDeviation` die Anfahrt-Linie
+        nullt (Route erreicht), übernimmt automatisch `curatedRoute` wie zuvor.
       → [CuratedRouteStepMatcher.swift](FahrradApp/RadFaehrte/Services/CuratedRouteStepMatcher.swift),
       [BikeRoutingEngine.swift](FahrradApp/RadFaehrte/Services/BikeRoutingEngine.swift)
       (`buildSteps` nicht mehr `private`, von `CuratedRouteStepMatcher` mitgenutzt),
       [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`activeStepRoute`,
-      `curatedRoute`, `loadCuratedRouteForNavigation`, `curatedRouteStepsDetailSheet`,
-      `loadCuratedRouteSteps`, `matchCuratedRouteSteps`),
+      `curatedRoute`, `currentConnectorStepIndex`, `loadCuratedRouteForNavigation`,
+      `curatedRouteStepsDetailSheet`, `loadCuratedRouteSteps`, `matchCuratedRouteSteps`,
+      `loadConnectorRoute`, `loadCombinedConnectorRoute`, `checkCuratedConnectorDeviation`),
       [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift) ("Route suchen",
       "Navigation")
 - [x] **Abbiege-Hinweise oben im Bildschirm für kuratierte Radrouten** – s. o., als Teil desselben
