@@ -238,6 +238,17 @@ struct LocationSearchField: View {
         }
         .onAppear {
             viewModel.updateRegion(around: biasCoordinate)
+            // Nutzer-Beobachtung (2026-08-09, Karten-Ziehgriff `routeFormCollapseGrabber`): Das
+            // Ein-/Ausklappen des umgebenden Suchfelder-Bereichs entfernt diese View per `if` komplett
+            // aus dem Baum und erzeugt sie beim Wiedereinblenden neu - dabei geht `viewModel` (und
+            // damit der angezeigte `queryFragment`-Text) als eigener `@State` verloren, obwohl
+            // `selectedPlace` selbst unverändert blieb. Der `onChange(of: selectedPlace)`-Sync weiter
+            // oben greift nur bei einer echten Änderung, nicht beim ersten Erscheinen einer frischen
+            // View-Instanz - ohne diesen zusätzlichen Abgleich blieb das Feld leer, obwohl Route und
+            // Karte weiterhin die vorherige Auswahl zeigten.
+            if let selectedPlace, viewModel.queryFragment.isEmpty {
+                viewModel.queryFragment = selectedPlace.title
+            }
         }
     }
 

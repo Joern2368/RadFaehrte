@@ -4750,10 +4750,22 @@ für die ursprüngliche Produktidee.
       dann vollflächigen Karte (`routeFormHandle`, Tippen oder Wischen nach unten) blendet wieder ein
       - beide Griffe eine direkte Kopie des bereits vorhandenen Musters für den Navigations-Banner
       (`isNavigationBannerVisible`/`navigationBannerHandle`). Wird beim Start einer Navigation
-      zurückgesetzt, damit nach deren Ende wieder die volle Ansicht erscheint. Build (Device-Ziel)
-      erfolgreich, auf dem iPhone installiert - **Live-Verifikation noch ausstehend**.
+      zurückgesetzt, damit nach deren Ende wieder die volle Ansicht erscheint. Live auf dem iPhone
+      getestet und für gut befunden.
       → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`isRouteFormCollapsed`,
       `mapFillsFullScreen`, `routeFormCollapseGrabber`, `routeFormHandle`, `startNavigating`)
+- [x] **Fix: Start-/Ziel-Suchfelder erschienen nach dem Ein-/Ausklappen der Kartenvorschau leer**
+      (2026-08-09, Nutzer-Beobachtung mit drei Screenshots direkt nach Einführung des Ziehgriffs
+      oben: Karte hochziehen und wieder runter zeigte "Start"/"Ziel" als Platzhalter statt "Aktueller
+      Standort"/"Achim", obwohl Route und Karte weiterhin die vorherige Auswahl zeigten). Ursache:
+      der Ziehgriff entfernt den Suchfelder-Bereich per `if` komplett aus dem View-Baum und erzeugt
+      ihn beim Wiedereinblenden neu - dabei geht `LocationSearchField`s eigener `@State private var
+      viewModel` (und damit der angezeigte `queryFragment`-Text) verloren, obwohl die eigentliche
+      Auswahl (`selectedPlace`-Binding) unverändert blieb. Der vorhandene `onChange(of:
+      selectedPlace)`-Sync griff nur bei einer echten Änderung, nicht beim ersten Erscheinen einer
+      frischen View-Instanz. Neuer Abgleich in `onAppear` zieht `queryFragment` bei Bedarf aus
+      `selectedPlace` nach. Live auf dem iPhone getestet und für gut befunden.
+      → [LocationSearchField.swift](FahrradApp/RadFaehrte/Views/LocationSearchField.swift)
 
 ## Bekannte Probleme
 
