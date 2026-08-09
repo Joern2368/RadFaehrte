@@ -238,6 +238,13 @@ struct ContentView: View {
     }
     @State private var connectorRouteToStart: MKRoute?
     @State private var connectorRouteToEnd: MKRoute?
+    /// `true`, während `connectorRouteToStart` wegen Abweichens vom ursprünglichen Startpunkt
+    /// gerade neu berechnet wird (s. `checkCuratedConnectorDeviation`) - verhindert überlappende
+    /// Neuberechnungen bei mehreren Standort-Updates während eine noch läuft.
+    @State private var isReroutingCuratedConnector = false
+    /// Zeitpunkt der letzten automatischen Neuberechnung von `connectorRouteToStart` während der
+    /// Navigation - verhindert wiederholtes Neuberechnen bei jedem einzelnen Standort-Update.
+    @State private var lastCuratedConnectorRerouteAt: Date?
     @State private var isDirectRouteMode = false
     @State private var isLoadingDirectRoute = false
     @State private var directRoutes: [DirectRoute] = []
@@ -718,13 +725,17 @@ struct ContentView: View {
         voiceAnnouncer.stop()
         isNavigating = false
         lastRerouteAt = nil
+        lastCuratedConnectorRerouteAt = nil
         WatchSessionManager.shared.send(.idle)
         WatchSessionManager.shared.sendImmediateIfReachable(.idle)
         if let tourStartTime {
             let tourEndTime = Date()
             let duration = tourEndTime.timeIntervalSince(tourStartTime)
             let distanceKm = tourDistanceMeters / 1000
-            let averageSpeedKmh = duration > 0 ? distanceKm / (duration / 3600) : 0
+            // Bezogen auf die reine Bewegungszeit statt `duration` (Gesamtzeit inkl. Pausen) - s.
+            // `currentAverageSpeedKmh` weiter unten, dieselbe Begründung gilt hier fürs
+            // Verlauf-Tab/HealthKit: Pausen sollen den Ø-Wert nicht künstlich drücken.
+            let averageSpeedKmh = tourMovingSeconds > 0 ? distanceKm / (tourMovingSeconds / 3600) : 0
             // Wird erst beim expliziten Tippen auf "Im Verlauf speichern" im Sheet tatsächlich
             // persistiert (s. `tourSummarySheet`), nicht mehr automatisch hier - Nutzerwunsch,
             // nach jeder Tour selbst wählen zu können statt jede Fahrt ungefragt zu behalten.
@@ -916,6 +927,7 @@ struct ContentView: View {
                 checkTurnAnnouncementTrigger(location)
                 advanceDirectRouteStepIfNeeded(location)
                 checkDirectRouteDeviation(location)
+                checkCuratedConnectorDeviation(location)
                 updateDisplayedUserLocation(location)
                 updateWatchNavigationState()
             }
@@ -1283,6 +1295,10 @@ struct ContentView: View {
     /// Mindestabstand zwischen zwei automatischen Neuberechnungen, damit ein GPS-Punkt, der genau
     /// um den Schwellenwert herum schwankt, nicht wiederholt Netzwerk-/Rechenlast auslöst.
     private static let directRouteRerouteCooldown: TimeInterval = 15
+    /// Ab welchem Abstand zwischen Start-/Zielkoordinate und dem tatsächlichen Anfang/Ende der
+    /// berechneten `DirectRoute` ein Connector geladen wird - deckt sich mit dem Schwellenwert in
+    /// `loadConnectorRoute` (dort als `distanceToStartKm/EndKm > 0.05`).
+    private static let directRouteConnectorMinDistanceMeters: CLLocationDistance = 50
 
     /// Spiegelt die aktuelle Navigations-Kopfzeile (Anweisung + Live-Entfernung, s.
     /// `navigationInstructionTitle`/`currentStepDistanceText`) an eine gekoppelte Apple Watch -
@@ -1416,6 +1432,50 @@ struct ContentView: View {
         rerouteDirectRoute(from: location.coordinate)
     }
 
+    /// Ab welcher Entfernung zur kuratierten Route (`selectedRouteLines`) während der Navigation
+    /// die graue "Anfahrt"-Linie (`connectorRouteToStart`) noch als sinnvoll gilt - identisch mit
+    /// dem Schwellenwert, ab dem `loadConnectorRoute` sie überhaupt erst anlegt.
+    private static let curatedConnectorRelevantThresholdKm: Double = 0.05
+    /// Mindestabstand zwischen zwei automatischen Neuberechnungen der "Anfahrt"-Linie, analog
+    /// `directRouteRerouteCooldown`.
+    private static let curatedConnectorRerouteCooldown: TimeInterval = 15
+
+    /// Hält `connectorRouteToStart` während der Navigation zu einer kuratierten Route/Tour
+    /// (`selectedMatch`/`combinedMatch`) aktuell: `loadConnectorRoute`/`loadCombinedConnectorRoute`
+    /// berechnen sie nur einmal beim Auswählen der Route, ausgehend vom damaligen `startPlace` -
+    /// fährt der Nutzer danach einen anderen Weg zur Route als ursprünglich geplant, zeigte die
+    /// Linie weiterhin zum alten Startpunkt statt zur aktuellen Position (Nutzer-Beobachtung
+    /// 2026-08-09, Screenshot Weser Radweg/Hemelingen). Anders als `checkDirectRouteDeviation`
+    /// wird hier bewusst nicht die eigentliche Route neu berechnet (s. Kommentar an
+    /// `directRouteDeviationThresholdKm`), nur die Anfahrt-Wegbeschreibung dorthin.
+    private func checkCuratedConnectorDeviation(_ location: CLLocation) {
+        guard !isDirectRouteMode, !isReroutingCuratedConnector,
+              selectedMatch != nil || combinedMatch != nil,
+              !selectedRouteLines.isEmpty else { return }
+        guard let nearest = RouteMatcher.nearestPoint(from: location.coordinate, toLines: selectedRouteLines)
+        else { return }
+        guard nearest.distanceKm > Self.curatedConnectorRelevantThresholdKm else {
+            // Route erreicht - die Anfahrt-Linie hat ihren Zweck erfüllt.
+            if connectorRouteToStart != nil { connectorRouteToStart = nil }
+            return
+        }
+        if let lastCuratedConnectorRerouteAt,
+           Date().timeIntervalSince(lastCuratedConnectorRerouteAt) < Self.curatedConnectorRerouteCooldown { return }
+
+        isReroutingCuratedConnector = true
+        lastCuratedConnectorRerouteAt = Date()
+        let start = location.coordinate
+        let target = nearest.coordinate
+        let matchID = selectedMatch?.id
+        let combinedMatchID = combinedMatch?.id
+        Task {
+            defer { isReroutingCuratedConnector = false }
+            guard let route = await Self.directions(from: start, to: target).first else { return }
+            guard selectedMatch?.id == matchID, combinedMatch?.id == combinedMatchID else { return }
+            connectorRouteToStart = route
+        }
+    }
+
     /// Berechnet die "Direkte Fahrrad-Route" vom aktuellen Standort aus neu (Ziel bleibt gleich) -
     /// ausgelöst durch `checkDirectRouteDeviation`, wenn der Nutzer während der Navigation von der
     /// Strecke abweicht. Ersetzt `directRoutes` erst, sobald die neue Route fertig berechnet ist,
@@ -1448,6 +1508,7 @@ struct ContentView: View {
             currentDirectRouteStepIndex = 0
             lastWatchHapticStepIndex = nil
             lastVoiceNowAnnouncementStepIndex = nil
+            loadDirectRouteConnectors(start: location, ziel: ziel)
             sendActiveRouteToWatch()
         }
     }
@@ -1925,11 +1986,14 @@ struct ContentView: View {
         }
     }
 
-    /// Durchschnittstempo der laufenden Fahrt seit `tourStartTime` (nicht die in den Einstellungen
-    /// hinterlegte Wunschgeschwindigkeit, s. `averageSpeedKmh`).
+    /// Durchschnittstempo der laufenden Fahrt, bezogen auf die reine Bewegungszeit
+    /// (`tourMovingSeconds`) statt der Gesamtzeit seit `tourStartTime` - sonst würde jede Pause
+    /// (Ampel, Stopp, Tippen auf Pause) den Wert künstlich nach unten ziehen, obwohl während der
+    /// Pause keine Strecke zurückgelegt wird (nicht die in den Einstellungen hinterlegte
+    /// Wunschgeschwindigkeit, s. `averageSpeedKmh`).
     private var currentAverageSpeedKmh: Double {
-        guard let tourStartTime else { return 0 }
-        let hours = Date().timeIntervalSince(tourStartTime) / 3600
+        guard tourStartTime != nil else { return 0 }
+        let hours = tourMovingSeconds / 3600
         guard hours > 0 else { return 0 }
         return (tourDistanceMeters / 1000) / hours
     }
@@ -2282,6 +2346,18 @@ struct ContentView: View {
                         .stroke(.blue, lineWidth: 5)
                 }
             }
+            // Grau gepunktet wie die Anfahrt-Linie bei kuratierten Routen (s. u.) - überbrückt die
+            // Lücke, die entsteht, weil die Offline-Engine Start/Ziel auf den nächsten Knoten im
+            // Wege-Graphen snappt statt exakt zur gesuchten Koordinate zu routen (s.
+            // `loadDirectRouteConnectors`).
+            if let connectorRouteToStart {
+                MapPolyline(connectorRouteToStart.polyline)
+                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
+            }
+            if let connectorRouteToEnd {
+                MapPolyline(connectorRouteToEnd.polyline)
+                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
+            }
         } else {
             ForEach(routeLineSlots) { slot in
                 MapPolyline(coordinates: slot.coordinates)
@@ -2361,6 +2437,8 @@ struct ContentView: View {
     private func loadDirectRoute() {
         directRoutes = []
         selectedDirectRouteIndex = 0
+        connectorRouteToStart = nil
+        connectorRouteToEnd = nil
         guard let start = startPlace?.coordinate, let ziel = zielPlace?.coordinate else { return }
         isLoadingDirectRoute = true
         // Bevorzugt die Offline-Engine, falls eine Region (Bundesland oder Land) heruntergeladen
@@ -2372,7 +2450,10 @@ struct ContentView: View {
                 let offlineRoutes = await Self.offlineDirectRoutes(path: path, from: start, to: ziel)
                 if !offlineRoutes.isEmpty {
                     isLoadingDirectRoute = false
-                    if isDirectRouteMode { directRoutes = offlineRoutes }
+                    if isDirectRouteMode {
+                        directRoutes = offlineRoutes
+                        loadDirectRouteConnectors(start: start, ziel: ziel)
+                    }
                     return
                 }
             }
@@ -2383,12 +2464,18 @@ struct ContentView: View {
                 candidatePaths: offlineGraphCandidatePaths(), from: start, to: ziel
             ) {
                 isLoadingDirectRoute = false
-                if isDirectRouteMode { directRoutes = [combined] }
+                if isDirectRouteMode {
+                    directRoutes = [combined]
+                    loadDirectRouteConnectors(start: start, ziel: ziel)
+                }
                 return
             }
             let routes = await Self.directions(from: start, to: ziel, alternates: true)
             isLoadingDirectRoute = false
-            if isDirectRouteMode { directRoutes = routes.map(DirectRoute.init(route:)) }
+            if isDirectRouteMode {
+                directRoutes = routes.map(DirectRoute.init(route:))
+                loadDirectRouteConnectors(start: start, ziel: ziel)
+            }
         }
     }
 
@@ -2505,6 +2592,46 @@ struct ContentView: View {
             Task {
                 if let route = await Self.directions(from: match.nearestPointToEnd, to: ziel).first {
                     if match.id == selectedMatch?.id { connectorRouteToEnd = route }
+                }
+            }
+        }
+    }
+
+    /// Wie `loadConnectorRoute`, aber für den Direktrouten-Modus (`isDirectRouteMode`): Die
+    /// Offline-Engine snappt Start/Ziel auf den nächstgelegenen Knoten im Wege-Graphen
+    /// (`BikeRoutingEngine.nearestNodes`, bis zu 2 km Suchradius) und hängt die berechnete Linie
+    /// (`BikeRoutingEngine.displayCoordinates`) nie an die tatsächlich gesuchte Koordinate an - ohne
+    /// diesen Connector endete die blaue Linie sichtbar vor dem Adresspunkt (Nutzer-Beobachtung
+    /// 2026-08-08, Bückeburger Straße 9). `start`/`ziel` werden statt `startPlace`/`zielPlace`
+    /// übergeben, da `rerouteDirectRoute` hier die aktuelle Live-Position statt `startPlace` braucht.
+    private func loadDirectRouteConnectors(start: CLLocationCoordinate2D, ziel: CLLocationCoordinate2D) {
+        connectorRouteToStart = nil
+        connectorRouteToEnd = nil
+        guard directRoutes.indices.contains(selectedDirectRouteIndex),
+              let routeStart = directRoutes[selectedDirectRouteIndex].coordinates.first,
+              let routeEnd = directRoutes[selectedDirectRouteIndex].coordinates.last else { return }
+        let routeID = directRoutes[selectedDirectRouteIndex].id
+
+        func stillCurrent() -> Bool {
+            isDirectRouteMode && directRoutes.indices.contains(selectedDirectRouteIndex)
+                && directRoutes[selectedDirectRouteIndex].id == routeID
+        }
+
+        let startGapMeters = CLLocation(latitude: start.latitude, longitude: start.longitude)
+            .distance(from: CLLocation(latitude: routeStart.latitude, longitude: routeStart.longitude))
+        if startGapMeters > Self.directRouteConnectorMinDistanceMeters {
+            Task {
+                if let route = await Self.directions(from: start, to: routeStart).first, stillCurrent() {
+                    connectorRouteToStart = route
+                }
+            }
+        }
+        let endGapMeters = CLLocation(latitude: ziel.latitude, longitude: ziel.longitude)
+            .distance(from: CLLocation(latitude: routeEnd.latitude, longitude: routeEnd.longitude))
+        if endGapMeters > Self.directRouteConnectorMinDistanceMeters {
+            Task {
+                if let route = await Self.directions(from: routeEnd, to: ziel).first, stillCurrent() {
+                    connectorRouteToEnd = route
                 }
             }
         }

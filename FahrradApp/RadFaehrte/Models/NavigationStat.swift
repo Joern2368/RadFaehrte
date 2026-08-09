@@ -62,7 +62,7 @@ enum NavigationStatKind: String, CaseIterable, Identifiable, Codable {
         case .distanceToDestination: return "Entfernung zum Ziel"
         case .arrivalTimeSetSpeed: return "Ankunftszeit (eingestellte Ø-Geschwindigkeit)"
         case .arrivalTimeAverageSpeed: return "Ankunftszeit (bisheriges Ø-Tempo der Fahrt)"
-        case .averageSpeed: return "Durchschnittsgeschwindigkeit (seit Start)"
+        case .averageSpeed: return "Durchschnittsgeschwindigkeit (bezogen auf reine Fahrzeit, ohne Pausen)"
         case .elapsedTime: return "Fahrtzeit (seit Start, inkl. Pausen)"
         case .elevationGain: return "Höhenmeter (bergauf, seit Start)"
         case .elevationLoss: return "Höhenmeter (bergab, seit Start)"

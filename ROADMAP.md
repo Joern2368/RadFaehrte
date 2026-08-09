@@ -4691,6 +4691,53 @@ für die ursprüngliche Produktidee.
       konkurrierende zweite Route wirkt. Live auf dem Gerät getestet und für besser befunden.
       → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`routeOverlayContent`,
       `connectorRouteToStart`/`connectorRouteToEnd`-Darstellung)
+- [x] **"Direkte Fahrrad-Route" (offline): Anfahrt/Zielweg-Connector ergänzt, damit die blaue Linie
+      wirklich am Zielpunkt endet** (2026-08-08, Nutzer-Beobachtung: Ziel "Bückeburger Straße 9" lag
+      sichtbar nicht am Ende der blauen Linie). Ursache: `BikeRoutingEngine.routes` snappt Start/Ziel
+      auf den nächstgelegenen Knoten im Wege-Graphen (`nearestNodes`, bis zu 2 km Suchradius) und
+      `displayCoordinates` baut die Linie ausschließlich aus Graph-Knoten-Koordinaten - die
+      tatsächlich gesuchte Koordinate wurde nie angehängt. Für benannte/kuratierte Routen gab es
+      dafür bereits einen Connector-Mechanismus (`loadConnectorRoute`, graue gepunktete Linie), der
+      im Direktrouten-Modus (`isDirectRouteMode`) aber fehlte. Neue `loadDirectRouteConnectors`
+      (analog zu `loadConnectorRoute`, ab 50 m Lücke) lädt bei Bedarf eine Online-Wegbeschreibung
+      vom letzten Graph-Knoten zur echten Zielkoordinate (und vom Start zum ersten Graph-Knoten) und
+      zeigt sie als dieselbe graue gepunktete Linie wie bei kuratierten Routen. Aufgerufen aus
+      `loadDirectRoute` (alle drei Zweige: Offline-Einzelregion, Cross-Region, Online-Fallback) und
+      `rerouteDirectRoute` (dort mit der Live-Position statt `startPlace`). Build (Device-Ziel)
+      erfolgreich - **Live-Verifikation auf dem iPhone noch ausstehend**.
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`loadDirectRouteConnectors`,
+      `loadDirectRoute`, `rerouteDirectRoute`, `routeOverlayContent`)
+- [x] **Ø-Tempo bezieht sich jetzt auf reine Fahrzeit statt Gesamtzeit seit Start** (2026-08-09,
+      Nutzer-Beobachtung: Anhalten/Pause drücken lässt den Durchschnittswert künstlich sinken).
+      `currentAverageSpeedKmh` (Live-Anzeige während der Navigation) sowie die beim Beenden der
+      Tour berechnete `averageSpeedKmh` (Verlauf-Eintrag `DrivenTour` + HealthKit-Workout) teilten
+      die Strecke bisher durch `Date().timeIntervalSince(tourStartTime)` bzw. `duration` - beides
+      Gesamtzeit inklusive Stillstand. Beide nutzen jetzt stattdessen `tourMovingSeconds` (die
+      bereits vorhandene reine Bewegungszeit ohne Stopps, s. `movingTime`-Statistik). Betrifft
+      auch die davon abgeleiteten Werte `arrivalTimeAverageSpeed`/`remainingTimeAverageSpeed`.
+      Build (Device-Ziel) erfolgreich, auf dem iPhone installiert - **Live-Verifikation beim
+      Fahren mit Pause noch ausstehend**.
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`currentAverageSpeedKmh`,
+      `stopNavigating`), [NavigationStat.swift](FahrradApp/RadFaehrte/Models/NavigationStat.swift)
+- [x] **Anfahrt-Linie zum Streckenanfang folgt jetzt der Live-Position statt am Planungs-Startpunkt
+      einzufrieren** (2026-08-09, Nutzer-Beobachtung mit Screenshot: Weser Radweg bei Hemelingen -
+      wich der Nutzer während der Navigation vom ursprünglich geplanten Weg zur Route ab, blieb die
+      graue gepunktete Linie unverändert am alten Startpunkt stehen statt zur aktuellen Position zu
+      zeigen). Ursache: `loadConnectorRoute`/`loadCombinedConnectorRoute` berechnen
+      `connectorRouteToStart` nur einmal beim Auswählen der Route (`onChange(of: selectedMatch)`
+      bzw. `combinedMatch`), ausgehend vom damaligen `startPlace` - anders als beim Connector der
+      "Direkten Fahrrad-Route" (`loadDirectRouteConnectors`, dort schon an die Live-Position
+      gekoppelt über `rerouteDirectRoute`) gab es für kuratierte Routen/Touren keine
+      Neuberechnung während der Fahrt. Neue `checkCuratedConnectorDeviation` (analog
+      `checkDirectRouteDeviation`, aber bewusst **ohne** die eigentliche Route neu zu berechnen -
+      s. Kommentar an `directRouteDeviationThresholdKm`, bei kuratierten Routen soll ein Abweichen
+      zur Strecke zurückführen, nicht die Strecke ändern) läuft bei jedem Standort-Update während
+      der Navigation mit, aktualisiert `connectorRouteToStart` alle 15 s vom aktuellen Standort aus
+      neu (solange die Route noch >50 m entfernt ist) und blendet die Linie aus, sobald die Route
+      erreicht ist. Build (Simulator-Ziel) erfolgreich - **Live-Verifikation auf dem iPhone noch
+      ausstehend**.
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`checkCuratedConnectorDeviation`,
+      `curatedConnectorRelevantThresholdKm`, `curatedConnectorRerouteCooldown`, `handleLocationUpdate`)
 
 ## Bekannte Probleme
 
