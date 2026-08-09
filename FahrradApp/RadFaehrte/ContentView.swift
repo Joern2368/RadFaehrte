@@ -221,6 +221,15 @@ struct ContentView: View {
     /// Banners (s. `mapFillsFullScreen`). Startet bei jeder neuen Navigation wieder eingeblendet
     /// (s. `startNavigating`).
     @State private var isNavigationBannerVisible = true
+    /// Nutzer-Wunsch (2026-08-09): Karte ganz sehen können (Suchfelder, Routenvorschläge und
+    /// "Los"-Button ausgeblendet) - per Ziehgriff über der Karte (`routeFormCollapseGrabber`)
+    /// einklappen, Tippen oder Wischen auf den Griff über der dann vollflächigen Karte
+    /// (`routeFormHandle`) blendet wieder ein. Ursprünglich als Wisch-Geste auf der Karte selbst
+    /// umgesetzt, aber nach Live-Test verworfen: normales Verschieben/Antippen der Karte löste das
+    /// Einklappen zu leicht versehentlich mit aus - der eigene Ziehgriff kollidiert nicht mit der
+    /// Kartenbedienung. Wird beim Start einer Navigation zurückgesetzt (s. `startNavigating`), damit
+    /// nach deren Ende wieder die volle Ansicht erscheint.
+    @State private var isRouteFormCollapsed = false
     /// Nutzer-Feedback: Während der Navigation ist die Tab-Leiste ausgeblendet, daher war der
     /// Einstellungen-Tab (z. B. für eine Tempo-Änderung mitten in der Fahrt) unerreichbar. Zahnrad-
     /// Button in `navigationControlsOverlay` öffnet stattdessen dieses Sheet, Navigation läuft
@@ -315,7 +324,7 @@ struct ContentView: View {
     /// navigiert wird und der Nutzer den Banner per Button ausgeblendet hat. Ist er eingeblendet,
     /// bleibt die Karte wie gewohnt unterhalb des Banners begrenzt (s. `isNavigationBannerVisible`).
     private var mapFillsFullScreen: Bool {
-        isNavigating && !isNavigationBannerVisible
+        (isNavigating && !isNavigationBannerVisible) || (!isNavigating && isRouteFormCollapsed)
     }
 
     /// Ob für die aktuell gewählte Route (`isDirectRouteMode`/`selectedMatch`/`combinedMatch`) noch
@@ -336,7 +345,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            if !isNavigating {
+            if !isNavigating && !isRouteFormCollapsed {
                 HStack(alignment: .top, spacing: 8) {
                     VStack(spacing: 8) {
                         LocationSearchField(
@@ -405,6 +414,8 @@ struct ContentView: View {
                     }
                     .padding(.horizontal)
                 }
+
+                routeFormCollapseGrabber
             }
 
             if isNavigating && isNavigationBannerVisible {
@@ -504,6 +515,9 @@ struct ContentView: View {
                 }
                 .overlay(alignment: .top) {
                     navigationBannerHandle
+                }
+                .overlay(alignment: .top) {
+                    routeFormHandle
                 }
                 .overlay(alignment: .bottom) {
                     recenterButtonOverlay
@@ -674,6 +688,7 @@ struct ContentView: View {
         isNavigating = true
         isFollowingUser = true
         isNavigationBannerVisible = true
+        isRouteFormCollapsed = false
         isHeadingUpEnabled = navigationDefaultHeadingUp
         tourStartTime = Date()
         tourDistanceMeters = 0
@@ -1866,6 +1881,72 @@ struct ContentView: View {
                 )
                 .accessibilityIdentifier("showNavigationBanner")
                 .accessibilityLabel("Hinweise einblenden")
+        }
+    }
+
+    /// Schmaler Ziehgriff direkt über der Karte zum Einklappen von Suchfeldern/Routenvorschlägen/
+    /// "Los"-Button (s. `isRouteFormCollapsed`) - bewusst ein eigenes kleines Ziehziel statt einer
+    /// Wisch-Geste auf der Karte selbst: Nutzer-Feedback (2026-08-09) direkt nach Einführung der
+    /// ursprünglichen Karten-Wisch-Geste - normales Verschieben/Antippen der Karte beim Navigieren
+    /// löste das Einklappen zu leicht versehentlich mit aus. Tippen oder Wischen nach oben klappt
+    /// ein, spiegelbildlich zu `routeFormHandle` weiter unten, die den Rückweg anbietet.
+    private var routeFormCollapseGrabber: some View {
+        Capsule()
+            .fill(.tertiary)
+            .frame(width: 36, height: 5)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isRouteFormCollapsed = true
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 15)
+                    .onEnded { value in
+                        guard value.translation.height < -20 else { return }
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            isRouteFormCollapsed = true
+                        }
+                    }
+            )
+            .accessibilityIdentifier("collapseRouteForm")
+            .accessibilityLabel("Karte ganz anzeigen")
+    }
+
+    /// Griff, solange die Karte per Wisch-Geste ganz eingeblendet ist (s. `isRouteFormCollapsed`) -
+    /// Tap oder Wisch nach unten blenden Suchfelder/Routenvorschläge/"Los"-Button wieder ein, analog
+    /// zu `navigationBannerHandle`.
+    @ViewBuilder
+    private var routeFormHandle: some View {
+        if !isNavigating && isRouteFormCollapsed {
+            Capsule()
+                .fill(.regularMaterial)
+                .frame(width: 44, height: 20)
+                .overlay {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 8)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isRouteFormCollapsed = false
+                    }
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 15)
+                        .onEnded { value in
+                            guard value.translation.height > 20 else { return }
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                isRouteFormCollapsed = false
+                            }
+                        }
+                )
+                .accessibilityIdentifier("showRouteForm")
+                .accessibilityLabel("Routenvorschläge einblenden")
         }
     }
 

@@ -4738,6 +4738,22 @@ für die ursprüngliche Produktidee.
       ausstehend**.
       → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`checkCuratedConnectorDeviation`,
       `curatedConnectorRelevantThresholdKm`, `curatedConnectorRerouteCooldown`, `handleLocationUpdate`)
+- [x] **Kartenvorschau bei der Routenplanung ein-/ausklappbar** (2026-08-09, Nutzer-Wunsch: die
+      kleine Kartenvorschau unterhalb der Routenvorschläge ganz sehen können, ohne dafür erst "Los"
+      zu drücken). Neuer Zustand `isRouteFormCollapsed`: eingeklappt blendet Suchfelder,
+      Routenvorschläge und "Los"-Button aus, die Karte füllt danach den ganzen Bildschirm (analog
+      `mapFillsFullScreen`, bisher nur für den ausgeblendeten Navigations-Banner). Erster Versuch
+      nutzte dafür eine Wisch-Geste direkt auf der Karte - nach Live-Test verworfen (Nutzer-Feedback:
+      löste beim normalen Verschieben/Antippen der Karte zu leicht versehentlich mit aus). Stattdessen
+      jetzt ein schmaler Ziehgriff über der Karte (`routeFormCollapseGrabber`, Tippen oder Wischen
+      nach oben klappt ein), der nicht mit der Kartenbedienung kollidiert; ein kleiner Griff über der
+      dann vollflächigen Karte (`routeFormHandle`, Tippen oder Wischen nach unten) blendet wieder ein
+      - beide Griffe eine direkte Kopie des bereits vorhandenen Musters für den Navigations-Banner
+      (`isNavigationBannerVisible`/`navigationBannerHandle`). Wird beim Start einer Navigation
+      zurückgesetzt, damit nach deren Ende wieder die volle Ansicht erscheint. Build (Device-Ziel)
+      erfolgreich, auf dem iPhone installiert - **Live-Verifikation noch ausstehend**.
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`isRouteFormCollapsed`,
+      `mapFillsFullScreen`, `routeFormCollapseGrabber`, `routeFormHandle`, `startNavigating`)
 
 ## Bekannte Probleme
 
