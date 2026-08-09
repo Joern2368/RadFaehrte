@@ -5454,6 +5454,21 @@ Diese Punkte brauchen zusätzliche Informationen, die die aktuelle `routes.sqlit
         Einzeltreffern denselben `curatedRoute`-Zustand, da sich beide Modi gegenseitig
         ausschließen). Live auf dem iPhone bestätigt (Bremen → Achim, "StadtLandFluss →
         Geestweg").
+      - **Regionsübergreifende Einzeltreffer nachgezogen** (2026-08-09, Nutzer-Beobachtung): Ein
+        Einzeltreffer, dessen Geometrie selbst eine Bundesland-/Länder-Grenze überquert (z. B.
+        "Weser Radweg Alternative Route" zwischen Bremen und Niedersachsen), fiel bisher komplett
+        auf den generischen Hinweis "Route folgen" zurück, weil `matchCuratedRouteSteps` nur
+        prüfte, ob **ein einzelner** heruntergeladener Wege-Graph ≥50 % der Strecke abdeckt
+        (`CuratedRouteStepMatcher.minMatchedFraction`) - bei einer Grenzüberquerung deckte aber
+        keiner der beiden Graphen allein genug ab. Neue zweite Stufe
+        `CuratedRouteStepMatcher.steps(along:candidateRepositories:)`, analog
+        `CrossRegionRouteStitcher` für die direkte Fahrrad-Route, aber ohne
+        Übergangspunkt-Suche entlang einer Luftlinie nötig (die kuratierte Route liefert die
+        echten Zwischenpunkte bereits): ordnet jeden Punkt der Region mit dem nächstgelegenen
+        Graph-Knoten zu, fasst aufeinanderfolgende Punkte derselben Region zu einem Abschnitt
+        zusammen, matcht jeden Abschnitt einzeln und reiht die Ergebnisse mit einem "Weiter in
+        <Region>"-Übergangsschritt aneinander. Live auf dem iPhone bestätigt (Bremen → Achim,
+        Weser Radweg Alternative Route).
       → [CuratedRouteStepMatcher.swift](FahrradApp/RadFaehrte/Services/CuratedRouteStepMatcher.swift),
       [BikeRoutingEngine.swift](FahrradApp/RadFaehrte/Services/BikeRoutingEngine.swift)
       (`buildSteps` nicht mehr `private`, von `CuratedRouteStepMatcher` mitgenutzt),

@@ -97,6 +97,103 @@ enum CuratedRouteStepMatcher {
         return BikeRoutingEngine.buildSteps(path: nodePath, nameIndex: nameIndexByNode, repository: repository)
     }
 
+    /// Wie `steps(along:using:)`, kombiniert dabei aber mehrere heruntergeladene Regionsgraphen,
+    /// falls `coordinates` selbst eine Regionsgrenze überquert (z. B. der Weser-Radweg zwischen
+    /// Bremen und Niedersachsen) - analog `CrossRegionRouteStitcher` für die direkte Fahrrad-Route,
+    /// hier aber ohne Übergangspunkt-Suche entlang einer Luftlinie: `coordinates` liefert bereits
+    /// die tatsächlichen Zwischenpunkte der kuratierten Route, jeder Punkt wird einfach der Region
+    /// mit dem nächstgelegenen Graph-Knoten zugeordnet, aufeinanderfolgende Punkte derselben Region
+    /// bilden einen Abschnitt, und jeder Abschnitt wird einzeln über `steps(along:using:)` gegen
+    /// seinen eigenen Graphen gematcht. Wird von der aufrufenden Stelle
+    /// (`ContentView.matchCuratedRouteSteps`) erst probiert, nachdem der einfachere
+    /// Ein-Regionen-Versuch (`steps(along:using:)` für jeden einzelnen Kandidaten) für die gesamte
+    /// Strecke fehlgeschlagen ist. `nil` bei weniger als zwei Kandidaten, zu wenigen erfolgreich
+    /// gematchten Abschnitten (analog `minMatchedFraction`) oder wenn kein Punkt überhaupt einen
+    /// Graph-Knoten in Reichweite hat.
+    nonisolated static func steps(
+        along coordinates: [CLLocationCoordinate2D],
+        candidateRepositories: [(repository: WayGraphRepository, displayName: String)]
+    ) -> [BikeRoutingEngine.Result.Step]? {
+        guard coordinates.count >= 2, candidateRepositories.count >= 2 else { return nil }
+
+        // Region je Punkt: welcher Kandidat hat hier den nächstgelegenen Knoten (innerhalb der
+        // üblichen Snap-Toleranz)? `nil`, wenn keiner in Reichweite ist (z. B. eine Datenlücke) -
+        // solche Punkte übernehmen unten die Region ihres Vorgängers, statt einen künstlichen
+        // Regionswechsel auszulösen.
+        var regionIndexPerPoint: [Int?] = coordinates.map { coordinate in
+            var bestIndex: Int?
+            var bestDistance = Double.infinity
+            for (index, candidate) in candidateRepositories.enumerated() {
+                guard let node = candidate.repository.nearestNode(to: coordinate, maxDistanceMeters: maxSnapDistanceMeters)
+                else { continue }
+                let location = candidate.repository.nodeLocations[node]
+                let distance = CLLocation(latitude: location.latitude, longitude: location.longitude)
+                    .distance(from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
+                if distance < bestDistance {
+                    bestDistance = distance
+                    bestIndex = index
+                }
+            }
+            return bestIndex
+        }
+
+        guard let firstKnownIndex = (regionIndexPerPoint.first { $0 != nil } ?? nil) else { return nil }
+        var lastKnown = firstKnownIndex
+        for i in regionIndexPerPoint.indices {
+            if let known = regionIndexPerPoint[i] { lastKnown = known } else { regionIndexPerPoint[i] = lastKnown }
+        }
+        let resolvedRegionIndex = regionIndexPerPoint.map { $0! }
+
+        // Aufeinanderfolgende Punkte derselben Region zu Abschnitten zusammenfassen. Der
+        // Übergangspunkt wird in beide Nachbarabschnitte übernommen (Bereichsende = nächster
+        // Bereichsanfang), damit `steps(along:using:)` an der Naht keinen Punkt verliert.
+        struct Segment { let regionIndex: Int; let startIndex: Int; let endIndex: Int }
+        var segments: [Segment] = []
+        var segmentStart = 0
+        for i in 1..<resolvedRegionIndex.count where resolvedRegionIndex[i] != resolvedRegionIndex[i - 1] {
+            segments.append(Segment(regionIndex: resolvedRegionIndex[i - 1], startIndex: segmentStart, endIndex: i))
+            segmentStart = i
+        }
+        segments.append(Segment(
+            regionIndex: resolvedRegionIndex[resolvedRegionIndex.count - 1],
+            startIndex: segmentStart, endIndex: resolvedRegionIndex.count - 1
+        ))
+        segments = segments.filter { $0.endIndex > $0.startIndex }
+
+        var mergedSteps: [BikeRoutingEngine.Result.Step] = []
+        var matchedSegmentCount = 0
+        var previousMatchedRegionIndex: Int?
+        for segment in segments {
+            let candidate = candidateRepositories[segment.regionIndex]
+            let segmentCoordinates = Array(coordinates[segment.startIndex...segment.endIndex])
+            guard let segmentSteps = steps(along: segmentCoordinates, using: candidate.repository), !segmentSteps.isEmpty
+            else { continue }
+            matchedSegmentCount += 1
+
+            if let previousMatchedRegionIndex, previousMatchedRegionIndex != segment.regionIndex {
+                mergedSteps.append(BikeRoutingEngine.Result.Step(
+                    instructions: "Weiter in \(candidate.displayName)",
+                    endCoordinate: segmentCoordinates[0], direction: .straight
+                ))
+            }
+            for step in segmentSteps {
+                if let last = mergedSteps.last, last.instructions == step.instructions {
+                    mergedSteps[mergedSteps.count - 1] = BikeRoutingEngine.Result.Step(
+                        instructions: last.instructions, endCoordinate: step.endCoordinate, direction: last.direction
+                    )
+                } else {
+                    mergedSteps.append(step)
+                }
+            }
+            previousMatchedRegionIndex = segment.regionIndex
+        }
+
+        guard !mergedSteps.isEmpty, Double(matchedSegmentCount) / Double(segments.count) >= minMatchedFraction else {
+            return nil
+        }
+        return mergedSteps
+    }
+
     /// Straßenname der direkten Kante `from -> to`, falls vorhanden - `edges(from:)` liefert
     /// typischerweise nur eine Handvoll Kanten pro Knoten, ein linearer Scan ist hier also
     /// billiger als eine eigene Kanten-Lookup-Struktur.

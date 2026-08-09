@@ -3207,27 +3207,52 @@ struct ContentView: View {
     }
 
     /// Sucht unter allen heruntergeladenen Wege-Graphen (`offlineGraphCandidatePaths`, analog
-    /// `loadDirectRoute`) den ersten, der `path` ausreichend abdeckt (s.
+    /// `loadDirectRoute`) den ersten, der `path` allein ausreichend abdeckt (s.
     /// `CuratedRouteStepMatcher.minMatchedFraction`), und liefert dessen Treffer als vollwertiges
     /// `BikeRoutingEngine.Result` (Distanz + Schritte) - gemeinsame Grundlage für die On-Demand-
     /// Vorschau (`loadCuratedRouteSteps`) und die aktive Navigation
     /// (`loadCuratedRouteForNavigation`), damit beide nicht getrennt durch dieselbe
     /// Kandidaten-Liste laufen.
+    ///
+    /// Deckt kein einzelner Graph `path` allein ausreichend ab, versucht ein zweiter Schritt, ob
+    /// `path` selbst eine Regionsgrenze überquert (z. B. eine kuratierte Route wie der Weser-Radweg
+    /// zwischen Bremen und Niedersachsen) - analog `CrossRegionRouteStitcher` für die direkte
+    /// Fahrrad-Route, s. `CuratedRouteStepMatcher.steps(along:candidateRepositories:)`. Live-Fund
+    /// 2026-08-09: Bremen -> Achim lieferte für den Weser-Radweg bisher nur den generischen Hinweis
+    /// "Route folgen", weil weder das heruntergeladene Bremen- noch das Niedersachsen-Bundesland
+    /// allein ≥50 % der Route abdeckte.
     private static func matchCuratedRouteSteps(
         along path: [CLLocationCoordinate2D], candidatePaths: [String]
     ) async -> BikeRoutingEngine.Result? {
         await Task.detached(priority: .userInitiated) { () -> BikeRoutingEngine.Result? in
-            for graphPath in candidatePaths {
-                guard let repository = WayGraphCache.shared.repository(for: graphPath) else { continue }
-                guard let steps = CuratedRouteStepMatcher.steps(along: path, using: repository) else { continue }
-                let distanceMeters = zip(path, path.dropFirst()).reduce(0.0) { total, pair in
-                    total + CLLocation(latitude: pair.0.latitude, longitude: pair.0.longitude)
-                        .distance(from: CLLocation(latitude: pair.1.latitude, longitude: pair.1.longitude))
-                }
-                return BikeRoutingEngine.Result(coordinates: path, distanceMeters: distanceMeters, steps: steps)
+            let repositories: [(repository: WayGraphRepository, displayName: String)] = candidatePaths.compactMap { graphPath in
+                guard let repository = WayGraphCache.shared.repository(for: graphPath) else { return nil }
+                return (repository, Self.regionDisplayName(forPath: graphPath))
             }
-            return nil
+
+            for candidate in repositories {
+                if let steps = CuratedRouteStepMatcher.steps(along: path, using: candidate.repository) {
+                    return Self.curatedRouteResult(coordinates: path, steps: steps)
+                }
+            }
+
+            guard repositories.count >= 2,
+                  let crossRegionSteps = CuratedRouteStepMatcher.steps(along: path, candidateRepositories: repositories)
+            else { return nil }
+            return Self.curatedRouteResult(coordinates: path, steps: crossRegionSteps)
         }.value
+    }
+
+    /// `BikeRoutingEngine.Result` aus `coordinates` + bereits ermittelten `steps` - gemeinsame
+    /// Endstufe für beide Matching-Versuche in `matchCuratedRouteSteps(along:candidatePaths:)`.
+    private static func curatedRouteResult(
+        coordinates: [CLLocationCoordinate2D], steps: [BikeRoutingEngine.Result.Step]
+    ) -> BikeRoutingEngine.Result {
+        let distanceMeters = zip(coordinates, coordinates.dropFirst()).reduce(0.0) { total, pair in
+            total + CLLocation(latitude: pair.0.latitude, longitude: pair.0.longitude)
+                .distance(from: CLLocation(latitude: pair.1.latitude, longitude: pair.1.longitude))
+        }
+        return BikeRoutingEngine.Result(coordinates: coordinates, distanceMeters: distanceMeters, steps: steps)
     }
 
     /// Lädt die Straßennamen/Abbiege-Hinweise für `match` zwischen `startPlace`/`zielPlace` - s.
