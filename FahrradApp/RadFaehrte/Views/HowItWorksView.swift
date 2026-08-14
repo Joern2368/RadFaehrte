@@ -65,7 +65,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "arrow.down.circle",
             title: "Offline-Karten",
-            text: "In den Einstellungen unter \"Offline-Karten\" lädst du deutsche Bundesländer sowie zahlreiche europäische Länder für die direkte Fahrrad-Route herunter. In heruntergeladenen Regionen bevorzugt die App automatisch ruhige Wege und Radwege statt nur der kürzesten Verbindung, zeigt echte Abbiege-Hinweise mit Straßennamen und funktioniert komplett offline - auch über mehrere heruntergeladene Regionen hinweg, indem sie automatisch den gemeinsamen Grenzübergang findet. Fehlt eine beteiligte Region, berechnet die App die Strecke stattdessen online."
+            text: "In den Einstellungen unter \"Offline-Karten\" lädst du deutsche Bundesländer sowie zahlreiche europäische Länder für die direkte Fahrrad-Route herunter. In heruntergeladenen Regionen bevorzugt die App automatisch ruhige Wege und Radwege statt nur der kürzesten Verbindung, zeigt echte Abbiege-Hinweise mit Straßennamen und funktioniert komplett offline - auch über mehrere heruntergeladene Regionen hinweg, indem sie automatisch den gemeinsamen Grenzübergang findet. Fehlt eine beteiligte Region, berechnet die App die Strecke stattdessen online. Bei der direkten Route lässt sich zusätzlich zur ruhigen Offline-Route per Wischen die Online-Route (meist die direkteste Verbindung, ohne Bevorzugung ruhiger Wege) einblenden und auswählen."
         ),
         Topic(
             icon: "circle.lefthalf.filled",

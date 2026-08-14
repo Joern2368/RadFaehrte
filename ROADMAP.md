@@ -4800,6 +4800,84 @@ für die ursprüngliche Produktidee.
          befunden.
       → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`resultsSectionMaxHeight`,
       `directRoutePager`, `directRouteSubtitle`)
+- [x] **Fix: Blaue Routen-/Anfahrt-Linie startete beim Loslaufen sichtbar neben statt auf dem
+      blauen Standort-Punkt** (2026-08-14, Nutzer-Beobachtung mit Screenshot direkt nach Tippen auf
+      "Los" mit "Aktuelle Position" als Start). Ursache: `startPlace` bei "Aktuelle Position" ist
+      eine einmalige GPS-Momentaufnahme (`resolveCurrentLocationAsStart`), die Route/Anfahrt-Linie
+      dazu wird ebenfalls nur einmal beim Berechnen bzw. Auswählen der Route berechnet
+      (`loadDirectRoute`/`loadConnectorRoute`) - `startNavigating` selbst gleicht beides beim
+      Tippen auf "Los" nicht mit der zu dem Zeitpunkt ggf. schon abweichenden Live-Position ab. Die
+      vorhandene Selbstkorrektur (`checkDirectRouteDeviation`/`checkCuratedConnectorDeviation`)
+      lief bisher nur reaktiv bei künftigen Standort-Updates während der Navigation, nicht beim
+      Start selbst - dadurch die sichtbare Lücke direkt nach "Los". Fix: `startNavigating` ruft
+      beide Prüfungen jetzt einmal sofort mit der aktuellen Position auf, statt auf den ersten
+      GPS-Tick danach zu warten. Build (Device-Ziel) erfolgreich - **Live-Verifikation auf dem
+      iPhone noch ausstehend**.
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`startNavigating`,
+      `checkDirectRouteDeviation`, `checkCuratedConnectorDeviation`)
+- [x] **Fix: Blaue Route/Anfahrt-Linie endete manchmal komplett vor dem Ziel- bzw. Startpunkt,
+      ohne jede Anfahrts-/Zielweg-Linie** (2026-08-14, Nutzer-Beobachtung mit Screenshot: Ziel
+      "Bückeburger Straße 9" - derselbe Fall, der am 2026-08-08 oben scheinbar schon behoben wurde,
+      aber laut dortigem Vermerk nie live auf dem iPhone verifiziert war; genau dieser erste Live-
+      Test schlug fehl). Ursache: Alle vier Stellen, die eine Anfahrts-/Zielweg-Linie per Online-
+      Wegbeschreibung berechnen (`loadConnectorRoute`, `loadCombinedConnectorRoute`,
+      `loadDirectRouteConnectors`, `checkCuratedConnectorDeviation`) nutzen dafür `Self.directions`
+      (`MKDirections`, mit `try?`) - schlägt die Anfrage fehl (kein Netz, oder MKDirections liefert
+      für sehr kurze Strecken mitunter schlicht kein Ergebnis), wurde das bisher überall still
+      verschluckt: `connectorRouteToStart`/`connectorRouteToEnd` blieben `nil`, keine Linie, kein
+      Hinweis - die blaue Hauptroute wirkte dann, als würde sie einfach vor dem eigentlichen Ziel
+      aufhören. Fix: neue `@State`-Fallbacks `connectorRouteToStartFallback`/
+      `connectorRouteToEndFallback` (`[CLLocationCoordinate2D]?`) - schlägt die Online-
+      Wegbeschreibung fehl, wird stattdessen eine einfache Luftlinie zwischen den beiden Punkten
+      gezeigt (gleicher grau gepunkteter Stil), statt gar nichts. `MKRoute` selbst lässt sich nicht
+      synthetisch erzeugen (kein öffentlicher Initializer), daher ein separates Fallback-Feld statt
+      eines Ersatz-`MKRoute`-Werts. Build (Device-Ziel) erfolgreich, auf "iPhone von Jörn"
+      installiert. **Live-Test auf dem iPhone zeigte: Fix allein reichte nicht** - der Fallback
+      griff nicht, weil in diesem Fall (s. Eintrag direkt darunter) gar keine
+      Fehlerbehandlung nötig war, sondern die Auslöse-Schwelle selbst zu hoch stand.
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`connectorRouteToStartFallback`,
+      `connectorRouteToEndFallback`, `loadConnectorRoute`, `loadCombinedConnectorRoute`,
+      `loadDirectRouteConnectors`, `checkCuratedConnectorDeviation`, `routeOverlayContent`)
+- [x] **Fix: Anfahrts-/Zielweg-Connector der "Direkten Fahrrad-Route" löste erst ab 50 m Lücke aus -
+      eine deutlich sichtbare 48-m-Lücke blieb dadurch ohne jede Linie** (2026-08-14, unmittelbare
+      Fortsetzung des Eintrags direkt darüber: Live-Test auf dem iPhone mit "Bückeburger Straße 9"
+      zeigte die blaue Linie weiterhin sichtbar vor dem Zielpunkt endend, auch nach dem
+      Fallback-Fix, sogar nach vollständigem Neustart der App). Statt weiter zu raten, temporäres
+      Debug-Logging in `loadDirectRouteConnectors` ergänzt und live über
+      `xcrun devicectl device process launch --console` auf dem angeschlossenen iPhone mitgelesen,
+      während der Nutzer die Suche wiederholte. Ergebnis: Der erste Ladevorgang (3 Offline-
+      Routenalternativen) hatte tatsächlich eine 56,7-m-Lücke zum Ziel und lud den Connector
+      erfolgreich (`route=OK`). Ein zweiter, kurz darauf folgender Aufruf - ausgelöst durchs Laden
+      der Online-Routenalternative (`loadOnlineDirectRouteAlternative`, dabei mit einer leicht
+      abweichenden, präziseren `ziel`-Koordinate aus dem zweiten Geocoding-Ergebnis) - hatte nur
+      noch 48,5 m Lücke. Das lag *unter* der bisherigen Schwelle `directRouteConnectorMinDistanceMeters`
+      (50 m), löste also gar keinen Connector-Versuch aus (weder echte Route noch Luftlinien-
+      Fallback) - keine Netzwerk-/Fehlerfrage, sondern die Schwelle selbst zu hoch für eine auf dem
+      Kartenausschnitt klar erkennbare Lücke. Auf 15 m gesenkt (deutlich unter jede beobachtete
+      Lücke, aber weiterhin groß genug für reines Snapping-Rauschen der Offline-Engine). Debug-
+      Logging nach der Diagnose wieder entfernt. Build (Device-Ziel) erfolgreich, auf "iPhone von
+      Jörn" installiert - **live mit demselben Ziel ("Bückeburger Straße 9") verifiziert**: Linie
+      erreicht jetzt den Zielpunkt (zunächst als grauer gepunkteter Connector, wie bei jeder
+      Anfahrts-/Zielweg-Linie bisher üblich - Nutzer wollte stattdessen durchgängig Blau, s.
+      Eintrag direkt darunter).
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
+      (`directRouteConnectorMinDistanceMeters`, `loadDirectRouteConnectors`)
+- [x] **"Direkte Fahrrad-Route": Anfahrts-/Zielweg-Connector jetzt durchgängig blau statt grau
+      gepunktet** (2026-08-14, Nutzerwunsch direkt nach obigem Fix: "durchgängig blau bis zum
+      Ziel"). Bewusst nur für den Direktrouten-Modus (`isDirectRouteMode`) geändert, nicht für
+      kuratierte Routen/Touren (`loadConnectorRoute`/`loadCombinedConnectorRoute`/
+      `checkCuratedConnectorDeviation` weiterhin grau gepunktet) - der Unterschied ist inhaltlich
+      begründet: Bei der Direktroute ist die Anfahrt/der Zielweg schlicht die letzte, vom
+      Offline-Engine-Snapping abgeschnittene Teilstrecke derselben Route (soll nicht wie ein
+      separater Abschnitt wirken), während die graue Linie bei kuratierten Routen bewusst eine vom
+      Nutzer erkennbar andere, selbst geplante Strecke zur eigentlichen (festen) Tour markiert -
+      diese Unterscheidung war der Grund für die grau-gepunktete Konvention vom 2026-08-08 und
+      bleibt dort weiter gültig. `connectorRouteToStart`/`connectorRouteToEnd` sowie deren
+      Luftlinien-Fallbacks nutzen im Direktrouten-Zweig von `routeOverlayContent` jetzt denselben
+      Stil wie die Hauptroute (`.stroke(.blue, lineWidth: 5)`) statt grau gepunktet. Build
+      (Device-Ziel) erfolgreich, auf "iPhone von Jörn" installiert - **live getestet und für gut
+      befunden**.
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`routeOverlayContent`)
 
 ## Bekannte Probleme
 

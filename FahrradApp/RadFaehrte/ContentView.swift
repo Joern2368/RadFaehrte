@@ -253,6 +253,15 @@ struct ContentView: View {
     }
     @State private var connectorRouteToStart: MKRoute?
     @State private var connectorRouteToEnd: MKRoute?
+    /// Luftlinien-Ersatz für `connectorRouteToStart`/`connectorRouteToEnd`, falls die Online-
+    /// Wegbeschreibung dafür (`Self.directions`, MKDirections) fehlschlägt (kein Netz, oder
+    /// MKDirections liefert für sehr kurze Strecken mitunter gar kein Ergebnis) - der Fehler wurde
+    /// bisher überall still verschluckt (`try?`), die Anfahrts-/Zielweg-Linie blieb dann komplett
+    /// unsichtbar und die blaue Route endete sichtbar vor dem eigentlichen Adresspunkt (Nutzer-
+    /// Beobachtung 2026-08-14, "Bückeburger Straße 9"). Eine grobe Luftlinie ist immer noch
+    /// hilfreicher als gar keine Anzeige.
+    @State private var connectorRouteToStartFallback: [CLLocationCoordinate2D]?
+    @State private var connectorRouteToEndFallback: [CLLocationCoordinate2D]?
     /// `true`, während `connectorRouteToStart` wegen Abweichens vom ursprünglichen Startpunkt
     /// gerade neu berechnet wird (s. `checkCuratedConnectorDeviation`) - verhindert überlappende
     /// Neuberechnungen bei mehreren Standort-Updates während eine noch läuft.
@@ -264,6 +273,9 @@ struct ContentView: View {
     @State private var isLoadingDirectRoute = false
     @State private var directRoutes: [DirectRoute] = []
     @State private var selectedDirectRouteIndex = 0
+    /// `true`, während die Online-Route (`MKDirections`) für die Wisch-Seite nach den Offline-
+    /// Alternativen im Hintergrund nachgeladen wird - s. `loadOnlineDirectRouteAlternative`.
+    @State private var isLoadingOnlineDirectRouteAlternative = false
     /// Zeigt das Teilen-Sheet mit der per `exportRoute()` erzeugten `.gpx`-Datei der aktuell
     /// gewählten Route (Nutzer-Idee 2026-08-01: Route an einen Radcomputer übertragen oder an
     /// jemanden schicken, der sie mit einer anderen App öffnet).
@@ -333,6 +345,12 @@ struct ContentView: View {
         (isNavigating && !isNavigationBannerVisible) || (!isNavigating && isRouteFormCollapsed)
     }
 
+    /// Obergrenze für die Höhe der Ergebnisliste (Direktroute + Einzeltreffer + Kombination) -
+    /// deckelt, wie viel Platz sie der Kartenvorschau darunter wegnehmen kann (s. Kommentar an der
+    /// Verwendungsstelle). Deckt bequem eine Karte plus einen Ausblick auf die nächste ab; alles
+    /// darüber hinaus lässt sich innerhalb der Liste erreichen, statt die Karte weiter zu verkleinern.
+    private var resultsSectionMaxHeight: CGFloat { 320 }
+
     /// Ob für die aktuell gewählte Route (`isDirectRouteMode`/`selectedMatch`/`combinedMatch`) noch
     /// Daten im Hintergrund nachgeladen werden, die für die Turn-by-Turn-Navigation gebraucht werden
     /// (Alternativrouten bei der direkten Fahrrad-Route bzw. `curatedRoute` bei kuratierten
@@ -392,8 +410,18 @@ struct ContentView: View {
                 .zIndex(1)
 
                 if startPlace != nil && !isEditingStart && !isEditingZiel {
-                    resultsSection
-                        .padding(.horizontal)
+                    // Gedeckelte Höhe statt frei wachsender Liste (Nutzer-Beobachtung 2026-08-11:
+                    // je mehr Wisch-Karten hier erscheinen - Direktroute, Einzeltreffer,
+                    // Kombination -, desto kleiner wurde die Kartenvorschau darunter, da die Map
+                    // im `VStack` nur den verbleibenden Platz bekommt). `resultsSectionMaxHeight`
+                    // begrenzt das; alles darüber hinaus wird innerhalb der Liste scrollbar, die
+                    // Kartenvorschau behält so unabhängig von der Trefferzahl eine verlässliche
+                    // Mindesthöhe.
+                    ScrollView {
+                        resultsSection
+                    }
+                    .frame(maxHeight: resultsSectionMaxHeight)
+                    .padding(.horizontal)
                 }
 
                 if selectedMatch != nil || isDirectRouteMode || combinedMatch != nil {
@@ -492,7 +520,7 @@ struct ContentView: View {
                 })
                 // Dieselbe Logik für Ein-Finger-Gesten (Verschieben, aber auch MapKits eingebautes
                 // "Doppeltippen-und-Halten-dann-Ziehen"-Ein-Finger-Zoom) - `minimumDistance: 10`
-                // verhindert, dass ein einfacher Tipp (Routenwahl über `handleMapTap`) fälschlich
+                // verhindert, dass ein einfacher Tipp (Ziel-Wahl über `handleMapTap`) fälschlich
                 // schon als Verschieben zählt.
                 .simultaneousGesture(DragGesture(minimumDistance: 10).onChanged { _ in
                     if isNavigating { isFollowingUser = false }
@@ -731,6 +759,16 @@ struct ContentView: View {
             // normale kurze lineare Animation griffen). Direktes Setzen ohne Animation umgeht das
             // zuverlässig - Geschwindigkeit war dem Nutzer wichtiger als ein animierter Übergang.
             updateNavigationCamera(location: location, animated: false)
+            // Sofortiger Abgleich mit der Live-Position beim Start: `startPlace`/die Anfahrt-Linie
+            // stammen von einer einmaligen GPS-Momentaufnahme bzw. vom Zeitpunkt der Routenauswahl
+            // (s. `resolveCurrentLocationAsStart`/`loadConnectorRoute`) und würden sonst erst beim
+            // nächsten Standort-Update über `handleLocationUpdate` nachgeführt - bei "Aktuelle
+            // Position" begann die blaue Linie beim Tippen auf "Los" deshalb sichtbar neben dem
+            // blauen Punkt statt darauf (Nutzer-Beobachtung 2026-08-14). Dieselben Prüfungen wie bei
+            // jedem Standort-Update, nur hier schon einmal vorgezogen statt auf den ersten
+            // GPS-Tick nach Navigationsstart zu warten.
+            checkDirectRouteDeviation(location)
+            checkCuratedConnectorDeviation(location)
         } else {
             withAnimation {
                 cameraPosition = .region(Self.regionToFit(
@@ -1290,7 +1328,8 @@ struct ContentView: View {
     /// Index des Liniensegments in `coordinates`, dem `point` am nächsten liegt - Grundlage für
     /// den Fortschritts-Vergleich in `advanceDirectRouteStepIfNeeded` (ein höherer Index bedeutet
     /// "weiter auf der Route fortgeschritten"). Nutzt dieselbe ebene Punkt-zu-Segment-Projektion
-    /// wie `distanceMeters(from:toLine:)`, gibt zusätzlich den Index zurück statt nur die Distanz.
+    /// wie `RouteMatcher.closestPointOnSegmentMeters`, gibt zusätzlich den Index zurück statt nur
+    /// die Distanz.
     private static func nearestSegmentIndex(of point: CLLocationCoordinate2D, in coordinates: [CLLocationCoordinate2D]) -> Int? {
         guard coordinates.count >= 2 else { return nil }
         let metersPerDegreeLat = 111_320.0
@@ -1328,9 +1367,15 @@ struct ContentView: View {
     /// um den Schwellenwert herum schwankt, nicht wiederholt Netzwerk-/Rechenlast auslöst.
     private static let directRouteRerouteCooldown: TimeInterval = 15
     /// Ab welchem Abstand zwischen Start-/Zielkoordinate und dem tatsächlichen Anfang/Ende der
-    /// berechneten `DirectRoute` ein Connector geladen wird - deckt sich mit dem Schwellenwert in
-    /// `loadConnectorRoute` (dort als `distanceToStartKm/EndKm > 0.05`).
-    private static let directRouteConnectorMinDistanceMeters: CLLocationDistance = 50
+    /// berechneten `DirectRoute` ein Connector geladen wird. Ursprünglich 50 m (angelehnt an den
+    /// Schwellenwert in `loadConnectorRoute`, `distanceToStartKm/EndKm > 0.05`) - Live-Diagnose auf
+    /// dem iPhone (2026-08-14, "Bückeburger Straße 9", per Debug-Logging bestätigt) zeigte eine
+    /// tatsächliche Lücke von 48,5 m, die damit knapp *unter* der Schwelle blieb: gar keine
+    /// Anfahrts-/Zielweg-Linie, obwohl die blaue Route auf dem Kartenausschnitt sichtbar vor dem
+    /// Adresspunkt endete - eine Lücke dieser Größenordnung ist bei typischem Zoom klar erkennbar,
+    /// keine Rundungs-Ungenauigkeit. Auf 15 m gesenkt (deutlich unter jede real beobachtete Lücke,
+    /// aber weiterhin groß genug, um reines Snapping-Rauschen der Offline-Engine zu ignorieren).
+    private static let directRouteConnectorMinDistanceMeters: CLLocationDistance = 15
 
     /// Spiegelt die aktuelle Navigations-Kopfzeile (Anweisung + Live-Entfernung, s.
     /// `navigationInstructionTitle`/`currentStepDistanceText`) an eine gekoppelte Apple Watch -
@@ -1489,6 +1534,7 @@ struct ContentView: View {
         guard nearest.distanceKm > Self.curatedConnectorRelevantThresholdKm else {
             // Route erreicht - die Anfahrt-Linie hat ihren Zweck erfüllt.
             if connectorRouteToStart != nil { connectorRouteToStart = nil }
+            if connectorRouteToStartFallback != nil { connectorRouteToStartFallback = nil }
             return
         }
         if let lastCuratedConnectorRerouteAt,
@@ -1502,9 +1548,17 @@ struct ContentView: View {
         let combinedMatchID = combinedMatch?.id
         Task {
             defer { isReroutingCuratedConnector = false }
-            guard let route = await Self.directions(from: start, to: target).first else { return }
+            let route = await Self.directions(from: start, to: target).first
             guard selectedMatch?.id == matchID, combinedMatch?.id == combinedMatchID else { return }
+            guard let route else {
+                // Online-Wegbeschreibung fehlgeschlagen (kein Netz o. Ä.) - Luftlinie zeigen statt
+                // gar keine Anfahrts-Linie (s. Kommentar an `connectorRouteToStartFallback`).
+                connectorRouteToStart = nil
+                connectorRouteToStartFallback = [start, target]
+                return
+            }
             connectorRouteToStart = route
+            connectorRouteToStartFallback = nil
             currentConnectorStepIndex = 0
             lastWatchHapticStepIndex = nil
             lastVoiceNowAnnouncementStepIndex = nil
@@ -1729,77 +1783,28 @@ struct ContentView: View {
         currentRegionSpan = context.region.span
     }
 
-    /// Wählt beim Antippen der Karte die geometrisch nächstgelegene Route aus den
-    /// Alternativen der direkten Fahrrad-Route aus. MapKits eingebautes `Map(selection:)` +
-    /// `.tag()` auf `MapPolyline` erkennt Taps auf dünnen/überlappenden Linien nur sehr
-    /// unzuverlässig - dieselbe Punkt-zu-Segment-Projektion wie in
-    /// `RouteMatcher.nearestPoint(from:toLines:)`, hier direkt auf `DirectRoute.coordinates`
-    /// angewendet, ist deutlich robuster. Die Toleranz skaliert mit dem sichtbaren
-    /// Kartenausschnitt, damit sie sowohl beim Heranzoomen als auch beim Übersichtsblick
-    /// sinnvoll bleibt.
+    /// Behandelt Taps auf die Karte außerhalb der Navigation - aktuell nur noch für
+    /// `isPickingZielOnMap` relevant. Die Auswahl unter mehreren `directRoutes`-Alternativen
+    /// (früher hier per Punkt-zu-Linie-Hit-Testing) läuft seit Nutzer-Entscheidung 2026-08-11
+    /// stattdessen einheitlich per Wischen über `directRoutePager`, genau wie bei den kuratierten
+    /// Routen (`matchesPager`/`combinedMatchesPager`).
     private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
-        if isPickingZielOnMap {
-            if let coordinate = proxy.convert(point, from: .local) {
-                // Bewusst NICHT synchron im Gesten-Callback: `pickZielOnMap` setzt `zielPlace`,
-                // was über `onChange` sofort `runMatching()`/`updateCamera()` auslöst - ist dabei
-                // (anders als beim umgekehrten Ablauf, s. u.) bereits ein Start gesetzt, läuft die
-                // volle Suche inkl. neuer Karten-Overlays (`selectedRouteLines`/`routeSelectionToken`)
-                // synchron mit, während MapKit noch mitten in der Verarbeitung dieser selben
-                // `SpatialTapGesture` steckt - führte beim Live-Test zu wiederholten Abstürzen
-                // (Nutzer-Beobachtung 2026-08-01: nur in dieser Reihenfolge, nie wenn das Ziel
-                // zuerst ohne gesetzten Start gewählt wurde). `DispatchQueue.main.async` schiebt die
-                // Zustandsänderung auf den nächsten Runloop-Durchlauf, nachdem die Geste selbst
-                // fertig verarbeitet ist.
-                DispatchQueue.main.async {
-                    pickZielOnMap(at: coordinate)
-                }
-            }
-            return
-        }
-
-        guard isDirectRouteMode, directRoutes.count > 1,
-              let tapCoordinate = proxy.convert(point, from: .local) else { return }
-
-        var bestIndex: Int?
-        var bestDistance = Double.greatestFiniteMagnitude
-        for (index, route) in directRoutes.enumerated() {
-            let distance = Self.distanceMeters(from: tapCoordinate, toLine: route.coordinates)
-            if distance < bestDistance {
-                bestDistance = distance
-                bestIndex = index
+        guard isPickingZielOnMap else { return }
+        if let coordinate = proxy.convert(point, from: .local) {
+            // Bewusst NICHT synchron im Gesten-Callback: `pickZielOnMap` setzt `zielPlace`,
+            // was über `onChange` sofort `runMatching()`/`updateCamera()` auslöst - ist dabei
+            // (anders als beim umgekehrten Ablauf, s. u.) bereits ein Start gesetzt, läuft die
+            // volle Suche inkl. neuer Karten-Overlays (`selectedRouteLines`/`routeSelectionToken`)
+            // synchron mit, während MapKit noch mitten in der Verarbeitung dieser selben
+            // `SpatialTapGesture` steckt - führte beim Live-Test zu wiederholten Abstürzen
+            // (Nutzer-Beobachtung 2026-08-01: nur in dieser Reihenfolge, nie wenn das Ziel
+            // zuerst ohne gesetzten Start gewählt wurde). `DispatchQueue.main.async` schiebt die
+            // Zustandsänderung auf den nächsten Runloop-Durchlauf, nachdem die Geste selbst
+            // fertig verarbeitet ist.
+            DispatchQueue.main.async {
+                pickZielOnMap(at: coordinate)
             }
         }
-
-        let latitudeDeltaMeters = (currentRegionSpan?.latitudeDelta ?? 0.02) * 111_320
-        let tolerance = max(30, latitudeDeltaMeters * 0.05)
-        if let bestIndex, bestDistance < tolerance {
-            selectedDirectRouteIndex = bestIndex
-        }
-    }
-
-    /// Kürzeste Distanz (in Metern) von `point` zu einer Liniengeometrie, über dieselbe ebene
-    /// Punkt-zu-Segment-Projektion wie `RouteMatcher.closestPointOnSegmentMeters`.
-    private static func distanceMeters(from point: CLLocationCoordinate2D, toLine coordinates: [CLLocationCoordinate2D]) -> Double {
-        guard coordinates.count >= 2 else { return .greatestFiniteMagnitude }
-
-        let metersPerDegreeLat = 111_320.0
-        let metersPerDegreeLon = 111_320.0 * max(cos(point.latitude * .pi / 180), 0.1)
-
-        func toLocal(_ c: CLLocationCoordinate2D) -> (x: Double, y: Double) {
-            (
-                (c.longitude - point.longitude) * metersPerDegreeLon,
-                (c.latitude - point.latitude) * metersPerDegreeLat
-            )
-        }
-
-        var best = Double.greatestFiniteMagnitude
-        var prev = toLocal(coordinates[0])
-        for i in 1..<coordinates.count {
-            let curr = toLocal(coordinates[i])
-            best = min(best, distanceFromOriginToSegmentMeters(a: prev, b: curr))
-            prev = curr
-        }
-        return best
     }
 
     private static func distanceFromOriginToSegmentMeters(
@@ -2447,17 +2452,26 @@ struct ContentView: View {
                         .stroke(.blue, lineWidth: 5)
                 }
             }
-            // Grau gepunktet wie die Anfahrt-Linie bei kuratierten Routen (s. u.) - überbrückt die
-            // Lücke, die entsteht, weil die Offline-Engine Start/Ziel auf den nächsten Knoten im
-            // Wege-Graphen snappt statt exakt zur gesuchten Koordinate zu routen (s.
-            // `loadDirectRouteConnectors`).
+            // Durchgängig blau wie die Hauptroute (anders als die graue gepunktete Anfahrt-Linie
+            // bei kuratierten Routen, s. u.) - überbrückt die Lücke, die entsteht, weil die
+            // Offline-Engine Start/Ziel auf den nächsten Knoten im Wege-Graphen snappt statt exakt
+            // zur gesuchten Koordinate zu routen (s. `loadDirectRouteConnectors`). Anders als bei
+            // kuratierten Routen (dort eine bewusst andere, vom Nutzer geplante Strecke) ist dieses
+            // letzte Stück Teil derselben Route - Nutzerwunsch 2026-08-14, es soll nicht wie ein
+            // separater Abschnitt wirken.
             if let connectorRouteToStart {
                 MapPolyline(connectorRouteToStart.polyline)
-                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
+                    .stroke(.blue, lineWidth: 5)
+            } else if let connectorRouteToStartFallback {
+                MapPolyline(coordinates: connectorRouteToStartFallback)
+                    .stroke(.blue, lineWidth: 5)
             }
             if let connectorRouteToEnd {
                 MapPolyline(connectorRouteToEnd.polyline)
-                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
+                    .stroke(.blue, lineWidth: 5)
+            } else if let connectorRouteToEndFallback {
+                MapPolyline(coordinates: connectorRouteToEndFallback)
+                    .stroke(.blue, lineWidth: 5)
             }
         } else {
             ForEach(routeLineSlots) { slot in
@@ -2471,9 +2485,15 @@ struct ContentView: View {
             if let connectorRouteToStart {
                 MapPolyline(connectorRouteToStart.polyline)
                     .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
+            } else if let connectorRouteToStartFallback {
+                MapPolyline(coordinates: connectorRouteToStartFallback)
+                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
             }
             if let connectorRouteToEnd {
                 MapPolyline(connectorRouteToEnd.polyline)
+                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
+            } else if let connectorRouteToEndFallback {
+                MapPolyline(coordinates: connectorRouteToEndFallback)
                     .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
             }
         }
@@ -2538,13 +2558,20 @@ struct ContentView: View {
     private func loadDirectRoute() {
         directRoutes = []
         selectedDirectRouteIndex = 0
+        isLoadingOnlineDirectRouteAlternative = false
         connectorRouteToStart = nil
         connectorRouteToEnd = nil
+        connectorRouteToStartFallback = nil
+        connectorRouteToEndFallback = nil
         guard let start = startPlace?.coordinate, let ziel = zielPlace?.coordinate else { return }
         isLoadingDirectRoute = true
         // Bevorzugt die Offline-Engine, falls eine Region (Bundesland oder Land) heruntergeladen
         // ist, die Start und Ziel abdeckt (ruhige Wege statt nur die kürzeste Verbindung) - s.
-        // `offlineGraphCandidatePaths`.
+        // `offlineGraphCandidatePaths`. Die Online-Route wird in diesem Fall NICHT automatisch
+        // mitberechnet (Nutzer-Entscheidung 2026-08-11: unnötige Online-Anfrage bei jeder Suche,
+        // wenn ohnehin meist bei der ruhigen Offline-Route geblieben wird) - stattdessen lädt
+        // `loadOnlineDirectRouteAlternative` sie erst nach, sobald in der Wisch-Karte (s.
+        // `directRoutePager`) tatsächlich zu ihrer Seite gewechselt wird.
         let candidatePaths = offlineGraphCandidatePaths(from: start, to: ziel)
         Task {
             for path in candidatePaths {
@@ -2673,6 +2700,27 @@ struct ContentView: View {
         return results.map(DirectRoute.init(offlineResult:))
     }
 
+    /// Lädt die Online-Route (`MKDirections`) nachträglich als letzte Wisch-Seite in
+    /// `directRoutePager` nach, wenn `directRoutes` bisher nur Offline-Alternativen enthält (s.
+    /// `loadDirectRoute`). Idempotent über die `allSatisfy(\.isOffline)`-Prüfung: Läuft ein Aufruf
+    /// bereits (`isLoadingOnlineDirectRouteAlternative`) oder wurde eine Online-Route schon
+    /// angehängt, passiert nichts; schlug ein vorheriger Versuch fehl (keine Route gefunden),
+    /// bleibt `directRoutes` weiterhin rein offline und ein erneutes Erscheinen der Wisch-Seite
+    /// versucht es einfach noch einmal.
+    private func loadOnlineDirectRouteAlternative() {
+        guard isDirectRouteMode, !isLoadingOnlineDirectRouteAlternative, !directRoutes.isEmpty,
+              directRoutes.allSatisfy(\.isOffline),
+              let start = startPlace?.coordinate, let ziel = zielPlace?.coordinate else { return }
+        isLoadingOnlineDirectRouteAlternative = true
+        Task {
+            let routes = await Self.directions(from: start, to: ziel)
+            isLoadingOnlineDirectRouteAlternative = false
+            guard isDirectRouteMode, !directRoutes.isEmpty, directRoutes.allSatisfy(\.isOffline),
+                  let route = routes.first else { return }
+            directRoutes.append(DirectRoute(route: route))
+        }
+    }
+
     /// Zeigt Wegbeschreibungen zwischen Start/Ziel und dem jeweils nächstgelegenen Punkt der
     /// ausgewählten Route, falls dieser spürbar entfernt liegt (z. B. wenn der Radweg nicht
     /// direkt am Start- oder Zielpunkt beginnt/endet). Nutzt Fahrrad-Wegbeschreibung mit
@@ -2680,23 +2728,35 @@ struct ContentView: View {
     private func loadConnectorRoute(to match: RouteMatch?) {
         connectorRouteToStart = nil
         connectorRouteToEnd = nil
+        connectorRouteToStartFallback = nil
+        connectorRouteToEndFallback = nil
         guard let match else { return }
 
         if let start = startPlace?.coordinate, match.distanceToStartKm > 0.05 {
+            let target = match.nearestPointToStart
             Task {
-                if let route = await Self.directions(from: start, to: match.nearestPointToStart).first {
-                    if match.id == selectedMatch?.id {
-                        connectorRouteToStart = route
-                        currentConnectorStepIndex = 0
-                    }
+                let route = await Self.directions(from: start, to: target).first
+                guard match.id == selectedMatch?.id else { return }
+                guard let route else {
+                    // Online-Wegbeschreibung fehlgeschlagen - Luftlinie zeigen statt gar keine
+                    // Anfahrts-Linie (s. Kommentar an `connectorRouteToStartFallback`).
+                    connectorRouteToStartFallback = [start, target]
+                    return
                 }
+                connectorRouteToStart = route
+                currentConnectorStepIndex = 0
             }
         }
         if let ziel = zielPlace?.coordinate, match.distanceToEndKm > 0.05 {
+            let source = match.nearestPointToEnd
             Task {
-                if let route = await Self.directions(from: match.nearestPointToEnd, to: ziel).first {
-                    if match.id == selectedMatch?.id { connectorRouteToEnd = route }
+                let route = await Self.directions(from: source, to: ziel).first
+                guard match.id == selectedMatch?.id else { return }
+                guard let route else {
+                    connectorRouteToEndFallback = [source, ziel]
+                    return
                 }
+                connectorRouteToEnd = route
             }
         }
     }
@@ -2711,6 +2771,8 @@ struct ContentView: View {
     private func loadDirectRouteConnectors(start: CLLocationCoordinate2D, ziel: CLLocationCoordinate2D) {
         connectorRouteToStart = nil
         connectorRouteToEnd = nil
+        connectorRouteToStartFallback = nil
+        connectorRouteToEndFallback = nil
         guard directRoutes.indices.contains(selectedDirectRouteIndex),
               let routeStart = directRoutes[selectedDirectRouteIndex].coordinates.first,
               let routeEnd = directRoutes[selectedDirectRouteIndex].coordinates.last else { return }
@@ -2725,18 +2787,28 @@ struct ContentView: View {
             .distance(from: CLLocation(latitude: routeStart.latitude, longitude: routeStart.longitude))
         if startGapMeters > Self.directRouteConnectorMinDistanceMeters {
             Task {
-                if let route = await Self.directions(from: start, to: routeStart).first, stillCurrent() {
-                    connectorRouteToStart = route
+                let route = await Self.directions(from: start, to: routeStart).first
+                guard stillCurrent() else { return }
+                guard let route else {
+                    // Online-Wegbeschreibung fehlgeschlagen - Luftlinie zeigen statt gar keine
+                    // Anfahrts-Linie (s. Kommentar an `connectorRouteToStartFallback`).
+                    connectorRouteToStartFallback = [start, routeStart]
+                    return
                 }
+                connectorRouteToStart = route
             }
         }
         let endGapMeters = CLLocation(latitude: ziel.latitude, longitude: ziel.longitude)
             .distance(from: CLLocation(latitude: routeEnd.latitude, longitude: routeEnd.longitude))
         if endGapMeters > Self.directRouteConnectorMinDistanceMeters {
             Task {
-                if let route = await Self.directions(from: routeEnd, to: ziel).first, stillCurrent() {
-                    connectorRouteToEnd = route
+                let route = await Self.directions(from: routeEnd, to: ziel).first
+                guard stillCurrent() else { return }
+                guard let route else {
+                    connectorRouteToEndFallback = [routeEnd, ziel]
+                    return
                 }
+                connectorRouteToEnd = route
             }
         }
     }
@@ -2749,23 +2821,35 @@ struct ContentView: View {
     private func loadCombinedConnectorRoute(to match: RouteMatcher.CombinedRouteMatch?) {
         connectorRouteToStart = nil
         connectorRouteToEnd = nil
+        connectorRouteToStartFallback = nil
+        connectorRouteToEndFallback = nil
         guard let match, let firstLeg = match.legs.first, let lastLeg = match.legs.last else { return }
 
         if let start = startPlace?.coordinate, match.distanceToStartKm > 0.05 {
+            let target = firstLeg.entryPoint
             Task {
-                if let route = await Self.directions(from: start, to: firstLeg.entryPoint).first {
-                    if match.id == combinedMatch?.id {
-                        connectorRouteToStart = route
-                        currentConnectorStepIndex = 0
-                    }
+                let route = await Self.directions(from: start, to: target).first
+                guard match.id == combinedMatch?.id else { return }
+                guard let route else {
+                    // Online-Wegbeschreibung fehlgeschlagen - Luftlinie zeigen statt gar keine
+                    // Anfahrts-Linie (s. Kommentar an `connectorRouteToStartFallback`).
+                    connectorRouteToStartFallback = [start, target]
+                    return
                 }
+                connectorRouteToStart = route
+                currentConnectorStepIndex = 0
             }
         }
         if let ziel = zielPlace?.coordinate, match.distanceToEndKm > 0.05 {
+            let source = lastLeg.exitPoint
             Task {
-                if let route = await Self.directions(from: lastLeg.exitPoint, to: ziel).first {
-                    if match.id == combinedMatch?.id { connectorRouteToEnd = route }
+                let route = await Self.directions(from: source, to: ziel).first
+                guard match.id == combinedMatch?.id else { return }
+                guard let route else {
+                    connectorRouteToEndFallback = [source, ziel]
+                    return
                 }
+                connectorRouteToEnd = route
             }
         }
     }
@@ -2993,23 +3077,77 @@ struct ContentView: View {
         }
     }
 
-    /// Einzelne Zeile für die direkte Fahrrad-Route. Bei mehreren Alternativen können diese
-    /// direkt auf der Karte per Antippen gewählt werden (siehe `handleMapTap`, per eigenem
-    /// Punkt-zu-Linie-Hit-Testing statt MapKits unzuverlässigem `Map(selection:)`).
+    /// Zeile bzw. Wisch-Pager für die direkte Fahrrad-Route. Solange noch keine Route berechnet
+    /// wurde, ein einzelner Button, der `selectDirectRoute()` auslöst; danach `directRoutePager`
+    /// mit den Offline-Alternativen und - per Wischen nachgeladen - der Online-Route.
     @ViewBuilder
     private var directRouteSection: some View {
-        Button {
-            selectDirectRoute()
-        } label: {
-            if isDirectRouteMode, directRoutes.indices.contains(selectedDirectRouteIndex) {
-                directRouteRow(directRoutes[selectedDirectRouteIndex])
-            } else {
+        if isDirectRouteMode, !directRoutes.isEmpty {
+            directRoutePager
+        } else {
+            Button {
+                selectDirectRoute()
+            } label: {
                 directRoutePlaceholderRow
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("selectDirectRoute")
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("selectDirectRoute")
         Divider()
+    }
+
+    /// Wisch-Pager für die direkte Fahrrad-Route: eine Seite je Offline-Alternative
+    /// (`BikeRoutingEngine`, "ruhige Wege bevorzugt"), plus - Nutzer-Wunsch 2026-08-11 - eine
+    /// letzte Seite für die Online-Route (`MKDirections`, meist die direkteste/schnellste
+    /// Verbindung, aber ohne Bevorzugung ruhiger Wege). Ersetzt die frühere Auswahl per Antippen
+    /// der Route auf der Karte (s. `handleMapTap`) - einheitlich mit dem Wisch-Verhalten der
+    /// kuratierten Routen unten (`matchesPager`/`combinedMatchesPager`). Die Online-Seite wird erst
+    /// beim tatsächlichen Erscheinen nachgeladen (`onAppear` → `loadOnlineDirectRouteAlternative`),
+    /// nicht schon beim ersten Laden der Offline-Route.
+    @ViewBuilder
+    private var directRoutePager: some View {
+        let showsOnlineAlternativePage = directRoutes.allSatisfy(\.isOffline)
+        let pageCount = directRoutes.count + (showsOnlineAlternativePage ? 1 : 0)
+        TabView(selection: $selectedDirectRouteIndex) {
+            ForEach(Array(directRoutes.enumerated()), id: \.element.id) { index, route in
+                Button {
+                    selectedDirectRouteIndex = index
+                } label: {
+                    directRouteRow(route)
+                }
+                .buttonStyle(.plain)
+                .tag(index)
+            }
+            if showsOnlineAlternativePage {
+                directRouteOnlineAlternativePlaceholderRow
+                    .onAppear { loadOnlineDirectRouteAlternative() }
+                    .tag(directRoutes.count)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: pageCount > 1 ? .automatic : .never))
+        .indexViewStyle(.page(backgroundDisplayMode: .always))
+        // Zurückgesetzt auf 102pt wie `matchesPager`/`combinedMatchesPager` (Live-Fund 2026-08-11:
+        // 72pt reichte nicht - die von `.indexViewStyle` am unteren Rand überlagerten Punkte
+        // schnitten sich sichtbar mit der zweiten Textzeile).
+        .frame(height: 102)
+        .accessibilityIdentifier("selectDirectRoute")
+    }
+
+    private var directRouteOnlineAlternativePlaceholderRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Direkte Fahrrad-Route (online)")
+                    .font(.subheadline.weight(.medium))
+                Text("außerhalb des Radroutennetzes")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            ProgressView()
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
     }
 
     private func directRouteRow(_ route: DirectRoute) -> some View {
@@ -3031,14 +3169,15 @@ struct ContentView: View {
     }
 
     private func directRouteSubtitle(for route: DirectRoute) -> String {
-        var parts = [
+        // Bewusst kein "N Routen – wischen zum Wechseln"-Zusatz mehr (Nutzer-Beobachtung
+        // 2026-08-11): Der dadurch erzwungene Zeilenumbruch kostete zusätzlich zur neuen
+        // Punkte-Reihe (s. `directRoutePager`) spürbar Höhe - die Punkte selbst zeigen bereits an,
+        // dass es mehrere Seiten gibt.
+        let parts = [
             "\(String(format: "%.1f", route.distanceMeters / 1000)) km",
             estimatedTravelTimeText(distanceKm: route.distanceMeters / 1000),
             route.isOffline ? "ruhige Wege bevorzugt" : "außerhalb des Radroutennetzes"
         ]
-        if directRoutes.count > 1 {
-            parts.append("\(directRoutes.count) Routen – auf Karte wählbar")
-        }
         return parts.joined(separator: " · ")
     }
 
