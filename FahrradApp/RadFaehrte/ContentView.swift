@@ -351,6 +351,56 @@ struct ContentView: View {
     /// darüber hinaus lässt sich innerhalb der Liste erreichen, statt die Karte weiter zu verkleinern.
     private var resultsSectionMaxHeight: CGFloat { 320 }
 
+    /// Deterministische Schätzung der tatsächlich benötigten Höhe von `resultsSection`, damit die
+    /// umgebende `ScrollView` nicht immer die volle `resultsSectionMaxHeight` ausfüllt, auch wenn
+    /// der Inhalt viel kleiner ist (Nutzer-Beobachtung 2026-08-14: großer grauer Leerraum zwischen
+    /// Ergebnisliste und "Los"-Button bei nur einem Treffer). Bewusst **keine** Laufzeit-Messung per
+    /// `GeometryReader`/`PreferenceKey` - zwei solche Versuche sind live auf dem iPhone gescheitert
+    /// (ganze Liste blieb unsichtbar, vermutlich ein Rückkopplungskreis zwischen Messung und
+    /// dadurch veränderter Größe; Details dazu im ROADMAP.md-Eintrag). Diese Schätzung rechnet
+    /// stattdessen anhand derselben Zustandsgrößen nach, die `resultsSection` selbst zum Aufbau
+    /// nutzt (Wisch-Pager sind dort durchgehend fest `.frame(height: 102)` hoch). Muss nicht
+    /// pixelgenau sein: zu großzügig lässt nur etwas Leerraum übrig, zu knapp macht die Liste an der
+    /// Stelle scrollbar - beides unkritisch, solange es insgesamt näher am echten Inhalt liegt als
+    /// die feste Obergrenze.
+    private var resultsSectionEstimatedHeight: CGFloat {
+        let pagerHeight: CGFloat = 102
+        let labelHeight: CGFloat = 24
+        let emptyTextHeight: CGFloat = 36
+        let dividerHeight: CGFloat = 1
+        let placeholderRowHeight: CGFloat = 56
+
+        guard zielPlace != nil else {
+            return nearbyMatches.isEmpty ? emptyTextHeight : labelHeight + pagerHeight
+        }
+
+        var height: CGFloat = 0
+
+        // directRouteSection
+        height += (isDirectRouteMode && !directRoutes.isEmpty) ? pagerHeight : placeholderRowHeight
+        height += dividerHeight
+
+        // singleMatchesSection
+        if !matches.isEmpty {
+            height += dividerHeight
+            if isFallbackMatches { height += labelHeight }
+            height += pagerHeight
+        }
+
+        // combinedMatchesSection
+        if isSearchingCombinedMatch {
+            height += dividerHeight + emptyTextHeight
+        } else if !combinedMatches.isEmpty {
+            height += dividerHeight + pagerHeight
+        }
+
+        if matches.isEmpty && combinedMatches.isEmpty && !isSearchingCombinedMatch {
+            height += dividerHeight + emptyTextHeight
+        }
+
+        return height
+    }
+
     /// Ob für die aktuell gewählte Route (`isDirectRouteMode`/`selectedMatch`/`combinedMatch`) noch
     /// Daten im Hintergrund nachgeladen werden, die für die Turn-by-Turn-Navigation gebraucht werden
     /// (Alternativrouten bei der direkten Fahrrad-Route bzw. `curatedRoute` bei kuratierten
@@ -420,7 +470,7 @@ struct ContentView: View {
                     ScrollView {
                         resultsSection
                     }
-                    .frame(maxHeight: resultsSectionMaxHeight)
+                    .frame(maxHeight: min(resultsSectionEstimatedHeight, resultsSectionMaxHeight))
                     .padding(.horizontal)
                 }
 
@@ -3113,7 +3163,7 @@ struct ContentView: View {
                 Button {
                     selectedDirectRouteIndex = index
                 } label: {
-                    directRouteRow(route)
+                    directRouteRow(route, isSelected: index == selectedDirectRouteIndex)
                 }
                 .buttonStyle(.plain)
                 .tag(index)
@@ -3150,7 +3200,7 @@ struct ContentView: View {
         .contentShape(Rectangle())
     }
 
-    private func directRouteRow(_ route: DirectRoute) -> some View {
+    private func directRouteRow(_ route: DirectRoute, isSelected: Bool) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(route.isOffline ? "Ruhige Route (offline)" : "Direkte Fahrrad-Route")
@@ -3160,8 +3210,10 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.blue)
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.blue)
+            }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)

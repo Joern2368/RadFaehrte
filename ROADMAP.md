@@ -4878,6 +4878,57 @@ für die ursprüngliche Produktidee.
       (Device-Ziel) erfolgreich, auf "iPhone von Jörn" installiert - **live getestet und für gut
       befunden**.
       → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`routeOverlayContent`)
+- [x] **Fix: Blauer Haken in der Direktrouten-Alternativen-Liste ("Ruhige Route (offline)"/"Direkte
+      Fahrrad-Route") erschien bei jeder Seite, nicht nur bei der ausgewählten** (2026-08-14,
+      Nutzer-Fund per Screenshot). Ursache: `directRouteRow` zeigte das
+      `checkmark.circle.fill`-Icon komplett unbedingt an - anders als die strukturell fast
+      identischen `matchRow`/`combinedRouteRow`, die den Haken korrekt hinter
+      `if match.id == selectedMatch?.id`/`combinedMatch?.id` verstecken. Fix: `directRouteRow`
+      bekommt jetzt einen `isSelected`-Parameter (`index == selectedDirectRouteIndex`), Haken nur
+      noch bei `if isSelected`. Build (Device-Ziel) erfolgreich, auf "iPhone von Jörn" installiert.
+      **Live-Test zeigte weiteres, tieferliegendes Verhalten**: Da `directRoutePager` wie
+      `matchesPager`/`combinedMatchesPager` das Wischen selbst schon als Auswahl behandelt
+      (`TabView(selection: $selectedDirectRouteIndex)` setzt die Auswahl direkt beim Wischen, ganz
+      ohne Antippen - bewusstes, dokumentiertes Verhalten aller drei Pager, s. Kommentare an
+      `matchesPager`), zeigt jede Seite beim bloßen Durchwischen weiterhin ihren eigenen Haken -
+      das ist kein Rendering-Fehler mehr, sondern folgt konsequent aus diesem App-weiten
+      Wisch-wählt-aus-Muster. Nutzer-Entscheidung 2026-08-14 nach Rückfrage: **so lassen**, kein
+      Umbau zu "Wischen nur Vorschau, erst Antippen wählt aus".
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`directRouteRow`,
+      `directRoutePager`)
+- [x] **Fix: Großer Leerraum zwischen Ergebnisliste und "Los"-Button bei wenigen Treffern**
+      (2026-08-14, Nutzer-Fund per Screenshot: nur ein Treffer "Radrouten in der Nähe" nach
+      Eingabe des Starts, darunter viel leere Fläche vor dem "Los"-Button). Ursache: Die
+      `ScrollView` der Ergebnisliste (s. Fix oben, "Kartenvorschau schrumpfte...") bekommt per
+      `.frame(maxHeight: resultsSectionMaxHeight)` nur eine Obergrenze - `ScrollView` füllt einen so
+      angebotenen Platz aber immer komplett aus, unabhängig davon, ob der Inhalt tatsächlich so hoch
+      ist. Bei nur einer Wisch-Karte reservierte das die vollen 320pt, obwohl der Inhalt viel
+      kleiner war. **Zwei Fix-Versuche mit Laufzeit-Messung live auf dem iPhone gescheitert und
+      wieder verworfen** - beide machten die komplette Ergebnisliste unsichtbar (nicht nur falsch
+      hoch, sondern komplett weg, auch nach Laden der Treffer):
+      1. `GeometryReader` direkt im Hintergrund von `resultsSection`, dessen gemessene Höhe per
+         `PreferenceKey` in einen `@State` zurückgespeist und als `min(gemessen, resultsSectionMaxHeight)`
+         auf dasselbe `ScrollView` angewandt wurde, das den `GeometryReader` enthielt - vermuteter
+         Rückkopplungskreis (`ScrollView`-Höhe hängt von einer Messung ab, die im selben, dadurch
+         begrenzten `ScrollView` stattfindet).
+      2. Entkoppelter Versuch: unsichtbare, per `.fixedSize(vertical: true)` von jeder
+         Höhenvorgabe unabhängige Mess-Kopie von `resultsSection` (`.frame(height: 0).hidden()`)
+         parallel zum sichtbaren, unveränderten `ScrollView` in einem `ZStack` - sollte den
+         Rückkopplungskreis aus Versuch 1 eigentlich vermeiden, zeigte auf dem iPhone aber exakt
+         dasselbe Symptom (keine Route sichtbar).
+      **Tatsächlicher Fix (3. Versuch): keine Laufzeit-Messung mehr, sondern eine deterministische
+      Höhen-Schätzung** (`resultsSectionEstimatedHeight`) anhand derselben Zustandsgrößen, die
+      `resultsSection` selbst zum Aufbau nutzt (`nearbyMatches`/`matches`/`combinedMatches`/
+      `isDirectRouteMode`/`directRoutes`/`isFallbackMatches`/`isSearchingCombinedMatch`/`zielPlace`) -
+      alle Wisch-Pager sind ohnehin fest `.frame(height: 102)` hoch, die Schätzung addiert dazu
+      Label-/Divider-/Platzhalter-Konstanten je nach sichtbaren Abschnitten. Muss nicht pixelgenau
+      sein (zu großzügig lässt nur etwas Leerraum, zu knapp macht die Liste an der Stelle
+      scrollbar), vermeidet aber die SwiftUI-Unzuverlässigkeit der ersten beiden Versuche komplett,
+      da sie zur Layout-Zeit nichts misst. `.frame(maxHeight: min(resultsSectionEstimatedHeight,
+      resultsSectionMaxHeight))` auf dem `ScrollView`. Live auf dem iPhone getestet (München als
+      Start, ein Treffer) und vom Nutzer für gut befunden.
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`resultsSectionEstimatedHeight`,
+      `resultsSectionMaxHeight`)
 
 ## Bekannte Probleme
 
