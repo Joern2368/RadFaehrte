@@ -4766,8 +4766,63 @@ für die ursprüngliche Produktidee.
       frischen View-Instanz. Neuer Abgleich in `onAppear` zieht `queryFragment` bei Bedarf aus
       `selectedPlace` nach. Live auf dem iPhone getestet und für gut befunden.
       → [LocationSearchField.swift](FahrradApp/RadFaehrte/Views/LocationSearchField.swift)
+- [x] **"Direkte Fahrrad-Route": Online-Route als wischbare Alternative zur Offline-Route**
+      (2026-08-11, Nutzer-Wunsch nach einer Diskussion über Bremen/Niedersachsen-Offline-Routing).
+      Bisher berechnete `loadDirectRoute` die Online-Route (`MKDirections`) nur als kompletten
+      Fallback, wenn keine Offline-Route gefunden wurde - war eine Offline-Route ("ruhige Wege
+      bevorzugt") erfolgreich, gab es keine Möglichkeit mehr, stattdessen die direktere Online-
+      Route zu sehen. Jetzt zeigt die Direktrouten-Karte einen Wisch-Pager (`directRoutePager`,
+      analog zu `matchesPager`/`combinedMatchesPager`): eine Seite je Offline-Alternative, plus
+      eine letzte Seite für die Online-Route. Diese wird bewusst **nicht** bei jeder Suche
+      automatisch mitberechnet (Nutzer-Entscheidung: unnötige Online-Anfrage, wenn ohnehin meist
+      bei der ruhigen Route geblieben wird), sondern erst per `onAppear` nachgeladen
+      (`loadOnlineDirectRouteAlternative`), sobald tatsächlich zu ihrer Seite gewischt wird.
+      Ersetzt außerdem die bisherige Auswahl unter mehreren `directRoutes` per Antippen der Route
+      auf der Karte (`handleMapTap`, eigenes Punkt-zu-Linie-Hit-Testing) - Nutzer-Entscheidung:
+      Wischen soll die einzige Auswahlmethode sein, einheitlich mit den kuratierten Routen. Live
+      auf dem iPhone getestet und für gut befunden.
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`directRoutePager`,
+      `loadOnlineDirectRouteAlternative`, `loadDirectRoute`, `handleMapTap`), [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
+- [x] **Fix: Kartenvorschau schrumpfte mit jeder zusätzlichen Wisch-Karte in der Ergebnisliste**
+      (2026-08-11, direkte Folge des Online-Route-Wisch-Pagers oben - Nutzer-Beobachtung per
+      Screenshot: Direktroute + zwei kuratierte Treffer als je 102pt hohe Pager-Karten drückten die
+      Kartenvorschau darunter sichtbar klein, da sie im äußeren `VStack` nur den nach der
+      Ergebnisliste verbleibenden Platz bekommt). Zwei verworfene Zwischenschritte, bevor die
+      eigentliche Ursache klar war:
+      1. Direktrouten-Pager-Höhe auf 72pt reduziert + Hinweistext "N Routen – wischen zum Wechseln"
+         aus dem Untertitel entfernt - Höhen-Reduktion rückgängig gemacht (Live-Fund: 72pt reichte
+         nicht, die von `.indexViewStyle` überlagerten Punkte schnitten sich sichtbar mit der
+         zweiten Textzeile), Wegfall des Hinweistexts beibehalten.
+      2. Eigentlicher Fix: Die Ergebnisliste (`resultsSection`) steckt jetzt in einer `ScrollView`
+         mit `resultsSectionMaxHeight` (320pt) als Obergrenze, statt frei zu wachsen - bei mehr
+         Treffern wird die Liste selbst scrollbar, die Kartenvorschau behält unabhängig von der
+         Trefferzahl eine verlässliche Mindesthöhe. Live auf dem iPhone getestet und für gut
+         befunden.
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`resultsSectionMaxHeight`,
+      `directRoutePager`, `directRouteSubtitle`)
 
 ## Bekannte Probleme
+
+- [ ] **Bremen-Daten stecken offenbar auch im Niedersachsen-Wege-Graphen** (Live-Fund 2026-08-11,
+      Nutzer-Beobachtung: Bremen-Offline-Karte gelöscht, App neu gestartet, Route komplett
+      innerhalb Bremens - z. B. Große Weidestraße ↔ Bürgerpark, mehrere km von der Landesgrenze
+      entfernt - fand trotzdem weiterhin eine "Ruhige Route (offline)"). Löschen selbst
+      funktioniert korrekt (`WayGraphStore.delete` entfernt die `.sqlite`-Datei tatsächlich,
+      `WayGraphCache` wird vorher invalidiert) - kein Cache-Bug. Ursache vermutlich im
+      Rohmaterial: Der `offlineGraphCandidatePaths`-Vorfilter (grobe Bounding-Box je Bundesland,
+      s. `WayGraphStore.RegionBoundingBox`) lässt Niedersachsen als Kandidaten für jede
+      Bremen-Koordinate zu, da Bremen als Enklave innerhalb Niedersachsens liegt und dessen
+      Bounding-Box zwangsläufig mit einschließt - das ist so beabsichtigt (billiger Vorfilter).
+      Dass mit dem 2000-m-Snap-Radius aber selbst mitten in der Stadt Bremen tatsächlich
+      Straßenknoten im heruntergeladenen Niedersachsen-Graphen gefunden werden, spricht dafür,
+      dass der zugrunde liegende Geofabrik-Extrakt (`niedersachsen-latest.osm.pbf`, ungeklippt) die
+      Bremer Straßendaten redundant enthält. Praktisch bedeutet das: Bremen einzeln löschen befreit
+      nicht wirklich von den Bremen-Daten, solange Niedersachsen weiterhin heruntergeladen ist -
+      nicht weiter untersucht/behoben, da **Nutzer-Entscheidung 2026-08-11: nicht nötig**
+      (unkritisch, kostet nur etwas doppelten Speicherplatz).
+      → [WayGraphStore.swift](FahrradApp/RadFaehrte/Services/WayGraphStore.swift) (`RegionBoundingBox`, `delete`),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`offlineGraphCandidatePaths`),
+      [Scripts/build_way_graph.py](FahrradApp/Scripts/build_way_graph.py)
 
 - [x] **Wege-Graph Baden-Württemberg: Stuttgart-Bereich vom Rest der Region getrennt (Live-Fund
       2026-08-01)**: Nutzer meldete, dass "Direkte Fahrrad-Route" für Freiburg → Stuttgart
@@ -5786,6 +5841,39 @@ Lose Sammlung für Einfälle, die noch nicht in eine der Phasen oben eingeordnet
      Extension, eigene API, eigener Lebenszyklus) – zusätzliche Wartungsfläche.
   Vor einer Umsetzung wäre insbesondere Punkt 1 (aktuelles Zeitlimit) gegen die aktuelle
   Apple-Doku zu prüfen. Noch nicht priorisiert, keine Umsetzung begonnen.
+
+- **Refactoring: Auswahl-Zustand (`selectedMatch`/`combinedMatch`/`isDirectRouteMode`) als ein
+  Enum statt vier separater States** (Claude-Analyse 2026-08-14, unabhängig von einer konkreten
+  Nutzer-Meldung, **bewusst zurückgestellt**): [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
+  ist mit 4148 Zeilen, 92 `@State`-Variablen und 79 Methoden ein einzelnes großes View-Struct ohne
+  separates ViewModel. Auffällig viele der oben dokumentierten Live-Fixes sind derselbe Bug-Typ:
+  `selectedMatch`, `combinedMatch` und `isDirectRouteMode`/`selectedDirectRouteIndex` sind vier
+  unabhängige States, die sich gegenseitig ausschließen *sollen*, aber nur durch drei von Hand
+  gepflegte `onChange`-Handler ([ContentView.swift:578-633](FahrradApp/RadFaehrte/ContentView.swift))
+  synchron gehalten werden - jeder der Fälle "zwei Treffer gleichzeitig markiert" (Hannover ->
+  Braunschweig, Bremen -> Hannover, s. o.) entstand, weil eine Stelle im Code einen dieser States
+  setzte, ohne die anderen zurückzusetzen. Jeder Fix fügte ein weiteres Werkzeug hinzu
+  (`routeSelectionToken`, `lastMatchingCoordinates`, den zentralen
+  `onChange(of: isDirectRouteMode)`-Handler), statt die Ursache zu beseitigen.
+  - **Vorschlag**: Ein `enum RouteSelection { case none, single(RouteMatch),
+    combined(CombinedRouteMatch), direct(index: Int) }` ersetzt die vier States - gegenseitige
+    Ausschließlichkeit ist dann strukturell garantiert statt manuell durchgesetzt, die drei
+    `onChange`-Handler und `routeSelectionToken` könnten entfallen. Ausgelagert in eine eigene,
+    SwiftUI-unabhängige `@Observable`-Klasse (`RouteSelectionStore`) wäre das erstmals auch per
+    schnellem Unit-Test prüfbar, statt nur per Live-Test auf dem iPhone - genau die Fälle, die
+    bisher mehrere Runden mit dem Nutzer gebraucht haben.
+  - **Migrations-Idee**: nicht die ganze Datei umbauen, sondern nur den Auswahl-Cluster, mit
+    Kompatibilitäts-Properties (`var selectedMatch: RouteMatch? { ... }`) für einen schrittweisen
+    Umbau ohne große Zwischenzeit mit nicht-kompilierbarem Code. Geschätzter Umfang ca. 400-600
+    Zeilen, keine beabsichtigte Verhaltensänderung.
+  - **Zurückgestellt (Nutzer-Entscheidung 2026-08-14)**: reiner Aufräum-Umbau ohne neuen Nutzen,
+    genau im bug-anfälligsten Bereich der App - Risiko aktuell nicht gerechtfertigt. Erst wieder
+    angehen, wenn ein neuer, ähnlicher Auswahl-Bug live auffällt (dann als konkreter
+    Live-Testfall für die Migration nutzbar, analog zum bisherigen Vorgehen bei
+    Wege-Graph-Bugs oben).
+  → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`selectedMatch`, `combinedMatch`,
+  `isDirectRouteMode`, `selectedDirectRouteIndex`, `routeSelectionToken`, `onChange(of:
+  isDirectRouteMode)`, `onChange(of: selectedMatch)`, `onChange(of: combinedMatch)`)
 
 ## Offene Entscheidungen (vor Umsetzung zu klären)
 
