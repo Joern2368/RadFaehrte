@@ -4929,6 +4929,41 @@ für die ursprüngliche Produktidee.
       Start, ein Treffer) und vom Nutzer für gut befunden.
       → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`resultsSectionEstimatedHeight`,
       `resultsSectionMaxHeight`)
+- [x] **"Radrouten in der Nähe"-Vorschau (Start ohne Ziel) nach Streckenlänge statt Entfernung
+      sortiert** (2026-08-14, Nutzer-Wunsch: längste Route zuerst). `RouteMatcher.findNearby`
+      selektiert die Kandidaten weiterhin nach Nähe (Suchradius + `limit`, unverändert) - nur die
+      Anzeige-Reihenfolge in `loadNearbyMatches` wurde geändert, sortiert jetzt absteigend nach
+      Streckenlänge. **Erster Versuch nutzte nur `route.distanceKm`** (OSM-`distance`-Tag) und
+      scheiterte prompt am Live-Test: Nutzer-Fund - der Ammerseeradweg ist eine lange, bekannte
+      Route, landete aber ganz hinten, weil er (wie viele auch bekannte Routen) in den OSM-Daten
+      keinen `distance`-Tag trägt (`?? 0` schob ihn ans Ende). **Fix:** Neue
+      `BikeRoute.geometryLengthKm` summiert die Streckenlänge direkt aus der Linien-Geometrie
+      (`CLLocation.distance(from:)` zwischen aufeinanderfolgenden Punkten je Liniensegment,
+      Segmente addiert) als Fallback, wenn `distanceKm` fehlt - kann bei an einer Regionsgrenze
+      abgeschnittenen Kartendaten leicht zu kurz ausfallen, ist aber deutlich näher an der Wahrheit
+      als `0`. `nearbySubtitle` zeigt jetzt ebenfalls immer diesen Fallback-Wert (vorher nur bei
+      vorhandenem Tag), damit die angezeigte Länge zur Sortierung passt. Live auf dem iPhone
+      getestet (Ammerseeradweg erscheint jetzt weiter vorn) und vom Nutzer für gut befunden.
+      **Dritte Runde (Freiburg, per Screenshot gefunden):** Jetzt erschien "RadNETZ
+      Baden-Württemberg" ganz vorn - Recherche direkt in `routes.sqlite` (Python-Nachbau von
+      `findNearby` gegen die echte Datenbank, siehe Vorgehen unten) zeigte: das ist keine normale
+      Route, sondern eine OSM-Superroute, die das GESAMTE landesweite Radnetz Baden-Württembergs
+      als eine `route=bicycle`-Relation bündelt - über 15.800 unzusammenhängende
+      Liniensegmente, die `geometryLengthKm` (s. o.) auf über 3100 km aufsummierte. Als Route zum
+      Auswählen ergibt so ein Eintrag ohnehin keinen Sinn ("das ganze Bundesland" losfahren).
+      **Fix:** Neue `RouteMatcher.isImplausiblyFragmentedSuperroute` (Schwellenwert 5000
+      Liniensegmente - der bisher längste echte Fernweg im Datensatz, "Badischer Weinradweg" mit
+      468 km, hat 2270 Segmente, reichlich Abstand nach unten) schließt solche Sammel-Einträge an
+      allen vier Kandidatensuchstellen aus (`findMatches`, `findClosestMatches`, `findNearby`,
+      `combinableRoutes`), nicht nur aus der Sortierung. Vor dem Fix per eigenem Python-Skript
+      gegen die reale `routes.sqlite` verifiziert (Geometrie-BLOB entpackt, `findNearby`-Filterung/
+      Dedup/Sortierung nachgebaut), dass "Badischer Weinradweg" danach korrekt vorn steht - dann
+      erst gebaut und live getestet. Nutzer testete anschließend zusätzlich München, Berlin,
+      Dresden, Bielefeld und Passau - überall unauffällig.
+      → [BikeRoute.swift](FahrradApp/RadFaehrte/Models/BikeRoute.swift) (`geometryLengthKm`),
+      [RouteMatcher.swift](FahrradApp/RadFaehrte/Services/RouteMatcher.swift)
+      (`isImplausiblyFragmentedSuperroute`), [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
+      (`loadNearbyMatches`, `nearbySubtitle`)
 
 ## Bekannte Probleme
 

@@ -477,7 +477,8 @@ final class RouteMatcher {
             // Unbenannte Routen sind meist Fragmente lokaler Knotenpunkt-Netze (network=lcn),
             // die in OSM oft als viele einzelne, kurze Wegabschnitte statt als eine
             // durchgehende Route kartiert sind - für den Nutzer keine sinnvoll folgbare Route.
-            guard let name = route.name, !name.isEmpty else { continue }
+            guard let name = route.name, !name.isEmpty,
+                  !Self.isImplausiblyFragmentedSuperroute(route) else { continue }
             guard let toStart = Self.nearestPoint(from: start, toLines: route.lines),
                   let toEnd = Self.nearestPoint(from: end, toLines: route.lines) else { continue }
             if toStart.distanceKm <= thresholdKm && toEnd.distanceKm <= thresholdKm {
@@ -518,7 +519,8 @@ final class RouteMatcher {
 
         var matches: [RouteMatch] = []
         for route in candidates {
-            guard let name = route.name, !name.isEmpty else { continue }
+            guard let name = route.name, !name.isEmpty,
+                  !Self.isImplausiblyFragmentedSuperroute(route) else { continue }
             guard let toStart = Self.nearestPoint(from: start, toLines: route.lines),
                   let toEnd = Self.nearestPoint(from: end, toLines: route.lines) else { continue }
             matches.append(RouteMatch(
@@ -595,7 +597,8 @@ final class RouteMatcher {
 
         var nearby: [RouteMatch] = []
         for route in candidates {
-            guard let name = route.name, !name.isEmpty, !Self.isNodeToNodeSegment(name: name) else { continue }
+            guard let name = route.name, !name.isEmpty, !Self.isNodeToNodeSegment(name: name),
+                  !Self.isImplausiblyFragmentedSuperroute(route) else { continue }
             guard let nearest = Self.nearestPoint(from: point, toLines: route.lines),
                   nearest.distanceKm <= searchRadiusKm else { continue }
             nearby.append(RouteMatch(
@@ -714,6 +717,23 @@ final class RouteMatcher {
         return nodeToNodeNamePatterns.contains { $0.firstMatch(in: name, range: range) != nil }
     }
 
+    /// OSM enthält für einige deutsche Bundesländer eine `route=bicycle`-Superroute, die nicht
+    /// eine einzelne befahrbare Strecke ist, sondern das GESAMTE landesweite Radnetz als eine
+    /// Relation bündelt (Live-Fund 2026-08-14: "RadNETZ Baden-Württemberg" bei Freiburg - über
+    /// 15.800 unzusammenhängende Liniensegmente, per `BikeRoute.geometryLengthKm` auf > 3100 km
+    /// aufsummiert, dadurch bei einer Sortierung nach Streckenlänge fälschlich ganz vorn). Als
+    /// Route zum Auswählen/Losfahren ergibt so ein Eintrag ohnehin keinen Sinn ("das ganze
+    /// Bundesland" lässt sich nicht abfahren) - unabhängig von der Sortierung ausgeschlossen.
+    /// Echte, auch sehr lange benannte Fernwege (z. B. der ~468 km lange "Badischer Weinradweg")
+    /// bleiben mit reichlich Abstand darunter (< 2300 Segmente in den bisher gesehenen Daten);
+    /// der Schwellenwert liegt bewusst weit über deren Segmentzahl, aber weit unter der eines
+    /// landesweiten Sammel-Eintrags.
+    private static let maxPlausibleRouteLineSegments = 5000
+
+    private static func isImplausiblyFragmentedSuperroute(_ route: BikeRoute) -> Bool {
+        route.lines.count > maxPlausibleRouteLineSegments
+    }
+
     private struct CombinableRouteCandidate {
         let route: BikeRoute
         let nearestPoint: CLLocationCoordinate2D
@@ -732,7 +752,8 @@ final class RouteMatcher {
 
         var results: [CombinableRouteCandidate] = []
         for route in candidates {
-            guard let name = route.name, !name.isEmpty, !Self.isNodeToNodeSegment(name: name) else { continue }
+            guard let name = route.name, !name.isEmpty, !Self.isNodeToNodeSegment(name: name),
+                  !Self.isImplausiblyFragmentedSuperroute(route) else { continue }
             guard let network = route.network, Self.combinableNetworks.contains(network) else { continue }
             guard let nearest = Self.nearestPoint(from: point, toLines: route.lines),
                   nearest.distanceKm <= searchRadiusKm else { continue }

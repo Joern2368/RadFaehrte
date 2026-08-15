@@ -3707,10 +3707,10 @@ struct ContentView: View {
     /// `subtitle(for:)` ohne Streckenlänge-entlang-der-Route (kein zweiter Punkt vorhanden) und
     /// ohne `combinedDistanceKm` (wäre hier doppelt gezählt, siehe `RouteMatcher.findNearby`).
     private func nearbySubtitle(for match: RouteMatch) -> String {
-        var parts: [String] = []
-        if let distanceKm = match.route.distanceKm {
-            parts.append("\(Int(distanceKm)) km Gesamtlänge")
-        }
+        // Fallback auf `geometryLengthKm`, wenn kein `distance`-Tag vorliegt - dieselbe
+        // Streckenlänge, nach der `loadNearbyMatches` die Treffer auch sortiert, damit die
+        // Anzeige nicht scheinbar unsortiert wirkt.
+        var parts: [String] = ["\(Int(match.route.distanceKm ?? match.route.geometryLengthKm)) km Gesamtlänge"]
         parts.append("~\(String(format: "%.1f", match.distanceToStartKm)) km entfernt")
         return parts.joined(separator: " · ")
     }
@@ -3943,7 +3943,14 @@ struct ContentView: View {
             nearbyMatches = []
             return
         }
+        // `findNearby` selektiert die Kandidaten selbst noch nach Nähe (Suchradius + `limit`,
+        // s. dortigen Kommentar) - hier nur die Anzeige-Reihenfolge der bereits gefundenen Treffer
+        // geändert (Nutzer-Wunsch 2026-08-14: längste Route zuerst statt nächstgelegene zuerst).
+        // `route.distanceKm` (OSM-`distance`-Tag) fehlt bei vielen, auch bekannten langen Routen
+        // (Live-Fund: Ammerseeradweg landete per fehlendem Tag ganz hinten) - `geometryLengthKm`
+        // als Fallback aus der Streckengeometrie selbst berechnet, s. dort.
         nearbyMatches = matcher.findNearby(around: start)
+            .sorted { ($0.route.distanceKm ?? $0.route.geometryLengthKm) > ($1.route.distanceKm ?? $1.route.geometryLengthKm) }
         pagedMatchIndex = 0
         selectedMatch = nearbyMatches.first
     }
