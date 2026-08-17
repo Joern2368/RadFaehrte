@@ -15,7 +15,10 @@ import MapKit
 /// durchgehenden Pfad in der Routen-Geometrie selbst, unabhängig vom Wege-Graphen. Ein
 /// Wege-Graph-Download hätte daran nichts geändert).
 private enum CuratedRouteStepsAvailability {
-    case steps([BikeRoutingEngine.Result.Step])
+    /// `metersByCategory` nur hier befüllt (durchgehender Match) - bei `partialSteps` (Lücke)
+    /// bewusst weggelassen, um die Fehlerfall-Behandlung nicht zusätzlich zu verzweigen; die
+    /// Wegearten-Anzeige bleibt dort einfach aus.
+    case steps([BikeRoutingEngine.Result.Step], metersByCategory: [WayGraphRepository.WayCategory: Double])
     /// Echte Lücke in der Routen-Geometrie zwischen Start und Ziel (s.
     /// `RouteMatcher.routeSegmentPathAllowingGap`), aber mindestens eine Seite bis dahin ließ sich
     /// gegen einen heruntergeladenen Wege-Graphen matchen - analog zur bereits bestehenden
@@ -3234,6 +3237,36 @@ struct ContentView: View {
         .contentShape(Rectangle())
     }
 
+    /// Farbpunkt für eine Wegearten-Zeile (s. `wayCategoryRow`) - zentral hier definiert, damit
+    /// alle drei Stellen (Offline-Route, kuratierter Einzeltreffer, kombinierte Kette) automatisch
+    /// dieselbe Zuordnung verwenden und nicht auseinanderdriften. Grün/Blau für die beiden ruhigen
+    /// Kategorien, Orange/Braun für die beiden unangenehmeren - passt seit dem `cycleway:right/
+    /// left`-Fix (s. ROADMAP.md) inhaltlich: eine Landstraße mit separatem Radweg zählt dort schon
+    /// als "Radweg", nicht mehr als "Landstraße".
+    private static func wayCategoryColor(_ category: WayGraphRepository.WayCategory) -> Color {
+        switch category {
+        case .cycleway: return .green
+        case .quietRoad: return .blue
+        case .mainRoad: return .orange
+        case .unpaved: return .brown
+        case .other: return .gray
+        }
+    }
+
+    /// Eine Zeile einer Wegearten-Liste (Farbpunkt + Name + Kilometer) - gemeinsame Darstellung für
+    /// `wayCategoryDetailSheet`, `curatedRouteStepsDetailSheet` und `combinedRouteDetailSheet`.
+    private func wayCategoryRow(_ category: WayGraphRepository.WayCategory, meters: Double) -> some View {
+        HStack {
+            Circle()
+                .fill(Self.wayCategoryColor(category))
+                .frame(width: 10, height: 10)
+            Text(category.displayName)
+            Spacer()
+            Text(String(format: "%.1f km", meters / 1000))
+                .foregroundStyle(.secondary)
+        }
+    }
+
     /// Wegearten-Aufschlüsselung ("X km Landstraße" usw.) für eine "ruhige Wege"-Offline-Route,
     /// s. `BikeRoutingEngine.Result.metersByCategory`/`ROADMAP.md` "Wegearten-Aufschlüsselung
     /// anzeigen". Bewusst als eigenes Sheet statt inline in der Zeile, analog
@@ -3242,12 +3275,7 @@ struct ContentView: View {
     private func wayCategoryDetailSheet(_ route: DirectRoute) -> some View {
         NavigationStack {
             List(route.metersByCategory.sorted { $0.value > $1.value }, id: \.key) { category, meters in
-                HStack {
-                    Text(category.displayName)
-                    Spacer()
-                    Text(String(format: "%.1f km", meters / 1000))
-                        .foregroundStyle(.secondary)
-                }
+                wayCategoryRow(category, meters: meters)
             }
             .navigationTitle("Wegearten")
             .navigationBarTitleDisplayMode(.inline)
@@ -3366,6 +3394,16 @@ struct ContentView: View {
                         }
                     }
                 }
+                // Wegearten über alle Etappen zusammengeführt (s. `loadCombinedRouteSteps`),
+                // analog zur Straßennamen-Sektion unten - eigene Sektion, nicht pro Etappe
+                // verschachtelt, aus demselben Grund.
+                if case let .steps(_, metersByCategory) = combinedRouteStepsResult, !metersByCategory.isEmpty {
+                    Section("Wegearten") {
+                        ForEach(metersByCategory.sorted { $0.value > $1.value }, id: \.key) { category, meters in
+                            wayCategoryRow(category, meters: meters)
+                        }
+                    }
+                }
                 // Straßennamen über alle Etappen zusammengeführt (s. `loadCombinedRouteSteps`) -
                 // eigene Sektion statt pro Etappe verschachtelt, da Etappengrenzen für die
                 // Turn-by-Turn-Abfolge keine Rolle spielen (dieselbe Straße kann nahtlos über
@@ -3373,7 +3411,7 @@ struct ContentView: View {
                 Section("Straßennamen") {
                     if isLoadingCombinedRouteSteps {
                         ProgressView()
-                    } else if case let .steps(steps) = combinedRouteStepsResult {
+                    } else if case let .steps(steps, _) = combinedRouteStepsResult {
                         ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
                             Text(step.instructions)
                         }
@@ -3412,9 +3450,20 @@ struct ContentView: View {
                 if isLoadingCuratedRouteSteps {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if case let .steps(steps) = curatedRouteStepsResult {
-                    List(Array(steps.enumerated()), id: \.offset) { _, step in
-                        Text(step.instructions)
+                } else if case let .steps(steps, metersByCategory) = curatedRouteStepsResult {
+                    List {
+                        if !metersByCategory.isEmpty {
+                            Section("Wegearten") {
+                                ForEach(metersByCategory.sorted { $0.value > $1.value }, id: \.key) { category, meters in
+                                    wayCategoryRow(category, meters: meters)
+                                }
+                            }
+                        }
+                        Section("Straßennamen") {
+                            ForEach(Array(steps.enumerated()), id: \.offset) { _, step in
+                                Text(step.instructions)
+                            }
+                        }
                     }
                 } else if case let .partialSteps(fromStart, toEnd, gapDistanceKm) = curatedRouteStepsResult {
                     List {
@@ -3488,29 +3537,31 @@ struct ContentView: View {
             }
 
             for candidate in repositories {
-                if let steps = CuratedRouteStepMatcher.steps(along: path, using: candidate.repository) {
-                    return Self.curatedRouteResult(coordinates: path, steps: steps)
+                if let result = CuratedRouteStepMatcher.steps(along: path, using: candidate.repository) {
+                    return Self.curatedRouteResult(coordinates: path, matchResult: result)
                 }
             }
 
             guard repositories.count >= 2,
-                  let crossRegionSteps = CuratedRouteStepMatcher.steps(along: path, candidateRepositories: repositories)
+                  let crossRegionResult = CuratedRouteStepMatcher.steps(along: path, candidateRepositories: repositories)
             else { return nil }
-            return Self.curatedRouteResult(coordinates: path, steps: crossRegionSteps)
+            return Self.curatedRouteResult(coordinates: path, matchResult: crossRegionResult)
         }.value
     }
 
-    /// `BikeRoutingEngine.Result` aus `coordinates` + bereits ermittelten `steps` - gemeinsame
-    /// Endstufe für beide Matching-Versuche in `matchCuratedRouteSteps(along:candidatePaths:)`.
+    /// `BikeRoutingEngine.Result` aus `coordinates` + bereits ermitteltem Matching-Ergebnis
+    /// (Schritte + Wegearten) - gemeinsame Endstufe für beide Matching-Versuche in
+    /// `matchCuratedRouteSteps(along:candidatePaths:)`.
     private static func curatedRouteResult(
-        coordinates: [CLLocationCoordinate2D], steps: [BikeRoutingEngine.Result.Step]
+        coordinates: [CLLocationCoordinate2D], matchResult: CuratedRouteStepMatcher.MatchResult
     ) -> BikeRoutingEngine.Result {
         let distanceMeters = zip(coordinates, coordinates.dropFirst()).reduce(0.0) { total, pair in
             total + CLLocation(latitude: pair.0.latitude, longitude: pair.0.longitude)
                 .distance(from: CLLocation(latitude: pair.1.latitude, longitude: pair.1.longitude))
         }
         return BikeRoutingEngine.Result(
-            coordinates: coordinates, distanceMeters: distanceMeters, steps: steps, metersByCategory: [:]
+            coordinates: coordinates, distanceMeters: distanceMeters, steps: matchResult.steps,
+            metersByCategory: matchResult.metersByCategory
         )
     }
 
@@ -3535,7 +3586,7 @@ struct ContentView: View {
             let result = await Self.matchCuratedRouteSteps(along: path, candidatePaths: candidatePaths)
             guard curatedRouteStepsDetail?.id == match.id else { return }
             isLoadingCuratedRouteSteps = false
-            curatedRouteStepsResult = result.map { .steps($0.steps) } ?? .noWayGraphMatch
+            curatedRouteStepsResult = result.map { .steps($0.steps, metersByCategory: $0.metersByCategory) } ?? .noWayGraphMatch
 
         case let .gap(gap):
             var fromStartResult: BikeRoutingEngine.Result?
@@ -3614,6 +3665,7 @@ struct ContentView: View {
     ) async -> BikeRoutingEngine.Result? {
         var mergedCoordinates: [CLLocationCoordinate2D] = []
         var mergedSteps: [BikeRoutingEngine.Result.Step] = []
+        var mergedMetersByCategory: [WayGraphRepository.WayCategory: Double] = [:]
         var totalDistanceMeters = 0.0
         var matchedLegCount = 0
 
@@ -3632,12 +3684,15 @@ struct ContentView: View {
                     mergedSteps.append(step)
                 }
             }
+            for (category, meters) in legResult.metersByCategory {
+                mergedMetersByCategory[category, default: 0] += meters
+            }
         }
 
         guard !mergedSteps.isEmpty, matchedLegCount * 2 >= legs.count else { return nil }
         return BikeRoutingEngine.Result(
             coordinates: mergedCoordinates, distanceMeters: totalDistanceMeters, steps: mergedSteps,
-            metersByCategory: [:]
+            metersByCategory: mergedMetersByCategory
         )
     }
 
@@ -3658,7 +3713,7 @@ struct ContentView: View {
 
         guard combinedRouteDetail?.id == match.id else { return }
         isLoadingCombinedRouteSteps = false
-        combinedRouteStepsResult = result.map { .steps($0.steps) } ?? .noWayGraphMatch
+        combinedRouteStepsResult = result.map { .steps($0.steps, metersByCategory: $0.metersByCategory) } ?? .noWayGraphMatch
     }
 
     /// Lädt `curatedRoute` für die tatsächlich laufende Turn-by-Turn-Navigation einer ausgewählten

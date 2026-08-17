@@ -5792,9 +5792,39 @@ Diese Punkte brauchen zusätzliche Informationen, die die aktuelle `routes.sqlit
         alte, vom neuen Parser nicht mehr lesbare Format (s. `WayGraphRepository`s
         Format-v2-Dokumentation). Größerer Batch als die Bundesländer heute (teils mehrere GB
         Rohdaten pro Land, z. B. Polen/Schweden/Finnland/Griechenland >900 MB), eigene Sitzung(en)
-        nötig, wenn es soweit ist. Gilt weiterhin bewusst nur für die selbst berechneten "ruhige
-        Wege"-Routen der Offline-Engine - kuratierte Routen (GPX-Import, keine OSM-Tags) und die
-        direkte Apple-Route (`MKDirections`, liefert keine Wegetyp-Info) bleiben davon unberührt.
+        nötig, wenn es soweit ist.
+      - **Auch für kuratierte Radrouten umgesetzt** (2026-08-17, Nutzer-Wunsch: "auch bei den
+        kartierten Radwegen wie Weserradweg, Friedensradweg, Oder-Neiße-Radweg" die Wegearten
+        sehen) - die obige Aussage "kuratierte Routen bleiben davon unberührt" gilt also nicht
+        mehr. `CuratedRouteStepMatcher` matcht kuratierte Routen (`routes.sqlite`, keine eigenen
+        OSM-Tags) ja bereits für Straßennamen/Abbiege-Hinweise gegen denselben Wege-Graphen -
+        neue `MatchResult`-Struct (`steps` + `metersByCategory`) bündelt beides, da beides beim
+        selben Kanten-Walk über den gematchten Knotenpfad anfällt (neue private Funktion
+        `metersByCategory(alongNodePath:repository:)`). Gilt für Einzeltreffer
+        (`steps(along:using:)`) **und** regionsübergreifende Einzeltreffer
+        (`steps(along:candidateRepositories:)`, summiert über Abschnitte) **und** kombinierte
+        Ketten (`ContentView.matchCuratedRouteSteps(forLegs:)`, summiert über Etappen) - dieselbe
+        Grundvoraussetzung wie bei den Straßennamen: nur innerhalb heruntergeladener Regionen, nur
+        so vollständig wie das Matching selbst gelingt (bei einer kombinierten Kette werden nicht
+        abgedeckte Etappen einfach übersprungen, der Rest bleibt vollständig). UI: neue "Wegearten"-
+        Sektion oberhalb der bestehenden "Straßennamen"-Sektion in `curatedRouteStepsDetailSheet`
+        (Einzeltreffer) und `combinedRouteDetailSheet` (Ketten), nur wenn die Aufschlüsselung
+        nicht leer ist. Bei `partialSteps` (Kartenlücke zwischen Start/Ziel) bewusst weggelassen,
+        um den Fehlerfall nicht zusätzlich zu verzweigen. Live auf dem iPhone getestet (Weser-
+        Radweg Bremen, Nutzer bestätigt "sieht gut aus"; Oder-Neiße-Radweg-Kette zeigte zunächst
+        nichts an, weil Brandenburg nicht heruntergeladen war - kein Bug, dieselbe Voraussetzung
+        wie bei Straßennamen, nach Brandenburg-Download erwartungsgemäß funktionsfähig).
+      - **Farbpunkte in allen drei Wegearten-Listen** (2026-08-17, Nutzer-Wunsch nach Live-Test:
+        "ein wenig farblich unterscheiden") - zentrale Farbzuordnung in `ContentView.
+        wayCategoryColor(_:)` (Grün Radweg, Blau Ruhige Straße, Orange Landstraße, Braun
+        Unbefestigter Weg, Grau Sonstiger Weg), gemeinsamer Zeilen-Helper `wayCategoryRow(_:
+        meters:)` in allen drei Sheets (Offline-Route, kuratierter Einzeltreffer, kombinierte
+        Kette) statt dreifach dupliziertem `HStack` - verhindert, dass die Zuordnung bei
+        künftigen Änderungen auseinanderdriftet. Bewusst als reine `Color`-Extension in
+        `ContentView.swift`, nicht in `WayGraphRepository.swift` (Services-Layer bleibt
+        SwiftUI-frei, kein anderes Service-File importiert dort `SwiftUI`). Ausdrücklich **kein**
+        Widerspruch zur "keine Kartenfärbung"-Entscheidung oben - die galt nur für die
+        Routenlinie auf der Karte, nicht für diese Listen-Sheets.
       → [build_way_graph.py](FahrradApp/Scripts/build_way_graph.py) (`way_category`,
       `WAY_CATEGORY_*`, `UNPAVED_SURFACES`, `MAIN_ROAD_HIGHWAYS`, `QUIET_ROAD_HIGHWAYS`),
       [build_way_graph_v2.py](FahrradApp/Scripts/build_way_graph_v2.py),
@@ -5806,9 +5836,13 @@ Diese Punkte brauchen zusätzliche Informationen, die die aktuelle `routes.sqlit
       (`Result.metersByCategory`, `cameFromCategory`),
       [CrossRegionRouteStitcher.swift](FahrradApp/RadFaehrte/Services/CrossRegionRouteStitcher.swift),
       [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`DirectRoute.metersByCategory`,
-      `wayCategoryDetailRoute`, `wayCategoryDetailSheet`, `directRouteRow`),
+      `wayCategoryDetailRoute`, `wayCategoryDetailSheet`, `directRouteRow`, `wayCategoryColor`,
+      `wayCategoryRow`, `curatedRouteStepsDetailSheet`, `combinedRouteDetailSheet`,
+      `matchCuratedRouteSteps`, `curatedRouteResult`, `CuratedRouteStepsAvailability`),
       [WayGraphDownloadManager.swift](FahrradApp/RadFaehrte/Services/WayGraphDownloadManager.swift)
-      (`Bundesland.downloadURL`/`.approximateSizeMB`)
+      (`Bundesland.downloadURL`/`.approximateSizeMB`),
+      [CuratedRouteStepMatcher.swift](FahrradApp/RadFaehrte/Services/CuratedRouteStepMatcher.swift)
+      (`MatchResult`, `metersByCategory(alongNodePath:repository:)`)
 
 ### Phase 4 – größere Architektur-Entscheidungen
 

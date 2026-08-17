@@ -1219,10 +1219,11 @@ struct RadFaehrteTests {
         let buergerpark = CLLocationCoordinate2D(latitude: 53.0960, longitude: 8.8065)
         let reference = try #require(engine.route(from: hauptbahnhof, to: buergerpark))
 
-        let steps = try #require(
+        let matchResult = try #require(
             CuratedRouteStepMatcher.steps(along: reference.coordinates, using: repository),
             "Erwartete gematchte Schritte entlang einer Polyline, die per Konstruktion auf dem Wege-Graphen liegt"
         )
+        let steps = matchResult.steps
 
         #expect(!steps.isEmpty)
         #expect(steps.allSatisfy { !$0.instructions.isEmpty })
@@ -1262,10 +1263,11 @@ struct RadFaehrteTests {
         let path = try #require(
             RouteMatcher.routeSegmentPath(along: weserRadweg.lines, from: hauptbahnhof, to: weserwehr)
         )
-        let steps = try #require(
+        let matchResult = try #require(
             CuratedRouteStepMatcher.steps(along: path, using: wayGraphRepo),
             "Erwartete gematchte Schritte entlang der echten Weser-Radweg-Geometrie Bremen Hauptbahnhof -> Weserwehr"
         )
+        let steps = matchResult.steps
 
         #expect(steps.count > 5)
         #expect(steps.allSatisfy { !$0.instructions.isEmpty })

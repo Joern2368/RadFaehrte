@@ -30,6 +30,15 @@ import CoreLocation
 /// Die Namens-/Richtungs-Logik selbst kommt unverändert aus `BikeRoutingEngine.buildSteps`, nicht
 /// neu implementiert.
 enum CuratedRouteStepMatcher {
+    /// Ergebnis eines Matching-Versuchs: Straßennamen/Abbiege-Hinweise (`steps`, wie bisher) plus
+    /// die neue Wegearten-Aufschlüsselung (`metersByCategory`, analog `BikeRoutingEngine.
+    /// Result.metersByCategory`) - beide fallen beim selben Kanten-Walk entlang des gematchten
+    /// Knotenpfads an, deshalb hier zusammen statt als zwei getrennte Funktionen.
+    struct MatchResult {
+        let steps: [BikeRoutingEngine.Result.Step]
+        let metersByCategory: [WayGraphRepository.WayCategory: Double]
+    }
+
     /// Wie weit ein Originalpunkt vom nächsten Graph-Knoten entfernt sein darf, um noch als
     /// "getroffen" zu gelten - grober Toleranzwert für Abweichungen zwischen `routes.sqlite` und
     /// dem Wege-Graphen (unterschiedliche OSM-Extraktionen, s. ROADMAP.md) sowie für die
@@ -55,7 +64,7 @@ enum CuratedRouteStepMatcher {
     /// Hintergrund-Ausführung verantwortlich.
     nonisolated static func steps(
         along coordinates: [CLLocationCoordinate2D], using repository: WayGraphRepository
-    ) -> [BikeRoutingEngine.Result.Step]? {
+    ) -> MatchResult? {
         guard coordinates.count >= 2,
               let firstNode = repository.nearestNode(to: coordinates[0], maxDistanceMeters: maxSnapDistanceMeters)
         else { return nil }
@@ -94,7 +103,10 @@ enum CuratedRouteStepMatcher {
         guard nodePath.count >= 2, Double(matchedSegments) / Double(totalSegments) >= minMatchedFraction else {
             return nil
         }
-        return BikeRoutingEngine.buildSteps(path: nodePath, nameIndex: nameIndexByNode, repository: repository)
+        return MatchResult(
+            steps: BikeRoutingEngine.buildSteps(path: nodePath, nameIndex: nameIndexByNode, repository: repository),
+            metersByCategory: metersByCategory(alongNodePath: nodePath, repository: repository)
+        )
     }
 
     /// Wie `steps(along:using:)`, kombiniert dabei aber mehrere heruntergeladene Regionsgraphen,
@@ -113,7 +125,7 @@ enum CuratedRouteStepMatcher {
     nonisolated static func steps(
         along coordinates: [CLLocationCoordinate2D],
         candidateRepositories: [(repository: WayGraphRepository, displayName: String)]
-    ) -> [BikeRoutingEngine.Result.Step]? {
+    ) -> MatchResult? {
         guard coordinates.count >= 2, candidateRepositories.count >= 2 else { return nil }
 
         // Region je Punkt: welcher Kandidat hat hier den nächstgelegenen Knoten (innerhalb der
@@ -161,12 +173,13 @@ enum CuratedRouteStepMatcher {
         segments = segments.filter { $0.endIndex > $0.startIndex }
 
         var mergedSteps: [BikeRoutingEngine.Result.Step] = []
+        var mergedMetersByCategory: [WayGraphRepository.WayCategory: Double] = [:]
         var matchedSegmentCount = 0
         var previousMatchedRegionIndex: Int?
         for segment in segments {
             let candidate = candidateRepositories[segment.regionIndex]
             let segmentCoordinates = Array(coordinates[segment.startIndex...segment.endIndex])
-            guard let segmentSteps = steps(along: segmentCoordinates, using: candidate.repository), !segmentSteps.isEmpty
+            guard let segmentResult = steps(along: segmentCoordinates, using: candidate.repository), !segmentResult.steps.isEmpty
             else { continue }
             matchedSegmentCount += 1
 
@@ -176,7 +189,7 @@ enum CuratedRouteStepMatcher {
                     endCoordinate: segmentCoordinates[0], direction: .straight
                 ))
             }
-            for step in segmentSteps {
+            for step in segmentResult.steps {
                 if let last = mergedSteps.last, last.instructions == step.instructions {
                     mergedSteps[mergedSteps.count - 1] = BikeRoutingEngine.Result.Step(
                         instructions: last.instructions, endCoordinate: step.endCoordinate, direction: last.direction
@@ -185,13 +198,32 @@ enum CuratedRouteStepMatcher {
                     mergedSteps.append(step)
                 }
             }
+            for (category, meters) in segmentResult.metersByCategory {
+                mergedMetersByCategory[category, default: 0] += meters
+            }
             previousMatchedRegionIndex = segment.regionIndex
         }
 
         guard !mergedSteps.isEmpty, Double(matchedSegmentCount) / Double(segments.count) >= minMatchedFraction else {
             return nil
         }
-        return mergedSteps
+        return MatchResult(steps: mergedSteps, metersByCategory: mergedMetersByCategory)
+    }
+
+    /// Wegeart-Kilometer entlang eines bereits gematchten Knotenpfads (`nodePath`, inkl. per
+    /// `shortestBridge` eingefügter Zwischenknoten - jeder aufeinanderfolgende Knoten ist also per
+    /// Konstruktion direkt durch eine Kante verbunden). Analog `BikeRoutingEngine.search`s
+    /// Aggregation, nur nachträglich über den fertigen Pfad statt während der Suche selbst.
+    private static func metersByCategory(
+        alongNodePath nodePath: [Int], repository: WayGraphRepository
+    ) -> [WayGraphRepository.WayCategory: Double] {
+        var result: [WayGraphRepository.WayCategory: Double] = [:]
+        for i in 1..<nodePath.count {
+            guard let edge = repository.edges(from: nodePath[i - 1]).first(where: { Int($0.toNode) == nodePath[i] })
+            else { continue }
+            result[edge.wayCategory, default: 0] += Double(edge.distanceMeters)
+        }
+        return result
     }
 
     /// Straßenname der direkten Kante `from -> to`, falls vorhanden - `edges(from:)` liefert
