@@ -5850,14 +5850,20 @@ Diese Punkte brauchen zusätzliche Informationen, die die aktuelle `routes.sqlit
         kein `wayGraphFormatVersion`-Bump nötig, nur ein Neu-Bau der Regionsdateien (`gh release
         upload --clobber` auf denselben `way-graphs-v5`-Tag). Gegen echte Bremen-Daten verifiziert
         (7,8 % "Radweg an Landstraße" neben 7,0 % freistehendem "Radweg", plausible Verteilung,
-        keine Ausreißer). **Bremen und Niedersachsen neu gebaut und hochgeladen** - da eine
-        inhaltliche Content-Änderung ohne Versionsbump vom lokalen Download-Cache der App nicht
-        automatisch erkannt wird, zusätzlich beide Dateien manuell aufs Test-iPhone kopiert (`xcrun
-        devicectl device copy to`, analog zum bisherigen Vorgehen), App neu installiert, App-Ordner
-        blieb dabei erhalten. Nutzer bestätigt "sieht gut aus". **Noch offen**: die übrigen 14
-        Bundesländer (und die bereits zurückgestellten 77 EU/FR/IT/ES-Regionen) haben die neue
-        Kategorie noch nicht - dort weiterhin nur "Radweg" ohne die Unterscheidung, bis sie auch
-        neu gebaut werden.
+        keine Ausreißer). **Alle 16 Bundesländer neu gebaut und hochgeladen** (2026-08-17,
+        zweistufig: erst Bremen + Niedersachsen zur Kontrolle, nach Nutzer-Bestätigung "sieht gut
+        aus" der Rest in einem Rutsch ohne Rückfrage nach jedem einzelnen - anders als beim ersten
+        Bundesländer-Rollout, da das Verfahren inzwischen zweimal sauber lief). Da eine inhaltliche
+        Content-Änderung ohne Versionsbump vom lokalen Download-Cache der App nicht automatisch
+        erkannt wird, Bremen + Niedersachsen zusätzlich manuell aufs Test-iPhone kopiert (`xcrun
+        devicectl device copy to`), App neu installiert, App-Ordner blieb dabei erhalten. Zwei
+        Uploads (Hessen, Baden-Württemberg) scheiterten unterwegs an einem kurzzeitigen
+        GitHub-Server-Fehler (HTTP 503) - der jeweilige Bau selbst war erfolgreich, nur der Upload
+        schlug fehl; erneuter Upload-Versuch (ohne Neu-Bau, da die fertige Datei noch lokal lag)
+        lief beide Male sauber durch. Per Asset-Zeitstempel im Release verifiziert, dass alle 16
+        tatsächlich neu hochgeladen wurden (nicht nur der lokale Build-Log). **Noch offen**: die
+        bereits zurückgestellten 77 EU/FR/IT/ES-Regionen haben die neue Kategorie weiterhin nicht -
+        dort bleibt es vorerst bei nur "Radweg" ohne die Unterscheidung.
       → [build_way_graph.py](FahrradApp/Scripts/build_way_graph.py) (`way_category`,
       `WAY_CATEGORY_*`, `UNPAVED_SURFACES`, `MAIN_ROAD_HIGHWAYS`, `QUIET_ROAD_HIGHWAYS`,
       `MainRoadIndex`, `NEARBY_MAIN_ROAD_METERS`, `point_to_segment_distance_meters`),
