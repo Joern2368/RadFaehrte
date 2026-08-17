@@ -57,7 +57,7 @@ nonisolated protocol DownloadableRegion: Hashable, CaseIterable, Identifiable wh
 /// isoliert (`-default-isolation=MainActor`) - `WayGraphStore` selbst ist aber bewusst
 /// `nonisolated` (s. u.) und liest diese Konstante, was ohne diese Annotation einen
 /// Compiler-Fehler gäbe. Sicher, weil unveränderliche `Int`-Konstante (kein echtes Race möglich).
-private nonisolated(unsafe) let wayGraphFormatVersion = 6
+private nonisolated(unsafe) let wayGraphFormatVersion = 7
 
 /// Bundesländer, für die ein Wege-Graph heruntergeladen werden kann. `rawValue` entspricht dem
 /// Geofabrik-Bezeichner (download.geofabrik.de/europe/germany/<rawValue>-latest.osm.pbf).

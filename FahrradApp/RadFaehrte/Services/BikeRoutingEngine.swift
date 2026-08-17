@@ -162,6 +162,10 @@ nonisolated final class BikeRoutingEngine {
         /// wenn der Wege-Graph keine Namen enthält (altes Datenformat vor `WayGraphRepository`s
         /// `wayNames`) oder kein Pfad gefunden wurde.
         let steps: [Step]
+        /// Gefahrene Meter je `WayGraphRepository.WayCategory` (Radweg/Ruhige Straße/Landstraße/
+        /// Unbefestigter Weg/Sonstiger Weg) für die Wegearten-Anzeige ("X km Landstraße" usw.).
+        /// Summe über alle Werte entspricht `distanceMeters` (bis auf Rundung).
+        let metersByCategory: [WayGraphRepository.WayCategory: Double]
     }
 
     /// Knoten werden als dichte 0-basierte Array-Indizes referenziert (siehe
@@ -323,6 +327,9 @@ nonisolated final class BikeRoutingEngine {
         // Straßenname der Kante, über die ein Knoten erreicht wurde - für die Schritt-Erzeugung
         // (`buildSteps`), analog zu `cameFromOffsetSide`.
         var cameFromNameIndex: [Int: UInt32] = [:]
+        // Wegeart der Kante, über die ein Knoten erreicht wurde - für die Wegearten-Aggregation
+        // unten, analog zu `cameFromOffsetSide`.
+        var cameFromCategory: [Int: WayGraphRepository.WayCategory] = [:]
         var visited: Set<Int> = []
         var queue = AStarQueue()
         queue.push(priority: heuristic(startNode), node: startNode)
@@ -361,6 +368,7 @@ nonisolated final class BikeRoutingEngine {
                     cameFrom[toNode] = current.node
                     cameFromOffsetSide[toNode] = Int(edge.offsetSide)
                     cameFromNameIndex[toNode] = edge.nameIndex
+                    cameFromCategory[toNode] = edge.wayCategory
                     queue.push(priority: tentativeG + heuristic(toNode), node: toNode)
                 }
             }
@@ -376,10 +384,21 @@ nonisolated final class BikeRoutingEngine {
         }
         path.reverse()
 
+        // Kanten-Länge pro Hop aus der Differenz der (entlang des Pfads monoton steigenden)
+        // kumulierten `realDistance`-Werte statt einer eigenen dritten `cameFrom*`-Tabelle -
+        // spart eine weitere Dictionary-Allokation pro Suche.
+        var metersByCategory: [WayGraphRepository.WayCategory: Double] = [:]
+        for toNode in path.dropFirst() {
+            guard let category = cameFromCategory[toNode], let fromNode = cameFrom[toNode] else { continue }
+            let edgeMeters = (realDistance[toNode] ?? 0) - (realDistance[fromNode] ?? 0)
+            metersByCategory[category, default: 0] += edgeMeters
+        }
+
         let result = Result(
             coordinates: Self.displayCoordinates(for: path, offsetSide: cameFromOffsetSide, repository: repository),
             distanceMeters: realDistance[endNode] ?? 0,
-            steps: Self.buildSteps(path: path, nameIndex: cameFromNameIndex, repository: repository)
+            steps: Self.buildSteps(path: path, nameIndex: cameFromNameIndex, repository: repository),
+            metersByCategory: metersByCategory
         )
         return .found(result, path)
     }

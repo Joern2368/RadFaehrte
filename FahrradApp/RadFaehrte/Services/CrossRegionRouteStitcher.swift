@@ -265,10 +265,15 @@ nonisolated enum CrossRegionRouteStitcher {
         let transitionStep = BikeRoutingEngine.Result.Step(
             instructions: "Weiter in \(endRegionDisplayName)", endCoordinate: handoverInEnd, direction: .straight
         )
+        var metersByCategory = leg1.metersByCategory
+        for (category, meters) in leg2.metersByCategory {
+            metersByCategory[category, default: 0] += meters
+        }
         return BikeRoutingEngine.Result(
             coordinates: leg1.coordinates + leg2.coordinates,
             distanceMeters: leg1.distanceMeters + gap + leg2.distanceMeters,
-            steps: leg1.steps + [transitionStep] + leg2.steps
+            steps: leg1.steps + [transitionStep] + leg2.steps,
+            metersByCategory: metersByCategory
         )
     }
 
@@ -339,6 +344,7 @@ nonisolated enum CrossRegionRouteStitcher {
         var coordinates: [CLLocationCoordinate2D] = []
         var steps: [BikeRoutingEngine.Result.Step] = []
         var totalDistanceMeters = 0.0
+        var metersByCategory: [WayGraphRepository.WayCategory: Double] = [:]
         for i in 0..<chain.count {
             let repository = candidates[chain[i]].repository
             // Wie bei `combinedRoute`: nur die echten Start-/Zielpunkte (erstes/letztes Leg) bleiben
@@ -354,6 +360,9 @@ nonisolated enum CrossRegionRouteStitcher {
             coordinates.append(contentsOf: leg.coordinates)
             totalDistanceMeters += leg.distanceMeters
             steps.append(contentsOf: leg.steps)
+            for (category, meters) in leg.metersByCategory {
+                metersByCategory[category, default: 0] += meters
+            }
 
             if i < chain.count - 1 {
                 totalDistanceMeters += gaps[i]
@@ -364,6 +373,9 @@ nonisolated enum CrossRegionRouteStitcher {
             }
         }
 
-        return BikeRoutingEngine.Result(coordinates: coordinates, distanceMeters: totalDistanceMeters, steps: steps)
+        return BikeRoutingEngine.Result(
+            coordinates: coordinates, distanceMeters: totalDistanceMeters, steps: steps,
+            metersByCategory: metersByCategory
+        )
     }
 }

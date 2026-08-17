@@ -162,6 +162,8 @@ struct ContentView: View {
     /// "Direkte Fahrrad-Route", s. `isDirectRouteMode`/`previewedStep`) - kleinerer, risikoärmerer
     /// erster Schritt, der die bestehende Navigations-State-Machine nicht anfasst.
     @State private var curatedRouteStepsDetail: RouteMatch?
+    /// Wegearten-Aufschlüsselung der "ruhige Wege"-Offline-Route, s. `wayCategoryDetailSheet`.
+    @State private var wayCategoryDetailRoute: DirectRoute?
     /// `nil` = noch nicht geladen, s. `curatedRouteStepsDetailSheet`/`CuratedRouteStepsAvailability`.
     @State private var curatedRouteStepsResult: CuratedRouteStepsAvailability?
     @State private var isLoadingCuratedRouteSteps = false
@@ -742,6 +744,9 @@ struct ContentView: View {
         }
         .sheet(item: $combinedRouteDetail) { match in
             combinedRouteDetailSheet(match)
+        }
+        .sheet(item: $wayCategoryDetailRoute) { route in
+            wayCategoryDetailSheet(route)
         }
         .sheet(item: $curatedRouteStepsDetail) { match in
             curatedRouteStepsDetailSheet(match)
@@ -3210,6 +3215,15 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            if !route.metersByCategory.isEmpty {
+                Button {
+                    wayCategoryDetailRoute = route
+                } label: {
+                    Image(systemName: "chart.bar.doc.horizontal")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
             if isSelected {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.blue)
@@ -3218,6 +3232,32 @@ struct ContentView: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
         .contentShape(Rectangle())
+    }
+
+    /// Wegearten-Aufschlüsselung ("X km Landstraße" usw.) für eine "ruhige Wege"-Offline-Route,
+    /// s. `BikeRoutingEngine.Result.metersByCategory`/`ROADMAP.md` "Wegearten-Aufschlüsselung
+    /// anzeigen". Bewusst als eigenes Sheet statt inline in der Zeile, analog
+    /// `curatedRouteStepsDetailSheet` - die Daten liegen (anders als bei kuratierten Routen) schon
+    /// synchron vor, daher kein Lade-/Fehlerzustand nötig.
+    private func wayCategoryDetailSheet(_ route: DirectRoute) -> some View {
+        NavigationStack {
+            List(route.metersByCategory.sorted { $0.value > $1.value }, id: \.key) { category, meters in
+                HStack {
+                    Text(category.displayName)
+                    Spacer()
+                    Text(String(format: "%.1f km", meters / 1000))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Wegearten")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fertig") { wayCategoryDetailRoute = nil }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 
     private func directRouteSubtitle(for route: DirectRoute) -> String {
@@ -3469,7 +3509,9 @@ struct ContentView: View {
             total + CLLocation(latitude: pair.0.latitude, longitude: pair.0.longitude)
                 .distance(from: CLLocation(latitude: pair.1.latitude, longitude: pair.1.longitude))
         }
-        return BikeRoutingEngine.Result(coordinates: coordinates, distanceMeters: distanceMeters, steps: steps)
+        return BikeRoutingEngine.Result(
+            coordinates: coordinates, distanceMeters: distanceMeters, steps: steps, metersByCategory: [:]
+        )
     }
 
     /// Lädt die Straßennamen/Abbiege-Hinweise für `match` zwischen `startPlace`/`zielPlace` - s.
@@ -3593,7 +3635,10 @@ struct ContentView: View {
         }
 
         guard !mergedSteps.isEmpty, matchedLegCount * 2 >= legs.count else { return nil }
-        return BikeRoutingEngine.Result(coordinates: mergedCoordinates, distanceMeters: totalDistanceMeters, steps: mergedSteps)
+        return BikeRoutingEngine.Result(
+            coordinates: mergedCoordinates, distanceMeters: totalDistanceMeters, steps: mergedSteps,
+            metersByCategory: [:]
+        )
     }
 
     /// Lädt die Straßennamen/Abbiege-Hinweise für eine kombinierte Kette - s.
@@ -4200,6 +4245,10 @@ struct DirectRoute: Identifiable {
     /// Format ohne Namen vorliegt oder kein Pfad gefunden wurde. Die Navigations-UI fällt in dem
     /// Fall automatisch auf "Route folgen" zurück, genau wie bei DB-/importierten Routen.
     let steps: [Step]
+    /// Wegearten-Aufschlüsselung für die "ruhige Wege"-Offline-Route (s. `BikeRoutingEngine.
+    /// Result.metersByCategory`) - leer bei der online berechneten Route (`MKDirections` liefert
+    /// keine Wegetyp-Info).
+    let metersByCategory: [WayGraphRepository.WayCategory: Double]
 
     init(route: MKRoute) {
         coordinates = route.polyline.coordinates
@@ -4208,6 +4257,7 @@ struct DirectRoute: Identifiable {
         steps = route.steps.map {
             Step(instructions: $0.instructions, endCoordinate: $0.polyline.coordinates.last ?? route.polyline.coordinate, direction: .straight)
         }
+        metersByCategory = [:]
     }
 
     init(offlineResult: BikeRoutingEngine.Result) {
@@ -4223,6 +4273,7 @@ struct DirectRoute: Identifiable {
             }
             return Step(instructions: $0.instructions, endCoordinate: $0.endCoordinate, direction: direction)
         }
+        metersByCategory = offlineResult.metersByCategory
     }
 }
 

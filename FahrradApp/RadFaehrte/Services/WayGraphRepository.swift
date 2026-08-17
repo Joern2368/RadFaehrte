@@ -25,19 +25,27 @@ import SQLite3
 /// eine Stadt) berührt A* nur einen winzigen Bruchteil aller Knoten - Format v2 muss dafür auch nur
 /// einen winzigen Bruchteil der Datei tatsächlich lesen/dekodieren, statt beim Laden immer den
 /// gesamten Graphen zu verarbeiten. Layout (little-endian):
-/// - Header (16 Byte): `"RFG2"` (4 Byte Magic) + `UInt32 nodeCount` + `UInt32 edgeCount` +
+/// - Header (16 Byte): `"RFG3"` (4 Byte Magic) + `UInt32 nodeCount` + `UInt32 edgeCount` +
 ///   `UInt32 nameCount`
 /// - Nodes-Sektion (`nodeCount * 8` Byte): je `Float32 lat, Float32 lon`
 /// - EdgeOffsets-Sektion (`(nodeCount + 1) * 4` Byte): je `UInt32` - direkt aus der Datei gelesen,
 ///   keine eigene Berechnung mehr nötig (im Gegensatz zu v1)
-/// - Edges-Sektion (`edgeCount * 17` Byte), nach `fromNode` sortiert: je `UInt32 toNode,
-///   Float32 distanceMeters, Float32 weight, UInt8 offsetSide, UInt32 nameIndex` (kein
-///   `fromNode`-Feld mehr - die Position im sortierten Array codiert es bereits, 17 statt 21
+/// - Edges-Sektion (`edgeCount * 18` Byte), nach `fromNode` sortiert: je `UInt32 toNode,
+///   Float32 distanceMeters, Float32 weight, UInt8 offsetSide, UInt32 nameIndex, UInt8 wayCategory`
+///   (kein `fromNode`-Feld mehr - die Position im sortierten Array codiert es bereits, 18 statt 21
 ///   Byte/Kante)
 /// - Names-Sektion (`nameCount` Einträge): je `UInt16 byteLength` + UTF-8-Bytes
 ///
 /// Beide Formate teilen sich `nameIndex`/`noNameIndex`/`offsetSide`-Semantik (siehe
 /// `offset_side()`/`name_index_for()` in den jeweiligen Python-Skripten).
+///
+/// ⚠️ **`wayCategory`** (grobe Wegeart wie "Radweg"/"Landstraße"/"Unbefestigter Weg", s.
+/// `WayCategory` unten und `way_category()` in `Scripts/build_way_graph.py`) existiert **nur in
+/// Format v2** (ab Magic `"RFG3"`) - Format v1 kennt das Feld nicht, dort liefert `Edge.wayCategory`
+/// immer `WayCategory.other.rawValue` als neutralen Platzhalter, s. `parseLegacy`. Das alte
+/// `"RFG2"`-Layout (ohne dieses Feld, 17 Byte/Kante) wird bewusst nicht mehr unterstützt - beim
+/// Formatwechsel wurde `wayGraphFormatVersion` in `WayGraphStore.swift` hochgezählt, wodurch alte
+/// lokal heruntergeladene Dateien automatisch verworfen werden.
 ///
 /// ⚠️ **Historie (Format v1)**: Ursprünglich ein `[[Edge]]` pro Knoten (`adjacency`) - führte beim
 /// Live-Test mit dem Niederlande-Graphen (9,6 Mio. Knoten) zu einem Speicher-Kill durch iOS
@@ -50,10 +58,31 @@ nonisolated final class WayGraphRepository {
     /// Sentinel für "kein `name`-Tag".
     static let noNameIndex: UInt32 = .max
 
-    private static let v2Magic = Data("RFG2".utf8)
+    private static let v2Magic = Data("RFG3".utf8)
     private static let v1EdgeRecordSize = 21
-    private static let v2EdgeRecordSize = 17
+    private static let v2EdgeRecordSize = 18
     private static let v2HeaderSize = 16
+
+    /// Grobe Wegeart-Kategorie einer Kante für die Nutzer-Anzeige ("X km Landstraße" usw.), s.
+    /// `way_category()`/`WAY_CATEGORY_*` in `Scripts/build_way_graph.py` (Rohwert dort und hier
+    /// muss übereinstimmen). Nur in Format v2 vorhanden, s. Typ-Dokumentation.
+    enum WayCategory: UInt8 {
+        case cycleway = 0
+        case quietRoad = 1
+        case mainRoad = 2
+        case unpaved = 3
+        case other = 4
+
+        var displayName: String {
+            switch self {
+            case .cycleway: return "Radweg"
+            case .quietRoad: return "Ruhige Straße"
+            case .mainRoad: return "Landstraße"
+            case .unpaved: return "Unbefestigter Weg"
+            case .other: return "Sonstiger Weg"
+            }
+        }
+    }
 
     struct Edge {
         /// Dichter 0-basierter Knoten-Index, `Int32` statt `Int` - spart bei Millionen Kanten
@@ -65,6 +94,13 @@ nonisolated final class WayGraphRepository {
         let offsetSide: UInt8
         /// Index in `wayNames`, oder `noNameIndex` für unbenannte Wege.
         let nameIndex: UInt32
+        /// Rohwert von `WayCategory` - `WayCategory.other.rawValue` (neutraler Platzhalter) bei
+        /// Format v1, das dieses Feld nicht kennt (s. Typ-Dokumentation).
+        let wayCategoryRaw: UInt8
+
+        var wayCategory: WayCategory {
+            WayCategory(rawValue: wayCategoryRaw) ?? .other
+        }
     }
 
     private(set) var nodeLocations: [CLLocationCoordinate2D] = []
@@ -243,7 +279,10 @@ nonisolated final class WayGraphRepository {
             edgeOffsets[i + 1] = edgeOffsets[i] + outDegree[i]
         }
 
-        let placeholder = Edge(toNode: 0, distanceMeters: 0, weight: 0, offsetSide: 0, nameIndex: Self.noNameIndex)
+        let placeholder = Edge(
+            toNode: 0, distanceMeters: 0, weight: 0, offsetSide: 0, nameIndex: Self.noNameIndex,
+            wayCategoryRaw: WayCategory.other.rawValue
+        )
         eagerEdges = [Edge](repeating: placeholder, count: edgeCount)
         var writeCursor = edgeOffsets
         for i in 0..<edgeCount {
@@ -259,7 +298,7 @@ nonisolated final class WayGraphRepository {
             let position = Int(writeCursor[from])
             eagerEdges[position] = Edge(
                 toNode: Int32(bitPattern: to), distanceMeters: distance, weight: weight,
-                offsetSide: side, nameIndex: nameIndex
+                offsetSide: side, nameIndex: nameIndex, wayCategoryRaw: WayCategory.other.rawValue
             )
             writeCursor[from] += 1
         }
@@ -306,9 +345,10 @@ nonisolated final class WayGraphRepository {
                     let weight = raw.loadUnaligned(fromByteOffset: offset + 8, as: Float32.self)
                     let side = raw.loadUnaligned(fromByteOffset: offset + 12, as: UInt8.self)
                     let nameIndex = raw.loadUnaligned(fromByteOffset: offset + 13, as: UInt32.self)
+                    let category = raw.loadUnaligned(fromByteOffset: offset + 17, as: UInt8.self)
                     result.append(Edge(
                         toNode: Int32(bitPattern: to), distanceMeters: distance, weight: weight,
-                        offsetSide: side, nameIndex: nameIndex
+                        offsetSide: side, nameIndex: nameIndex, wayCategoryRaw: category
                     ))
                 }
             }

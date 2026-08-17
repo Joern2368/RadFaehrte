@@ -14,36 +14,39 @@ import Observation
 /// ... crosses into main actor-isolated code" (in Swift 6 ein Fehler).
 nonisolated extension Bundesland {
     var downloadURL: URL {
-        // v4: Kanten enthalten zusätzlich einen Namens-Index in eine deduplizierte
-        // Straßennamen-Tabelle (siehe `WayGraphRepository`, `BikeRoutingEngine.buildSteps`) für
-        // echte Turn-by-Turn-Anweisungen. Ursprünglich als v3 mit UInt16-Index versucht -
-        // Baden-Württemberg erreichte beim echten Bau aber dessen 65.535er-Grenze, deshalb direkt
-        // auf UInt32 umgestellt (v4) statt v3 fehlerhaft auszuliefern. Inkompatibel zum alten
-        // Format, deshalb neuer Release-Tag statt Assets im alten (way-graphs-v2) zu
-        // überschreiben.
-        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/way-graphs-v4/\(rawValue)_ways.sqlite")!
+        // v5: Kanten enthalten zusätzlich ein `wayCategory`-Feld (Radweg/Ruhige Straße/
+        // Landstraße/Unbefestigter Weg/Sonstiger Weg, s. `WayGraphRepository.WayCategory`) für die
+        // Wegearten-Anzeige ("X km Landstraße" usw., s. ROADMAP.md). Kanten-Record dadurch 17 → 18
+        // Byte, Magic `"RFG2"` → `"RFG3"` in `Scripts/build_way_graph_v2.py` - inkompatibel zum
+        // alten Format, deshalb neuer Release-Tag statt Assets im alten (way-graphs-v4) zu
+        // überschreiben (s. `wayGraphFormatVersion` in `WayGraphStore.swift`, das alte
+        // heruntergeladene Dateien beim Formatwechsel automatisch verwirft). Vorherige Historie
+        // (v3 UInt16-Namensindex-Überlauf bei Baden-Württemberg, v4-Umstellung auf UInt32) s.
+        // Git-Historie dieser Zeile.
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/way-graphs-v5/\(rawValue)_ways.sqlite")!
     }
 
     var approximateSizeMB: Int {
-        // v4-Größen (mit Straßennamen-Tabelle) - ca. 20-27 % größer als die alten v2-Werte, s.
-        // Doc-Kommentar an `downloadURL`.
+        // v5-Größen (mit wayCategory-Feld) - ca. 4-6 % größer als die alten v4-Werte (1 von 17
+        // Byte mehr pro Kante), s. Doc-Kommentar an `downloadURL`. Reale Release-Asset-Größen nach
+        // dem v5-Rebuild (2026-08-17), nicht mehr grob geschätzt.
         switch self {
-        case .badenWuerttemberg: return 515
-        case .bayern: return 747
-        case .berlin: return 31
-        case .brandenburg: return 151
+        case .badenWuerttemberg: return 539
+        case .bayern: return 781
+        case .berlin: return 32
+        case .brandenburg: return 158
         case .bremen: return 9
         case .hamburg: return 22
-        case .hessen: return 266
-        case .mecklenburgVorpommern: return 69
-        case .niedersachsen: return 298
-        case .nordrheinWestfalen: return 498
-        case .rheinlandPfalz: return 253
-        case .saarland: return 35
-        case .sachsen: return 183
-        case .sachsenAnhalt: return 121
-        case .schleswigHolstein: return 93
-        case .thueringen: return 141
+        case .hessen: return 278
+        case .mecklenburgVorpommern: return 72
+        case .niedersachsen: return 312
+        case .nordrheinWestfalen: return 520
+        case .rheinlandPfalz: return 264
+        case .saarland: return 36
+        case .sachsen: return 191
+        case .sachsenAnhalt: return 126
+        case .schleswigHolstein: return 97
+        case .thueringen: return 148
         }
     }
 }

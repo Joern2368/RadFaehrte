@@ -56,6 +56,37 @@ CYCLE_INFRA_BONUS = 0.7
 CYCLE_INFRA_TAGS = ("cycleway", "cycleway:left", "cycleway:right", "cycleway:both")
 CYCLE_INFRA_VALUES = {"track", "lane", "opposite_track", "opposite_lane", "share_busway"}
 
+# Grobe Wegeart-Kategorie pro Kante, unabhängig von `weight_multiplier` (das feiner fürs Routing
+# gewichtet) - für die spätere Nutzer-Anzeige "X km Landstraße, Y km Radweg usw." entlang einer
+# Route. Bewusst wenige, für Laien verständliche Kategorien statt der vollen OSM-`highway`-Palette.
+WAY_CATEGORY_CYCLEWAY = 0
+WAY_CATEGORY_QUIET_ROAD = 1
+WAY_CATEGORY_MAIN_ROAD = 2
+WAY_CATEGORY_UNPAVED = 3
+WAY_CATEGORY_OTHER = 4
+
+WAY_CATEGORY_LABELS = {
+    WAY_CATEGORY_CYCLEWAY: "Radweg",
+    WAY_CATEGORY_QUIET_ROAD: "Ruhige Straße",
+    WAY_CATEGORY_MAIN_ROAD: "Landstraße",
+    WAY_CATEGORY_UNPAVED: "Unbefestigter Weg",
+    WAY_CATEGORY_OTHER: "Sonstiger Weg",
+}
+
+MAIN_ROAD_HIGHWAYS = {
+    "tertiary", "tertiary_link", "secondary", "secondary_link",
+    "primary", "primary_link", "trunk", "trunk_link",
+}
+QUIET_ROAD_HIGHWAYS = {"living_street", "residential", "service", "unclassified", "pedestrian"}
+
+# `surface`-Werte, die einen Weg unabhängig vom `highway`-Tag als "unbefestigt" einstufen - das ist
+# für Rennrad- vs. Trekkingrad-Nutzer oft die praktisch relevantere Info als der Straßentyp (s.
+# ROADMAP.md "Oberflächentyp anzeigen").
+UNPAVED_SURFACES = {
+    "unpaved", "gravel", "fine_gravel", "dirt", "ground", "grass", "sand",
+    "compacted", "pebblestone", "mud", "earth", "woodchips",
+}
+
 # Ein `cycleway=track/lane`-Tag beschreibt einen baulich getrennten Radweg, der aber in OSM
 # i. d. R. NICHT als eigene, seitlich versetzte Geometrie gezeichnet ist, sondern nur als
 # Attribut an der Straßen-Mittellinie hängt. Damit die App trotzdem eine plausible, seitlich
@@ -145,6 +176,36 @@ def weight_multiplier(tags):
     if bicycle == "use_sidepath":
         multiplier *= 2.0
     return multiplier
+
+
+def way_category(tags):
+    """Kategorie für die Wegeart-Anzeige (s. `WAY_CATEGORY_*` oben). `surface` schlägt `highway`:
+    ein unbefestigter Radweg ist für die Anzeige in erster Linie "unbefestigt", nicht "Radweg".
+
+    ⚠️ Live-Fund (2026-08-15, Demo-Lauf Bremen Hauptbahnhof -> Bürgerpark): Ein separat kartierter
+    Radweg neben einer größeren Straße ist in OSM meist **kein** eigener `highway=cycleway`-Way,
+    sondern nur ein `cycleway:right/left=track`-Attribut an der Straßen-Mittellinie selbst (exakt
+    dieselben Tags, die auch `offset_side()`/`CYCLE_INFRA_BONUS` oben schon auswerten, um die
+    Linie seitlich zu versetzen bzw. die Straße fürs Routing günstiger zu gewichten). Ohne diesen
+    Check landete z. B. die Theodor-Heuss-Allee/Admiralstraße (durchgehend `cycleway:right/left=
+    track`) komplett in der Kategorie "Landstraße" statt "Radweg" - für die Anzeige ("X km
+    Radweg") die irreführendere der beiden Kategorien, weil der Nutzer ja tatsächlich auf dem
+    separaten Radweg fährt, nicht auf der Fahrbahn."""
+    if tags.get("surface") in UNPAVED_SURFACES:
+        return WAY_CATEGORY_UNPAVED
+    highway = tags.get("highway")
+    bicycle = tags.get("bicycle")
+    if highway == "cycleway" or (
+        highway in ("path", "footway", "pedestrian", "track") and bicycle == "designated"
+    ):
+        return WAY_CATEGORY_CYCLEWAY
+    if any(tags.get(key) in CYCLE_INFRA_VALUES for key in CYCLE_INFRA_TAGS):
+        return WAY_CATEGORY_CYCLEWAY
+    if highway in MAIN_ROAD_HIGHWAYS:
+        return WAY_CATEGORY_MAIN_ROAD
+    if highway in QUIET_ROAD_HIGHWAYS:
+        return WAY_CATEGORY_QUIET_ROAD
+    return WAY_CATEGORY_OTHER
 
 
 def direction(tags):

@@ -5717,8 +5717,98 @@ Diese Punkte brauchen zusätzliche Informationen, die die aktuelle `routes.sqlit
       Map-Matching-Versuchs für Einzeltreffer mitumgesetzt. Ursprünglich bewusst ohne Sprachausgabe
       (siehe ursprüngliche Spezifikation, MVP-Ausschluss) - inzwischen nachgerüstet, s. u.
       "Sprachausgabe für Abbiegehinweise" unter "Aktueller Stand".
-- [ ] **Oberflächentyp anzeigen** (asphaltiert/Schotter/etc.) – `surface`-Tag pro Way,
-      relevant für Rennrad- vs. Trekkingrad-Nutzer
+- [ ] **Wegearten-Aufschlüsselung anzeigen** (Nutzer-Idee 2026-08-15: "40 km Landstraße, 12 km
+      Radweg" usw. pro Route) – umfasst auch den älteren Punkt "Oberflächentyp anzeigen"
+      (asphaltiert/Schotter/etc., relevant für Rennrad- vs. Trekkingrad-Nutzer), da unbefestigte
+      Wege eine der Kategorien sind.
+      - **Schema-Änderung umgesetzt** (2026-08-15): Neues `UInt8 wayCategory`-Feld pro Kante im
+        Format-v2-Wege-Graphen (`WAY_CATEGORY_*`/`way_category()` in `build_way_graph.py`, von
+        `build_way_graph_v2.py` mitgeschrieben) - 5 grobe, laientaugliche Kategorien statt der
+        vollen OSM-`highway`-Palette: Radweg, Ruhige Straße, Landstraße, Unbefestigter Weg,
+        Sonstiger Weg. `surface` schlägt `highway` (ein unbefestigter Radweg zählt als
+        "Unbefestigter Weg", nicht "Radweg" - praktisch relevanter für die Rad-Wahl). Kanten-
+        Record dadurch 17 → 18 Byte, Magic `"RFG2"` → `"RFG3"` (verhindert Fehlinterpretation
+        alter Dateien mit dem neuen Parser), `wayGraphFormatVersion` 6 → 7 in
+        `WayGraphStore.swift` (verwirft alte lokal heruntergeladene Graphen automatisch beim
+        nächsten Start). Gegen echte Bremen-`.osm.pbf`-Daten verifiziert (Build-Script neu
+        gelaufen, Byte-Layout per Python nachgelesen: 391.152 Kanten, Kategorie-Verteilung
+        plausibel für eine Stadt - 53,5 % ruhige Straße, 17,8 % sonstige, je ~9-11 % Radweg/
+        Landstraße/unbefestigt). Bestehende Unit-Tests (`RadFaehrteTests.swift`) nutzen weiter das
+        alte, unveränderte SQLite-Format v1 (`bremen_ways.sqlite`) und sind daher nicht
+        betroffen.
+      - **Live-Fund + Fix: `cycleway:right/left`-Straßen fälschlich als "Landstraße" kategorisiert**
+        (2026-08-15, Demo-Lauf gegen echte Bremen-Daten Hauptbahnhof -> Bürgerpark, außerhalb der
+        App per eigenständig kompiliertem Kommandozeilen-Programm, das `WayGraphRepository`/
+        `BikeRoutingEngine` direkt nutzt - kein Simulator/Gerät nötig für diese reine
+        Daten-Verifikation): Straßen mit separat kartiertem, aber nur als `cycleway:right/left=
+        track`-Attribut (nicht als eigener `highway=cycleway`-Way) getaggtem Radweg - z. B.
+        Theodor-Heuss-Allee, Admiralstraße - landeten komplett in "Landstraße" statt "Radweg",
+        obwohl der Nutzer dort tatsächlich auf dem separaten Radweg fährt (dieselben Tags, die
+        `offset_side()`/`CYCLE_INFRA_BONUS` bereits für Linien-Versatz bzw. Routing-Gewichtung
+        auswerten). `way_category()` prüft jetzt zusätzlich `CYCLE_INFRA_TAGS`/`CYCLE_INFRA_VALUES`
+        (bereits vorhandene Konstanten). Auswirkung am Testfall: von 1,78 km fälschlich
+        "Landstraße" zu korrekt "Radweg" (1,87 km Gesamtroute bestand danach zu 1,78 km aus
+        "Radweg", 0,08 km "Ruhige Straße", 0,01 km "Sonstiger Weg" - kein einziger Meter
+        "Landstraße" mehr, plausibel für eine "ruhigste Route"-Suche). Bremen lokal neu gebaut und
+        Demo erneut verifiziert.
+      - **Aggregation + UI umgesetzt** (2026-08-15): `BikeRoutingEngine.Result` hat jetzt
+        `metersByCategory: [WayGraphRepository.WayCategory: Double]` - während der A*-Suche pro
+        Knoten mitgeführt (analog `offsetSide`/`nameIndex`), aus den kumulierten Distanzen beim
+        Pfad-Rekonstruieren aggregiert (kein nachträgliches Kanten-Raten nötig).
+        `CrossRegionRouteStitcher` summiert die Kategorien seiner Teilstrecken (`combinedRoute`,
+        `chainedRoute`); die beiden kuratierten-Routen-Stellen in `ContentView.swift` liefern
+        bewusst ein leeres Dictionary (kein OSM-Tag-Zugriff dort, s. o.). UI: neuer Balken-Icon-
+        Button neben "Ruhige Route (offline)" in der Ergebnisliste (nur sichtbar, wenn
+        `metersByCategory` nicht leer ist), öffnet ein Sheet mit der nach Kilometern absteigend
+        sortierten Liste - bewusst ein eigenes Sheet statt inline in der Zeile, analog
+        `curatedRouteStepsDetailSheet`, aber ohne dessen Async-Lade-/Fehlerzustände (Daten liegen
+        hier schon synchron vor). Live auf dem iPhone getestet (Bremen Hauptbahnhof -> Bürgerpark,
+        manuell aufs Gerät kopierter Testgraph statt regulärem Download, s. u.) - Nutzer bestätigt
+        "sieht sehr gut aus".
+      - **Entscheidung: keine Kartenfärbung** (2026-08-15, Nutzer-Rückmeldung nach Live-Test):
+        Routenlinie bleibt einheitlich blau, auch in der Vorschau vor "Los" - der eingangs als
+        Option 3 durchdachte Ansatz (Linie nach Wegeart einfärben) wird nicht umgesetzt. Grund:
+        zusätzliche visuelle Komplexität ausgerechnet im Moment des schnellen Routen-Vergleichs,
+        ohne klaren Mehrwert gegenüber dem Sheet.
+      - **Alle 16 Bundesländer neu gebaut + hochgeladen** (2026-08-17, Nutzer-Wunsch "alle 19
+        Regionen neu bauen", dabei rauskam: es sind inzwischen tatsächlich 93 Regionen über alle
+        Release-Tags hinweg - DE (16) + Europa (33 Länder inkl. NL/SE/PL) + Frankreich (21) +
+        Italien (5) + Spanien (18), nicht mehr die "19" von der ursprünglichen v2-Migration. Nach
+        Absprache bewusst auf die 16 Bundesländer für diese Sitzung begrenzt, Rest siehe unten).
+        Neuer Release-Tag `way-graphs-v5` (16 `<bundesland>_ways.sqlite`-Assets, trotz Namen im
+        neuen Flachdatei-Format v2+wayCategory, s. o.) - Bremen aus dem bereits lokal gebauten
+        Testdatensatz übernommen, die übrigen 15 einzeln heruntergeladen (Geofabrik), mit
+        `build_way_graph_v2.py` neu gebaut und hochgeladen (`gh release upload`), größere Downloads
+        (Hessen, Niedersachsen, NRW, Baden-Württemberg, Bayern) liefen dafür im Hintergrund.
+        Zwischen jedem Bundesland Rückfrage an den Nutzer, ob es weitergehen soll (spät abends,
+        Nutzer wollte irgendwann schlafen gehen). `WayGraphDownloadManager.swift`s `downloadURL`
+        für `Bundesland` zeigt jetzt auf `way-graphs-v5` statt `way-graphs-v4`,
+        `approximateSizeMB` mit den echten neuen Asset-Größen aktualisiert (ca. 4-6 % größer als
+        v4, 1 zusätzliches Byte pro Kante). Build erfolgreich verifiziert.
+      - **Noch offen**: die übrigen 77 Regionen (33 Länder `way-graphs-eu-v1`, 21 Frankreich
+        `way-graphs-fr-v1`, 5 Italien `way-graphs-it-v1`, 18 Spanien `way-graphs-es-v1`) sind noch
+        nicht neu gebaut - `WayGraphDownloadManager.swift` zeigt dort weiterhin auf die alten Tags,
+        ein regulärer Download liefert also weiterhin das alte, vom neuen Parser nicht mehr lesbare
+        Format (s. `WayGraphRepository`s Format-v2-Dokumentation). Größerer Batch als die
+        Bundesländer heute (teils mehrere GB Rohdaten pro Land, z. B. Polen/Schweden/Finnland/
+        Griechenland >900 MB), eigene Sitzung(en) nötig. Gilt weiterhin bewusst nur für die selbst
+        berechneten "ruhige Wege"-Routen der Offline-Engine - kuratierte Routen (GPX-Import, keine
+        OSM-Tags) und die direkte Apple-Route (`MKDirections`, liefert keine Wegetyp-Info) bleiben
+        davon unberührt.
+      → [build_way_graph.py](FahrradApp/Scripts/build_way_graph.py) (`way_category`,
+      `WAY_CATEGORY_*`, `UNPAVED_SURFACES`, `MAIN_ROAD_HIGHWAYS`, `QUIET_ROAD_HIGHWAYS`),
+      [build_way_graph_v2.py](FahrradApp/Scripts/build_way_graph_v2.py),
+      [WayGraphRepository.swift](FahrradApp/RadFaehrte/Services/WayGraphRepository.swift)
+      (`Edge.wayCategoryRaw`/`.wayCategory`, `WayCategory`),
+      [WayGraphStore.swift](FahrradApp/RadFaehrte/Services/WayGraphStore.swift)
+      (`wayGraphFormatVersion`),
+      [BikeRoutingEngine.swift](FahrradApp/RadFaehrte/Services/BikeRoutingEngine.swift)
+      (`Result.metersByCategory`, `cameFromCategory`),
+      [CrossRegionRouteStitcher.swift](FahrradApp/RadFaehrte/Services/CrossRegionRouteStitcher.swift),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`DirectRoute.metersByCategory`,
+      `wayCategoryDetailRoute`, `wayCategoryDetailSheet`, `directRouteRow`),
+      [WayGraphDownloadManager.swift](FahrradApp/RadFaehrte/Services/WayGraphDownloadManager.swift)
+      (`Bundesland.downloadURL`/`.approximateSizeMB`)
 
 ### Phase 4 – größere Architektur-Entscheidungen
 

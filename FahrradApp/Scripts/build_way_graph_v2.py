@@ -9,7 +9,7 @@ Unterschied zum bisherigen Format (siehe `WayGraphRepository.swift`, Format v1):
 - Kanten liegen bereits **auf der Platte** nach `fromNode` sortiert/gruppiert vor (CSR-Layout) -
   die App muss sie nicht mehr selbst zur Laufzeit in zwei Durchläufen umsortieren.
 - Jede Kante spart sich das `fromNode`-Feld (4 Byte) - die Position im sortierten Array codiert es
-  bereits implizit (17 statt 21 Byte/Kante).
+  bereits implizit (18 statt 21 Byte/Kante).
 - Kein SQLite-Container mehr, reine Flachdatei mit festem Header + Sektionen - die App liest sie
   per `mmap` und dekodiert nur die tatsächlich angefassten Kanten on-demand, statt beim Laden den
   kompletten Graphen in eigene Swift-Arrays zu kopieren (das war bei großen Ländern der
@@ -20,13 +20,21 @@ Nutzung:
         Scripts/data/netherlands-latest.osm.pbf Scripts/data/netherlands_ways_v2.bin
 
 Dateiformat (little-endian):
-    Header (16 Byte): "RFG2" (4 Byte Magic) + UInt32 nodeCount + UInt32 edgeCount + UInt32 nameCount
+    Header (16 Byte): "RFG3" (4 Byte Magic) + UInt32 nodeCount + UInt32 edgeCount + UInt32 nameCount
     Nodes-Sektion (nodeCount * 8 Byte): je Float32 lat, Float32 lon
     EdgeOffsets-Sektion ((nodeCount + 1) * 4 Byte): je UInt32 - Startindex der Kanten dieses
         Knotens im flachen, nach fromNode sortierten Kanten-Array (CSR-Layout)
-    Edges-Sektion (edgeCount * 17 Byte), nach fromNode sortiert: je UInt32 toNode,
-        Float32 distanceMeters, Float32 weight, UInt8 offsetSide, UInt32 nameIndex
+    Edges-Sektion (edgeCount * 18 Byte), nach fromNode sortiert: je UInt32 toNode,
+        Float32 distanceMeters, Float32 weight, UInt8 offsetSide, UInt32 nameIndex,
+        UInt8 wayCategory (s. `way_category()`/`WAY_CATEGORY_*` in `build_way_graph.py` - für die
+        Wegeart-Anzeige "X km Landstraße" usw., s. ROADMAP.md)
     Names-Sektion (nameCount Einträge): je UInt16 byteLength + UTF-8-Bytes
+
+⚠️ Format-Historie: Magic bis einschließlich Rollout auf alle 19 Regionen "RFG2" (17 Byte/Kante,
+ohne `wayCategory`) - beim Hinzufügen von `wayCategory` bewusst auf "RFG3" gewechselt, damit
+`WayGraphRepository` alte "RFG2"-Dateien nicht versehentlich mit dem neuen (um 1 Byte längeren)
+Kanten-Layout fehlinterpretiert. Alte lokal heruntergeladene Dateien werden ohnehin automatisch
+verworfen, sobald `wayGraphFormatVersion` in `WayGraphStore.swift` hochgezählt wird.
 """
 
 import struct
@@ -40,11 +48,12 @@ from build_way_graph import (
     is_bikeable,
     offset_side,
     haversine_meters,
+    way_category,
     weight_multiplier,
 )
 
 NO_NAME = 0xFFFFFFFF
-MAGIC = b"RFG2"
+MAGIC = b"RFG3"
 
 
 def build(pbf_path: str, output_path: str):
@@ -52,7 +61,7 @@ def build(pbf_path: str, output_path: str):
 
     node_index = {}
     node_coords = []
-    # (from_index, to_index, distance_m, weight, offset_side, name_index)
+    # (from_index, to_index, distance_m, weight, offset_side, name_index, way_category)
     edge_rows = []
     name_index_map = {}
     name_list = []
@@ -94,6 +103,7 @@ def build(pbf_path: str, output_path: str):
         forward, backward = direction(tags)
         side = offset_side(tags)
         name_idx = name_index_for(tags.get("name"))
+        category = way_category(tags)
         way_count += 1
 
         for i in range(len(nodes) - 1):
@@ -108,10 +118,10 @@ def build(pbf_path: str, output_path: str):
             b_idx = index_for(b.ref, b.location)
 
             if forward:
-                edge_rows.append((a_idx, b_idx, distance, weight, side, name_idx))
+                edge_rows.append((a_idx, b_idx, distance, weight, side, name_idx, category))
             if backward:
                 backward_side = {0: 0, 1: 2, 2: 1}[side]
-                edge_rows.append((b_idx, a_idx, distance, weight, backward_side, name_idx))
+                edge_rows.append((b_idx, a_idx, distance, weight, backward_side, name_idx, category))
 
     node_count = len(node_coords)
     edge_count = len(edge_rows)
@@ -142,8 +152,8 @@ def build(pbf_path: str, output_path: str):
     nodes_blob = b"".join(struct.pack("<ff", lat, lon) for lat, lon in node_coords)
     offsets_blob = b"".join(struct.pack("<I", offset) for offset in edge_offsets)
     edges_blob = b"".join(
-        struct.pack("<IffBI", to, distance, weight, side, name_idx)
-        for _from, to, distance, weight, side, name_idx in edge_rows
+        struct.pack("<IffBIB", to, distance, weight, side, name_idx, category)
+        for _from, to, distance, weight, side, name_idx, category in edge_rows
     )
     names_blob = b"".join(
         struct.pack("<H", len(encoded)) + encoded
