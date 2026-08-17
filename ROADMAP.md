@@ -5785,16 +5785,16 @@ Diese Punkte brauchen zusätzliche Informationen, die die aktuelle `routes.sqlit
         für `Bundesland` zeigt jetzt auf `way-graphs-v5` statt `way-graphs-v4`,
         `approximateSizeMB` mit den echten neuen Asset-Größen aktualisiert (ca. 4-6 % größer als
         v4, 1 zusätzliches Byte pro Kante). Build erfolgreich verifiziert.
-      - **Noch offen**: die übrigen 77 Regionen (33 Länder `way-graphs-eu-v1`, 21 Frankreich
-        `way-graphs-fr-v1`, 5 Italien `way-graphs-it-v1`, 18 Spanien `way-graphs-es-v1`) sind noch
-        nicht neu gebaut - `WayGraphDownloadManager.swift` zeigt dort weiterhin auf die alten Tags,
-        ein regulärer Download liefert also weiterhin das alte, vom neuen Parser nicht mehr lesbare
-        Format (s. `WayGraphRepository`s Format-v2-Dokumentation). Größerer Batch als die
-        Bundesländer heute (teils mehrere GB Rohdaten pro Land, z. B. Polen/Schweden/Finnland/
-        Griechenland >900 MB), eigene Sitzung(en) nötig. Gilt weiterhin bewusst nur für die selbst
-        berechneten "ruhige Wege"-Routen der Offline-Engine - kuratierte Routen (GPX-Import, keine
-        OSM-Tags) und die direkte Apple-Route (`MKDirections`, liefert keine Wegetyp-Info) bleiben
-        davon unberührt.
+      - **Zurückgestellt** (2026-08-17, Nutzer-Entscheidung): die übrigen 77 Regionen (33 Länder
+        `way-graphs-eu-v1`, 21 Frankreich `way-graphs-fr-v1`, 5 Italien `way-graphs-it-v1`, 18
+        Spanien `way-graphs-es-v1`) werden **bewusst noch nicht** neu gebaut - `WayGraphDownloadManager.swift`
+        zeigt dort weiterhin auf die alten Tags, ein regulärer Download liefert also weiterhin das
+        alte, vom neuen Parser nicht mehr lesbare Format (s. `WayGraphRepository`s
+        Format-v2-Dokumentation). Größerer Batch als die Bundesländer heute (teils mehrere GB
+        Rohdaten pro Land, z. B. Polen/Schweden/Finnland/Griechenland >900 MB), eigene Sitzung(en)
+        nötig, wenn es soweit ist. Gilt weiterhin bewusst nur für die selbst berechneten "ruhige
+        Wege"-Routen der Offline-Engine - kuratierte Routen (GPX-Import, keine OSM-Tags) und die
+        direkte Apple-Route (`MKDirections`, liefert keine Wegetyp-Info) bleiben davon unberührt.
       → [build_way_graph.py](FahrradApp/Scripts/build_way_graph.py) (`way_category`,
       `WAY_CATEGORY_*`, `UNPAVED_SURFACES`, `MAIN_ROAD_HIGHWAYS`, `QUIET_ROAD_HIGHWAYS`),
       [build_way_graph_v2.py](FahrradApp/Scripts/build_way_graph_v2.py),
