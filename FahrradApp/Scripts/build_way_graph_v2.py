@@ -44,6 +44,8 @@ from pathlib import Path
 import osmium
 
 from build_way_graph import (
+    MAIN_ROAD_HIGHWAYS,
+    MainRoadIndex,
     direction,
     is_bikeable,
     offset_side,
@@ -87,6 +89,25 @@ def build(pbf_path: str, output_path: str):
             name_list.append(name)
         return idx
 
+    # Vorgezogener Durchlauf nur für den räumlichen Landstraßen-Index (s. `MainRoadIndex`) - muss
+    # vollständig stehen, bevor Pass 1 unten `way_category()` pro Kante aufruft, da Ways in einer
+    # `.osm.pbf` in beliebiger Reihenfolge liegen (ein Radweg kann im Stream vor "seiner"
+    # Landstraße vorkommen). Eigener, günstiger Durchlauf statt alle Way-Geometrien im
+    # Hauptdurchlauf vorzuhalten - der Index braucht ohnehin nur den kleinen Teil der Ways, die
+    # `MAIN_ROAD_HIGHWAYS` sind.
+    print("Pass 0: Landstraßen-Index aufbauen...")
+    main_road_index = MainRoadIndex()
+    for way in osmium.FileProcessor(pbf_path).with_locations():
+        if not way.is_way():
+            continue
+        tags = dict(way.tags)
+        if tags.get("highway") not in MAIN_ROAD_HIGHWAYS or not is_bikeable(tags):
+            continue
+        nodes = [n for n in way.nodes if n.location.valid()]
+        for i in range(len(nodes) - 1):
+            a, b = nodes[i], nodes[i + 1]
+            main_road_index.add_segment(a.location.lat, a.location.lon, b.location.lat, b.location.lon)
+
     print("Pass 1: Ways verarbeiten...")
     for way in osmium.FileProcessor(pbf_path).with_locations():
         if not way.is_way():
@@ -103,7 +124,6 @@ def build(pbf_path: str, output_path: str):
         forward, backward = direction(tags)
         side = offset_side(tags)
         name_idx = name_index_for(tags.get("name"))
-        category = way_category(tags)
         way_count += 1
 
         for i in range(len(nodes) - 1):
@@ -116,6 +136,11 @@ def build(pbf_path: str, output_path: str):
             weight = distance * multiplier
             a_idx = index_for(a.ref, a.location)
             b_idx = index_for(b.ref, b.location)
+            # Mittelpunkt der Kante statt einem der beiden Endpunkte - robuster gegen Knoten, die
+            # zufällig direkt auf/neben der Landstraße selbst liegen (z. B. eine Kreuzung).
+            mid_lat = (a.location.lat + b.location.lat) / 2
+            mid_lon = (a.location.lon + b.location.lon) / 2
+            category = way_category(tags, near_main_road=main_road_index.nearby(mid_lat, mid_lon))
 
             if forward:
                 edge_rows.append((a_idx, b_idx, distance, weight, side, name_idx, category))

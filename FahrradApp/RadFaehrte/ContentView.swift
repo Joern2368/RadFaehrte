@@ -3218,12 +3218,12 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            if !route.metersByCategory.isEmpty {
+            if !route.metersByCategory.isEmpty || !route.steps.isEmpty {
                 Button {
                     wayCategoryDetailRoute = route
                 } label: {
-                    Image(systemName: "chart.bar.doc.horizontal")
-                        .foregroundStyle(.secondary)
+                    Image(systemName: "list.bullet")
+                        .foregroundStyle(.blue)
                 }
                 .buttonStyle(.plain)
             }
@@ -3250,6 +3250,9 @@ struct ContentView: View {
         case .mainRoad: return .orange
         case .unpaved: return .brown
         case .other: return .gray
+        // Eigener Farbton statt Grün wie `.cycleway` - optisch trotzdem als "auch ein Radweg"
+        // erkennbar (kühles statt warmes Grün), aber unterscheidbar in der Liste.
+        case .cyclewayNearMainRoad: return .mint
         }
     }
 
@@ -3267,17 +3270,33 @@ struct ContentView: View {
         }
     }
 
-    /// Wegearten-Aufschlüsselung ("X km Landstraße" usw.) für eine "ruhige Wege"-Offline-Route,
-    /// s. `BikeRoutingEngine.Result.metersByCategory`/`ROADMAP.md` "Wegearten-Aufschlüsselung
-    /// anzeigen". Bewusst als eigenes Sheet statt inline in der Zeile, analog
-    /// `curatedRouteStepsDetailSheet` - die Daten liegen (anders als bei kuratierten Routen) schon
-    /// synchron vor, daher kein Lade-/Fehlerzustand nötig.
+    /// Wegearten-Aufschlüsselung + Straßennamen für eine "ruhige Wege"-Offline-Route, s.
+    /// `BikeRoutingEngine.Result.metersByCategory`/`.steps`/`ROADMAP.md` "Wegearten-
+    /// Aufschlüsselung anzeigen". Gleicher Aufbau (Wegearten-Sektion über Straßennamen-Sektion)
+    /// wie `curatedRouteStepsDetailSheet`/`combinedRouteDetailSheet` - Nutzer-Fund 2026-08-17: bei
+    /// nur getrennter Wegearten-Anzeige fehlten hier plötzlich die Straßennamen, die es bei
+    /// kuratierten Routen längst gab, obwohl `DirectRoute.steps` sie längst enthält. Bewusst
+    /// weiterhin als eigenes Sheet statt inline in der Zeile - die Daten liegen (anders als bei
+    /// kuratierten Routen) schon synchron vor, daher kein Lade-/Fehlerzustand nötig.
     private func wayCategoryDetailSheet(_ route: DirectRoute) -> some View {
         NavigationStack {
-            List(route.metersByCategory.sorted { $0.value > $1.value }, id: \.key) { category, meters in
-                wayCategoryRow(category, meters: meters)
+            List {
+                if !route.metersByCategory.isEmpty {
+                    Section("Wegearten") {
+                        ForEach(route.metersByCategory.sorted { $0.value > $1.value }, id: \.key) { category, meters in
+                            wayCategoryRow(category, meters: meters)
+                        }
+                    }
+                }
+                if !route.steps.isEmpty {
+                    Section("Straßennamen") {
+                        ForEach(Array(route.steps.enumerated()), id: \.offset) { _, step in
+                            Text(step.instructions)
+                        }
+                    }
+                }
             }
-            .navigationTitle("Wegearten")
+            .navigationTitle("Ruhige Route")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -3285,7 +3304,7 @@ struct ContentView: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 
     private func directRouteSubtitle(for route: DirectRoute) -> String {
@@ -3334,7 +3353,7 @@ struct ContentView: View {
                 curatedRouteStepsDetail = match
             } label: {
                 Image(systemName: "list.bullet")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.blue)
             }
             .buttonStyle(.borderless)
             if match.id == selectedMatch?.id {
@@ -3365,7 +3384,7 @@ struct ContentView: View {
                 combinedRouteDetail = match
             } label: {
                 Image(systemName: "list.bullet")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.blue)
             }
             .buttonStyle(.borderless)
             if match.id == combinedMatch?.id {

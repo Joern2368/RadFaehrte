@@ -64,6 +64,10 @@ WAY_CATEGORY_QUIET_ROAD = 1
 WAY_CATEGORY_MAIN_ROAD = 2
 WAY_CATEGORY_UNPAVED = 3
 WAY_CATEGORY_OTHER = 4
+# Nutzer-Wunsch 2026-08-17: ein Radweg, der direkt neben einer Landstraße verläuft (s.
+# `MainRoadIndex`/`NEARBY_MAIN_ROAD_METERS` unten), separat von einem freistehenden Radweg
+# (Nebenstraße, freies Feld) ausweisen.
+WAY_CATEGORY_CYCLEWAY_NEAR_MAIN_ROAD = 5
 
 WAY_CATEGORY_LABELS = {
     WAY_CATEGORY_CYCLEWAY: "Radweg",
@@ -71,6 +75,7 @@ WAY_CATEGORY_LABELS = {
     WAY_CATEGORY_MAIN_ROAD: "Landstraße",
     WAY_CATEGORY_UNPAVED: "Unbefestigter Weg",
     WAY_CATEGORY_OTHER: "Sonstiger Weg",
+    WAY_CATEGORY_CYCLEWAY_NEAR_MAIN_ROAD: "Radweg an Landstraße",
 }
 
 MAIN_ROAD_HIGHWAYS = {
@@ -86,6 +91,78 @@ UNPAVED_SURFACES = {
     "unpaved", "gravel", "fine_gravel", "dirt", "ground", "grass", "sand",
     "compacted", "pebblestone", "mud", "earth", "woodchips",
 }
+
+# ~15 m Toleranz für "ein Radweg verläuft direkt neben dieser Landstraße" (s. `MainRoadIndex`
+# unten) - eng genug gewählt, um nicht versehentlich eine unbeteiligte, zufällig parallel
+# verlaufende Straße zu erwischen (ein begleitender Radweg liegt in der Praxis meist nur wenige
+# Meter von der Fahrbahn entfernt - Bordstein, schmaler Grünstreifen), großzügig genug für normale
+# Digitalisierungs-Ungenauigkeiten zwischen den beiden separat kartierten OSM-Wegen. Nutzer-Wunsch
+# 2026-08-17, tunable ohne Code-Änderung an der App - nur ein erneuter Bau nötig.
+NEARBY_MAIN_ROAD_METERS = 15.0
+# Rastergröße für `MainRoadIndex` - grob 150 m bei deutschen Breitengraden. Nur eine grobe
+# Vorauswahl (die 3x3-Nachbarschaft um den Suchpunkt wird durchsucht), die tatsächliche Distanz
+# wird danach exakt per Punkt-zu-Strecke-Berechnung geprüft - die Zellgröße muss deshalb nur
+# "deutlich größer als `NEARBY_MAIN_ROAD_METERS`" sein, nicht exakt kalibriert.
+MAIN_ROAD_GRID_CELL_DEGREES = 0.0015
+
+
+def point_to_segment_distance_meters(lat, lon, lat1, lon1, lat2, lon2):
+    """Abstand von `(lat, lon)` zur Strecke `(lat1, lon1)-(lat2, lon2)` in Metern - lokale ebene
+    Näherung (wie `WayGraphRepository.nearestNodes` in der App), für die hier relevanten
+    Distanzen (wenige zehn Meter) ausreichend genau und viel schneller als echte
+    Großkreis-Punkt-zu-Strecke-Geometrie."""
+    meters_per_degree_lat = 111_320.0
+    meters_per_degree_lon = meters_per_degree_lat * max(cos(radians(lat1)), 0.1)
+
+    px = (lon - lon1) * meters_per_degree_lon
+    py = (lat - lat1) * meters_per_degree_lat
+    dx = (lon2 - lon1) * meters_per_degree_lon
+    dy = (lat2 - lat1) * meters_per_degree_lat
+
+    length_squared = dx * dx + dy * dy
+    if length_squared == 0:
+        return sqrt(px * px + py * py)
+    t = max(0.0, min(1.0, (px * dx + py * dy) / length_squared))
+    closest_x, closest_y = dx * t, dy * t
+    return sqrt((px - closest_x) ** 2 + (py - closest_y) ** 2)
+
+
+class MainRoadIndex:
+    """Räumlicher Index über alle Landstraßen-Kantensegmente (s. `MAIN_ROAD_HIGHWAYS`) eines
+    Extrakts - für `way_category()`s "läuft dieser Radweg-Abschnitt direkt neben einer
+    Landstraße?"-Prüfung. Muss **vor** dem eigentlichen Kanten-Bau vollständig befüllt sein (s.
+    separater, vorgezogener Durchlauf in `build()`/`build_way_graph_v2.py`), damit auch Radwege,
+    die im Datei-Stream vor "ihrer" Landstraße vorkommen, korrekt geprüft werden können - Ways
+    liegen in einer `.osm.pbf` in beliebiger Reihenfolge, nicht geografisch sortiert."""
+
+    def __init__(self):
+        self._segments = []  # (lat1, lon1, lat2, lon2)
+        self._grid = {}  # (cell_lat, cell_lon) -> [segment_index, ...]
+
+    @staticmethod
+    def _cell(lat, lon):
+        return (int(lat // MAIN_ROAD_GRID_CELL_DEGREES), int(lon // MAIN_ROAD_GRID_CELL_DEGREES))
+
+    def add_segment(self, lat1, lon1, lat2, lon2):
+        segment_index = len(self._segments)
+        self._segments.append((lat1, lon1, lat2, lon2))
+        # Beide Endpunkt-Zellen statt aller Zellen entlang der Strecke - bei den kurzen
+        # Kantensegmenten hier (meist deutlich unter der Zellgröße) reicht das, `nearby()`
+        # durchsucht ohnehin die 3x3-Nachbarschaft um den jeweiligen Suchpunkt mit.
+        for cell in {self._cell(lat1, lon1), self._cell(lat2, lon2)}:
+            self._grid.setdefault(cell, []).append(segment_index)
+
+    def nearby(self, lat, lon, max_meters=NEARBY_MAIN_ROAD_METERS):
+        cell_lat, cell_lon = self._cell(lat, lon)
+        candidates = set()
+        for d_lat in (-1, 0, 1):
+            for d_lon in (-1, 0, 1):
+                candidates.update(self._grid.get((cell_lat + d_lat, cell_lon + d_lon), ()))
+        for idx in candidates:
+            lat1, lon1, lat2, lon2 = self._segments[idx]
+            if point_to_segment_distance_meters(lat, lon, lat1, lon1, lat2, lon2) <= max_meters:
+                return True
+        return False
 
 # Ein `cycleway=track/lane`-Tag beschreibt einen baulich getrennten Radweg, der aber in OSM
 # i. d. R. NICHT als eigene, seitlich versetzte Geometrie gezeichnet ist, sondern nur als
@@ -178,7 +255,7 @@ def weight_multiplier(tags):
     return multiplier
 
 
-def way_category(tags):
+def way_category(tags, near_main_road=False):
     """Kategorie für die Wegeart-Anzeige (s. `WAY_CATEGORY_*` oben). `surface` schlägt `highway`:
     ein unbefestigter Radweg ist für die Anzeige in erster Linie "unbefestigt", nicht "Radweg".
 
@@ -190,17 +267,28 @@ def way_category(tags):
     Check landete z. B. die Theodor-Heuss-Allee/Admiralstraße (durchgehend `cycleway:right/left=
     track`) komplett in der Kategorie "Landstraße" statt "Radweg" - für die Anzeige ("X km
     Radweg") die irreführendere der beiden Kategorien, weil der Nutzer ja tatsächlich auf dem
-    separaten Radweg fährt, nicht auf der Fahrbahn."""
+    separaten Radweg fährt, nicht auf der Fahrbahn.
+
+    `near_main_road`: vom Aufrufer per `MainRoadIndex` vorberechnet (s. dort) - True, wenn dieser
+    Kantenabschnitt innerhalb von `NEARBY_MAIN_ROAD_METERS` einer Landstraßen-Kante liegt.
+    Unterscheidet dann zwischen einem Radweg direkt an einer Landstraße
+    (`WAY_CATEGORY_CYCLEWAY_NEAR_MAIN_ROAD`) und einem freistehenden Radweg (`WAY_CATEGORY_
+    CYCLEWAY` - Nebenstraße, freies Feld, Wald usw.), Nutzer-Wunsch 2026-08-17. Gilt für beide
+    Cycleway-Erkennungswege oben (eigener `highway=cycleway`-Way **und** `cycleway:right/left`-Tag
+    an der Straße selbst) einheitlich - beim zweiten Fall matcht der Index praktisch immer
+    (dieselbe Straße liegt ja bereits im Index, falls sie selbst ein `MAIN_ROAD_HIGHWAYS`-Typ ist),
+    beim ersten Fall entscheidet die tatsächliche Nachbarschaft im Gelände."""
     if tags.get("surface") in UNPAVED_SURFACES:
         return WAY_CATEGORY_UNPAVED
     highway = tags.get("highway")
     bicycle = tags.get("bicycle")
-    if highway == "cycleway" or (
-        highway in ("path", "footway", "pedestrian", "track") and bicycle == "designated"
-    ):
-        return WAY_CATEGORY_CYCLEWAY
-    if any(tags.get(key) in CYCLE_INFRA_VALUES for key in CYCLE_INFRA_TAGS):
-        return WAY_CATEGORY_CYCLEWAY
+    is_cycleway = (
+        highway == "cycleway"
+        or (highway in ("path", "footway", "pedestrian", "track") and bicycle == "designated")
+        or any(tags.get(key) in CYCLE_INFRA_VALUES for key in CYCLE_INFRA_TAGS)
+    )
+    if is_cycleway:
+        return WAY_CATEGORY_CYCLEWAY_NEAR_MAIN_ROAD if near_main_road else WAY_CATEGORY_CYCLEWAY
     if highway in MAIN_ROAD_HIGHWAYS:
         return WAY_CATEGORY_MAIN_ROAD
     if highway in QUIET_ROAD_HIGHWAYS:

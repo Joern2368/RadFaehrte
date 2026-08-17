@@ -72,6 +72,12 @@ nonisolated final class WayGraphRepository {
         case mainRoad = 2
         case unpaved = 3
         case other = 4
+        /// Radweg, der laut `MainRoadIndex`/`NEARBY_MAIN_ROAD_METERS` in `build_way_graph.py`
+        /// innerhalb von ~15 m einer Landstraßen-Kante liegt - Nutzer-Wunsch 2026-08-17, um einen
+        /// straßenbegleitenden Radweg von einem freistehenden (`cycleway`, Nebenstraße/freies
+        /// Feld) zu unterscheiden. Reine Content-Änderung, kein Format-Bruch (weiterhin `UInt8`) -
+        /// deshalb kein `wayGraphFormatVersion`-Bump nötig, nur ein Neu-Bau der Regionsdateien.
+        case cyclewayNearMainRoad = 5
 
         var displayName: String {
             switch self {
@@ -80,6 +86,7 @@ nonisolated final class WayGraphRepository {
             case .mainRoad: return "Landstraße"
             case .unpaved: return "Unbefestigter Weg"
             case .other: return "Sonstiger Weg"
+            case .cyclewayNearMainRoad: return "Radweg an Landstraße"
             }
         }
     }

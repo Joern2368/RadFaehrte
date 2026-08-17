@@ -5825,8 +5825,42 @@ Diese Punkte brauchen zusätzliche Informationen, die die aktuelle `routes.sqlit
         SwiftUI-frei, kein anderes Service-File importiert dort `SwiftUI`). Ausdrücklich **kein**
         Widerspruch zur "keine Kartenfärbung"-Entscheidung oben - die galt nur für die
         Routenlinie auf der Karte, nicht für diese Listen-Sheets.
+      - **Konsistenz-Fixes nach Live-Test** (2026-08-17, Nutzer-Beobachtung): Das "Ruhige Route
+        (offline)"-Sheet zeigte bisher nur Wegearten, keine Straßennamen - dabei liegen die längst
+        in `DirectRoute.steps` vor, nur nie angezeigt. `wayCategoryDetailSheet` zeigt jetzt wie die
+        beiden kuratierten Sheets zuerst "Wegearten", dann "Straßennamen" darunter (Titel "Ruhige
+        Route" statt nur "Wegearten"). Zusätzlich das Listen-Symbol (`list.bullet`) an allen drei
+        Stellen (Offline-Route, kuratierter Einzeltreffer, kombinierte Kette) von `.secondary` auf
+        `.blue` vereinheitlicht - Nutzer-Wunsch, nachdem die Offline-Route zunächst noch das
+        andere Symbol (`chart.bar.doc.horizontal`) hatte.
+      - **Neue Kategorie "Radweg an Landstraße"** (2026-08-17, Nutzer-Wunsch nach Live-Test: einen
+        Radweg direkt neben einer Landstraße vom freistehenden Radweg unterscheiden - Nebenstraße,
+        freies Feld, Wald usw.) - `WayCategory.cyclewayNearMainRoad` (Rohwert 5), mint statt grün
+        in der Liste. Neuer räumlicher Index `MainRoadIndex` in `build_way_graph.py`: ein
+        vorgezogener, zusätzlicher Osmium-Durchlauf ("Pass 0") sammelt alle Landstraßen-
+        Kantensegmente in einem Gitter-Index (Zellgröße ~150 m, grobe Vorauswahl vor exakter
+        Punkt-zu-Strecke-Distanzberechnung), danach prüft `way_category()` für jede Radweg-Kante
+        (Mittelpunkt, nicht Endpunkt - robuster gegen Kreuzungen), ob sie innerhalb von
+        `NEARBY_MAIN_ROAD_METERS` (15 m, bewusst enger als die anfangs erwogenen 25-30 m, um keine
+        unbeteiligten parallelen Straßen zu erwischen) einer Landstraßen-Kante liegt. Ein
+        `cycleway:right/left`-Tag an der Straße selbst matcht dabei praktisch automatisch (die
+        Straße liegt ja bereits im Index, falls sie selbst ein `MAIN_ROAD_HIGHWAYS`-Typ ist) -
+        die räumliche Prüfung entscheidet nur bei echten, separat kartierten Radweg-Ways (der
+        Uphuser-Heerstraße-Fall). Reine Content-Änderung, kein Format-Bruch (weiterhin `UInt8`) -
+        kein `wayGraphFormatVersion`-Bump nötig, nur ein Neu-Bau der Regionsdateien (`gh release
+        upload --clobber` auf denselben `way-graphs-v5`-Tag). Gegen echte Bremen-Daten verifiziert
+        (7,8 % "Radweg an Landstraße" neben 7,0 % freistehendem "Radweg", plausible Verteilung,
+        keine Ausreißer). **Bremen und Niedersachsen neu gebaut und hochgeladen** - da eine
+        inhaltliche Content-Änderung ohne Versionsbump vom lokalen Download-Cache der App nicht
+        automatisch erkannt wird, zusätzlich beide Dateien manuell aufs Test-iPhone kopiert (`xcrun
+        devicectl device copy to`, analog zum bisherigen Vorgehen), App neu installiert, App-Ordner
+        blieb dabei erhalten. Nutzer bestätigt "sieht gut aus". **Noch offen**: die übrigen 14
+        Bundesländer (und die bereits zurückgestellten 77 EU/FR/IT/ES-Regionen) haben die neue
+        Kategorie noch nicht - dort weiterhin nur "Radweg" ohne die Unterscheidung, bis sie auch
+        neu gebaut werden.
       → [build_way_graph.py](FahrradApp/Scripts/build_way_graph.py) (`way_category`,
-      `WAY_CATEGORY_*`, `UNPAVED_SURFACES`, `MAIN_ROAD_HIGHWAYS`, `QUIET_ROAD_HIGHWAYS`),
+      `WAY_CATEGORY_*`, `UNPAVED_SURFACES`, `MAIN_ROAD_HIGHWAYS`, `QUIET_ROAD_HIGHWAYS`,
+      `MainRoadIndex`, `NEARBY_MAIN_ROAD_METERS`, `point_to_segment_distance_meters`),
       [build_way_graph_v2.py](FahrradApp/Scripts/build_way_graph_v2.py),
       [WayGraphRepository.swift](FahrradApp/RadFaehrte/Services/WayGraphRepository.swift)
       (`Edge.wayCategoryRaw`/`.wayCategory`, `WayCategory`),
