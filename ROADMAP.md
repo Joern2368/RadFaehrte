@@ -5002,6 +5002,26 @@ für die ursprüngliche Produktidee.
       die Sektion hat jetzt keinen Footer mehr.
       → [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
       [RecentPlaceStore.swift](FahrradApp/RadFaehrte/Services/RecentPlaceStore.swift)
+- [x] **Wegearten-Aufschlüsselung jetzt auch für die "Direkte Fahrrad-Route (online)"** (2026-08-18,
+      Nutzer-Frage: bei den Offline-Alternativen ("ruhige Wege bevorzugt") wird die Wegearten-Liste
+      angezeigt, bei der Online-Route (`MKDirections`) bisher nie - Ursache: `MKRoute` liefert selbst
+      keine OSM-Tag-Daten, `DirectRoute.init(route:)` setzte `metersByCategory` bisher hart auf `[:]`.
+      Fix: Sobald eine Online-Route geladen wird (`loadOnlineDirectRouteAlternative` - Wisch-Seite
+      neben Offline-Alternativen - sowie der reine Online-Fallback-Zweig in `loadDirectRoute`, wenn gar
+      keine Offline-Route gefunden wurde), wird ihre Polyline zusätzlich per Map-Matching gegen die
+      lokal heruntergeladenen Wege-Graphen abgeglichen - dieselbe Technik, die
+      `CuratedRouteStepMatcher`/`matchCuratedRouteSteps` bereits für kuratierte GPX-Routen nutzt, hier
+      nur auf `MKRoute.polyline.coordinates` statt auf eine kuratierte Routen-Linie angewendet. Neuer
+      `DirectRoute.init(route:metersByCategory:)`-Parameter (Default `[:]`) nimmt das Ergebnis auf.
+      Bewusst **nicht** in `rerouteDirectRoute` ergänzt (Neuberechnung während aktiver Navigation bei
+      Streckenabweichung) - dort soll die neue Route ohne zusätzliche Matching-Verzögerung möglichst
+      schnell wieder auf der Karte erscheinen, Wegetypen sind während der laufenden Navigation
+      zweitrangig. Funktioniert nur, wenn eine passende Region heruntergeladen ist (gleiche Grenze wie
+      bei kuratierten Routen) und das Matching genug der Route abdeckt (`minMatchedFraction`) - sonst
+      bleibt die Wegearten-Sektion wie bisher leer. Build (Device-Ziel) erfolgreich, auf "iPhone von
+      Jörn" installiert - **live getestet und für gut befunden**.
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`DirectRoute.init(route:)`,
+      `loadOnlineDirectRouteAlternative`, `loadDirectRoute`, `matchCuratedRouteSteps`)
 
 ## Bekannte Probleme
 

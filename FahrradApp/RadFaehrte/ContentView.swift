@@ -1649,7 +1649,7 @@ struct ContentView: View {
             }
             if newRoutes.isEmpty {
                 newRoutes = await Self.directions(from: location, to: ziel, alternates: true)
-                    .map(DirectRoute.init(route:))
+                    .map { DirectRoute(route: $0) }
             }
             guard isDirectRouteMode, isNavigating, !newRoutes.isEmpty else { return }
             directRoutes = newRoutes
@@ -2659,9 +2659,23 @@ struct ContentView: View {
                 return
             }
             let routes = await Self.directions(from: start, to: ziel, alternates: true)
+            // Kein Offline-Pfad gefunden - trotzdem lohnt sich ein Map-Matching-Versuch gegen alle
+            // heruntergeladenen Graphen (nicht nur `candidatePaths`, s. Kommentar an
+            // `offlineGraphCandidatePaths()`): Anders als die A*-Suche oben braucht Map-Matching
+            // keine durchgehende Konnektivität, kann also z. B. bei getrennten Graph-Inseln (s.
+            // `largeRegionMaxVisitedNodes`) trotzdem Wegearten für Teilstücke liefern, die
+            // tatsächlich innerhalb einer Region liegen.
+            let onlineMatchCandidatePaths = offlineGraphCandidatePaths()
+            var onlineDirectRoutes: [DirectRoute] = []
+            for route in routes {
+                let metersByCategory = await Self.matchCuratedRouteSteps(
+                    along: route.polyline.coordinates, candidatePaths: onlineMatchCandidatePaths
+                )?.metersByCategory ?? [:]
+                onlineDirectRoutes.append(DirectRoute(route: route, metersByCategory: metersByCategory))
+            }
             isLoadingDirectRoute = false
             if isDirectRouteMode {
-                directRoutes = routes.map(DirectRoute.init(route:))
+                directRoutes = onlineDirectRoutes
                 loadDirectRouteConnectors(start: start, ziel: ziel)
             }
         }
@@ -2767,17 +2781,30 @@ struct ContentView: View {
     /// angehängt, passiert nichts; schlug ein vorheriger Versuch fehl (keine Route gefunden),
     /// bleibt `directRoutes` weiterhin rein offline und ein erneutes Erscheinen der Wisch-Seite
     /// versucht es einfach noch einmal.
+    ///
+    /// Da hier bereits mindestens eine Offline-Alternative existiert, ist so gut wie immer eine
+    /// passende Region heruntergeladen - deshalb lohnt sich hier zusätzlich der Versuch, die
+    /// Wegearten der Online-Route per Map-Matching gegen genau diesen Graphen zu bestimmen (s.
+    /// `DirectRoute.metersByCategory`), statt die Wegetypen-Sektion für diese Seite komplett leer
+    /// zu lassen.
     private func loadOnlineDirectRouteAlternative() {
         guard isDirectRouteMode, !isLoadingOnlineDirectRouteAlternative, !directRoutes.isEmpty,
               directRoutes.allSatisfy(\.isOffline),
               let start = startPlace?.coordinate, let ziel = zielPlace?.coordinate else { return }
         isLoadingOnlineDirectRouteAlternative = true
+        let candidatePaths = offlineGraphCandidatePaths()
         Task {
             let routes = await Self.directions(from: start, to: ziel)
+            guard let route = routes.first else {
+                isLoadingOnlineDirectRouteAlternative = false
+                return
+            }
+            let metersByCategory = await Self.matchCuratedRouteSteps(
+                along: route.polyline.coordinates, candidatePaths: candidatePaths
+            )?.metersByCategory ?? [:]
             isLoadingOnlineDirectRouteAlternative = false
-            guard isDirectRouteMode, !directRoutes.isEmpty, directRoutes.allSatisfy(\.isOffline),
-                  let route = routes.first else { return }
-            directRoutes.append(DirectRoute(route: route))
+            guard isDirectRouteMode, !directRoutes.isEmpty, directRoutes.allSatisfy(\.isOffline) else { return }
+            directRoutes.append(DirectRoute(route: route, metersByCategory: metersByCategory))
         }
     }
 
@@ -4322,18 +4349,22 @@ struct DirectRoute: Identifiable {
     /// Fall automatisch auf "Route folgen" zurück, genau wie bei DB-/importierten Routen.
     let steps: [Step]
     /// Wegearten-Aufschlüsselung für die "ruhige Wege"-Offline-Route (s. `BikeRoutingEngine.
-    /// Result.metersByCategory`) - leer bei der online berechneten Route (`MKDirections` liefert
-    /// keine Wegetyp-Info).
+    /// Result.metersByCategory`). Bei der online berechneten Route (`MKDirections` liefert selbst
+    /// keine Wegetyp-Info) füllt `loadDirectRoute`/`loadOnlineDirectRouteAlternative` dieses Feld
+    /// nachträglich per Map-Matching gegen einen lokal heruntergeladenen Wege-Graphen
+    /// (`ContentView.matchCuratedRouteSteps`, dieselbe Technik wie bei kuratierten Routen) - bleibt
+    /// leer, wenn keine passende Region heruntergeladen ist oder die Route zu weit vom Graphen
+    /// abweicht (s. `CuratedRouteStepMatcher.minMatchedFraction`).
     let metersByCategory: [WayGraphRepository.WayCategory: Double]
 
-    init(route: MKRoute) {
+    init(route: MKRoute, metersByCategory: [WayGraphRepository.WayCategory: Double] = [:]) {
         coordinates = route.polyline.coordinates
         distanceMeters = route.distance
         isOffline = false
         steps = route.steps.map {
             Step(instructions: $0.instructions, endCoordinate: $0.polyline.coordinates.last ?? route.polyline.coordinate, direction: .straight)
         }
-        metersByCategory = [:]
+        self.metersByCategory = metersByCategory
     }
 
     init(offlineResult: BikeRoutingEngine.Result) {
