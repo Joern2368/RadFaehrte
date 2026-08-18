@@ -4984,6 +4984,24 @@ für die ursprüngliche Produktidee.
       gleichermaßen (gemeinsame Komponente), `ContentView.swift` musste dafür nicht geändert werden.
       Live auf dem iPhone getestet und vom Nutzer für gut befunden.
       → [LocationSearchField.swift](FahrradApp/RadFaehrte/Views/LocationSearchField.swift)
+- [x] **Zuletzt gesuchte Ziele auch im Start-Feld anzeigen** (2026-08-18). Die Auswahl im Start-Feld
+      wurde schon vorher im `RecentPlaceStore` gespeichert (`onPlaceChosen: recordRecent` war dort
+      bereits verdrahtet) - nur die "Zuletzt gesucht"-Sektion selbst fehlte, weil `recents`/
+      `onDeleteRecent` nur beim Ziel-Feld übergeben wurden. Start und Ziel teilen sich weiterhin
+      denselben `RecentPlaceStore` (eine gemeinsame Liste, kein getrennter Verlauf je Feld).
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
+- [x] **"Suchverlauf löschen" in den Einstellungen** (2026-08-18, Nutzer-Wunsch). Neuer Button unter
+      "Meine Routen & Orte" (kein Favoriten-Pendant - Favoriten lassen sich in der Favoriten-Ansicht
+      schon einzeln per Swipe löschen, ein Bulk-Löschen dort wäre redundant). Bestätigung per
+      `.confirmationDialog` nach dem bestehenden Muster von "Navigation beenden" in `ContentView.swift`
+      (roter "Löschen"-Button + "Abbrechen"). Neue `RecentPlaceStore.clear()` entfernt die
+      `RecentPlaces.json` komplett. Der Button steht bewusst ohne `role: .destructive` (wäre sonst rot
+      wie alle anderen Zeilen der Sektion) - die eigentliche destruktive Bestätigung passiert erst im
+      Dialog selbst. Der ursprünglich mitgeplante Erklärtext im Footer der Sektion wurde auf
+      Nutzer-Wunsch wieder entfernt (auch der schon vorher vorhandene zu "Alle Routen"/"Favoriten") -
+      die Sektion hat jetzt keinen Footer mehr.
+      → [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
+      [RecentPlaceStore.swift](FahrradApp/RadFaehrte/Services/RecentPlaceStore.swift)
 
 ## Bekannte Probleme
 
