@@ -17,6 +17,8 @@ struct SettingsView: View {
     let franceWayGraphStore: WayGraphStore<FranceRegion>
     let italyWayGraphStore: WayGraphStore<ItalyRegion>
     let spainWayGraphStore: WayGraphStore<SpainRegion>
+    private let recentPlaceStore = RecentPlaceStore()
+    @State private var showClearRecentsConfirmation = false
 
     init(
         wayGraphStore: WayGraphStore<Bundesland> = WayGraphStore(),
@@ -142,10 +144,26 @@ struct SettingsView: View {
                     } label: {
                         Label("Favoriten", systemImage: "star")
                     }
+                    Button {
+                        showClearRecentsConfirmation = true
+                    } label: {
+                        Label("Suchverlauf löschen", systemImage: "clock.arrow.circlepath")
+                    }
+                    .buttonStyle(.plain)
                 } header: {
                     Text("Meine Routen & Orte")
-                } footer: {
-                    Text("Alle Routen: nach Ort oder Name durchsuchen, z. B. um zu prüfen, ob ein bekannter Radweg hinterlegt ist. Favoriten: Zuhause, Arbeit und weitere gespeicherte Orte fürs schnelle Auswählen als Ziel - gespeichert wird direkt im Ziel-Suchfeld über das Stern-Symbol.")
+                }
+                .confirmationDialog(
+                    "Suchverlauf löschen?",
+                    isPresented: $showClearRecentsConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Löschen", role: .destructive) {
+                        recentPlaceStore.clear()
+                    }
+                    Button("Abbrechen", role: .cancel) {}
+                } message: {
+                    Text("Entfernt alle \"Zuletzt gesucht\"-Einträge aus Start- und Ziel-Suche. Favoriten bleiben erhalten.")
                 }
 
                 Section {

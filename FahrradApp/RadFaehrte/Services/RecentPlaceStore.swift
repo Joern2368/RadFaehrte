@@ -46,4 +46,8 @@ final class RecentPlaceStore {
         guard let data = try? JSONEncoder().encode(places) else { return }
         try? data.write(to: fileURL)
     }
+
+    func clear() {
+        try? FileManager.default.removeItem(at: fileURL)
+    }
 }
