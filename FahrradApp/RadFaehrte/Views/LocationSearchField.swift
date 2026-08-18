@@ -30,199 +30,70 @@ struct LocationSearchField: View {
     /// nach außen, damit `ContentView` sie in `RecentPlaceStore` festhält bzw. auffrischt.
     var onPlaceChosen: ((_ title: String, _ subtitle: String, _ coordinate: CLLocationCoordinate2D) -> Void)? = nil
     var biasCoordinate: CLLocationCoordinate2D? = nil
-    /// Meldet Fokus-Änderungen nach außen, damit `ContentView` z. B. die Ergebnisliste ausblenden
-    /// kann, solange dieses Feld aktiv bearbeitet wird (mehr Platz für die Vorschlagsliste).
+    /// Meldet Änderungen am Bearbeitungsstatus (Sheet offen/geschlossen) nach außen, damit
+    /// `ContentView` z. B. die Ergebnisliste ausblenden kann, solange dieses Feld aktiv bearbeitet
+    /// wird (mehr Platz für die Vorschlagsliste).
     var onFocusChange: ((Bool) -> Void)? = nil
 
     @State private var viewModel = LocationSearchViewModel()
     @FocusState private var isFocused: Bool
+    /// Ob die Auswahl-Sheet gerade angezeigt wird - getrennt von `isFocused`, weil das eigentliche
+    /// Sucheingabefeld während der Sheet-Anzeige ins Sheet wandert (`sheetContent`) und das äußere
+    /// Feld dafür aus dem Baum entfernt wird (kein doppelt gleichnamiges Textfeld gleichzeitig -
+    /// würde `app.textFields["Start"/"Ziel"]` in den UI-Tests mehrdeutig machen). `isFocused` dient
+    /// nur noch als Auslöser zum Öffnen; für "wird dieses Feld gerade bearbeitet" (siehe
+    /// `onFocusChange`) ist `isPresented` maßgeblich, da `isFocused` beim Entfernen des äußeren
+    /// Feldes aus dem Baum automatisch wieder auf `false` zurückfällt, während das Sheet noch offen
+    /// ist.
+    @State private var isPresented = false
+    @FocusState private var isSheetFieldFocused: Bool
 
     private var showsFavoritesAndRecents: Bool {
         viewModel.queryFragment.isEmpty && (!favorites.isEmpty || !recents.isEmpty)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
+        HStack {
+            if isPresented {
+                Text(viewModel.queryFragment.isEmpty ? label : viewModel.queryFragment)
+                    .foregroundStyle(viewModel.queryFragment.isEmpty ? .secondary : .primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 7)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+            } else {
                 TextField(label, text: $viewModel.queryFragment)
                     .focused($isFocused)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
+            }
 
-                if selectedPlace != nil {
-                    if let onSaveFavorite {
-                        Button {
-                            onSaveFavorite()
-                        } label: {
-                            Image(systemName: "star")
-                                .foregroundStyle(.secondary)
-                        }
-                        .accessibilityIdentifier("saveFavorite-\(label)")
-                    }
+            if selectedPlace != nil {
+                if let onSaveFavorite {
                     Button {
-                        clearSelection()
+                        onSaveFavorite()
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
+                        Image(systemName: "star")
                             .foregroundStyle(.secondary)
                     }
-                    .accessibilityIdentifier("clearSelection-\(label)")
+                    .accessibilityIdentifier("saveFavorite-\(label)")
                 }
-            }
-
-            if isFocused && (onUseCurrentLocation != nil || onPickOnMap != nil || showsFavoritesAndRecents || !viewModel.results.isEmpty) {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        if let onPickOnMap {
-                            Button {
-                                onPickOnMap()
-                                isFocused = false
-                            } label: {
-                                HStack {
-                                    Image(systemName: "hand.tap.fill")
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 20)
-                                    Text("Auf Karte wählen")
-                                        .font(.body.weight(.semibold))
-                                        .foregroundStyle(.primary)
-                                }
-                                .padding(.vertical, 8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .accessibilityIdentifier("pickOnMap-\(label)")
-                            Divider()
-                        }
-                        if let onUseCurrentLocation {
-                            Button {
-                                onUseCurrentLocation()
-                                isFocused = false
-                            } label: {
-                                HStack {
-                                    if isResolvingCurrentLocation {
-                                        ProgressView()
-                                            .frame(width: 20)
-                                    } else {
-                                        Image(systemName: "location.fill")
-                                            .foregroundStyle(.secondary)
-                                            .frame(width: 20)
-                                    }
-                                    Text("Aktuelle Position")
-                                        .font(.body.weight(.semibold))
-                                        .foregroundStyle(.primary)
-                                }
-                                .padding(.vertical, 8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .disabled(isResolvingCurrentLocation)
-                            .accessibilityIdentifier("useCurrentLocation-\(label)")
-                            Divider()
-                        }
-                        if showsFavoritesAndRecents {
-                            if !favorites.isEmpty {
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(alignment: .top, spacing: 0) {
-                                        ForEach(Array(favorites.enumerated()), id: \.element.id) { index, favorite in
-                                            if index > 0 {
-                                                Divider().frame(height: 36)
-                                            }
-                                            Button {
-                                                select(favorite)
-                                            } label: {
-                                                HStack(spacing: 8) {
-                                                    Image(systemName: favorite.icon)
-                                                        .foregroundStyle(.secondary)
-                                                    VStack(alignment: .leading, spacing: 1) {
-                                                        Text(favorite.displayName)
-                                                            .font(.body.weight(.semibold))
-                                                            .foregroundStyle(.primary)
-                                                            .lineLimit(1)
-                                                        if !favorite.title.isEmpty {
-                                                            Text(favorite.title)
-                                                                .font(.caption)
-                                                                .foregroundStyle(.secondary)
-                                                                .lineLimit(1)
-                                                        }
-                                                    }
-                                                }
-                                                .padding(.horizontal, 12)
-                                            }
-                                            .accessibilityIdentifier("favorite-\(label)-\(favorite.id)")
-                                        }
-                                    }
-                                    .padding(.vertical, 8)
-                                }
-                                Divider()
-                            }
-                            if !recents.isEmpty {
-                                Text("Zuletzt gesucht")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .padding(.top, favorites.isEmpty ? 0 : 4)
-                                ForEach(recents) { recent in
-                                    HStack {
-                                        Button {
-                                            select(recent)
-                                        } label: {
-                                            HStack {
-                                                Image(systemName: "clock.arrow.circlepath")
-                                                    .foregroundStyle(.secondary)
-                                                    .frame(width: 20)
-                                                VStack(alignment: .leading, spacing: 2) {
-                                                    Text(recent.title)
-                                                        .foregroundStyle(.primary)
-                                                    if !recent.subtitle.isEmpty {
-                                                        Text(recent.subtitle)
-                                                            .font(.caption)
-                                                            .foregroundStyle(.secondary)
-                                                    }
-                                                }
-                                            }
-                                            .padding(.vertical, 6)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                        }
-                                        if let onDeleteRecent {
-                                            Button {
-                                                onDeleteRecent(recent)
-                                            } label: {
-                                                Image(systemName: "xmark")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                            .accessibilityIdentifier("deleteRecent-\(label)-\(recent.id)")
-                                        }
-                                    }
-                                    .accessibilityIdentifier("recent-\(label)-\(recent.id)")
-                                    Divider()
-                                }
-                            }
-                        }
-                        ForEach(viewModel.results, id: \.self) { completion in
-                            Button {
-                                select(completion)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(completion.title)
-                                        .foregroundStyle(.primary)
-                                    if !completion.subtitle.isEmpty {
-                                        Text(completion.subtitle)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .padding(.vertical, 6)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            Divider()
-                        }
-                    }
-                    .padding(.horizontal, 4)
+                Button {
+                    clearSelection()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
                 }
-                .frame(maxHeight: 220)
-                .background(.background)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .shadow(radius: 2)
+                .accessibilityIdentifier("clearSelection-\(label)")
             }
         }
+        .sheet(isPresented: $isPresented, onDismiss: { isFocused = false }) {
+            sheetContent
+        }
         .onChange(of: isFocused) { _, newValue in
+            if newValue { isPresented = true }
+        }
+        .onChange(of: isPresented) { _, newValue in
             onFocusChange?(newValue)
         }
         .onChange(of: selectedPlace) { _, newValue in
@@ -252,6 +123,149 @@ struct LocationSearchField: View {
         }
     }
 
+    @ViewBuilder
+    private var sheetContent: some View {
+        VStack(spacing: 0) {
+            TextField(label, text: $viewModel.queryFragment)
+                .focused($isSheetFieldFocused)
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                .padding()
+
+            List {
+                if let onPickOnMap {
+                    Button {
+                        onPickOnMap()
+                        isPresented = false
+                    } label: {
+                        Label {
+                            Text("Auf Karte wählen")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.primary)
+                        } icon: {
+                            Image(systemName: "hand.tap.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("pickOnMap-\(label)")
+                }
+                if let onUseCurrentLocation {
+                    Button {
+                        onUseCurrentLocation()
+                        isPresented = false
+                    } label: {
+                        Label {
+                            Text("Aktuelle Position")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.primary)
+                        } icon: {
+                            if isResolvingCurrentLocation {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "location.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isResolvingCurrentLocation)
+                    .accessibilityIdentifier("useCurrentLocation-\(label)")
+                }
+
+                if showsFavoritesAndRecents {
+                    if !favorites.isEmpty {
+                        Section("Favoriten") {
+                            ForEach(favorites) { favorite in
+                                Button {
+                                    select(favorite)
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: favorite.icon)
+                                            .foregroundStyle(.secondary)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(favorite.displayName)
+                                                .foregroundStyle(.primary)
+                                            if !favorite.title.isEmpty {
+                                                Text(favorite.title)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("favorite-\(label)-\(favorite.id)")
+                            }
+                        }
+                    }
+                    if !recents.isEmpty {
+                        Section("Zuletzt gesucht") {
+                            ForEach(recents) { recent in
+                                Button {
+                                    select(recent)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "clock.arrow.circlepath")
+                                            .foregroundStyle(.secondary)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(recent.title)
+                                                .foregroundStyle(.primary)
+                                            if !recent.subtitle.isEmpty {
+                                                Text(recent.subtitle)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityIdentifier("recent-\(label)-\(recent.id)")
+                                .swipeActions(edge: .trailing) {
+                                    if let onDeleteRecent {
+                                        Button(role: .destructive) {
+                                            onDeleteRecent(recent)
+                                        } label: {
+                                            Label("Löschen", systemImage: "trash")
+                                        }
+                                        .accessibilityIdentifier("deleteRecent-\(label)-\(recent.id)")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !viewModel.results.isEmpty {
+                    Section("Ergebnisse") {
+                        ForEach(viewModel.results, id: \.self) { completion in
+                            Button {
+                                select(completion)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(completion.title)
+                                        .foregroundStyle(.primary)
+                                    if !completion.subtitle.isEmpty {
+                                        Text(completion.subtitle)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .listStyle(.plain)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .onAppear {
+            isSheetFieldFocused = true
+        }
+    }
+
     private func select(_ completion: MKLocalSearchCompletion) {
         Task {
             do {
@@ -262,7 +276,7 @@ struct LocationSearchField: View {
                     coordinate: coordinate
                 )
                 viewModel.queryFragment = completion.title
-                isFocused = false
+                isPresented = false
                 onPlaceChosen?(completion.title, completion.subtitle, coordinate)
             } catch {
                 // Auflösung fehlgeschlagen (z. B. kein Treffer) – Auswahl bleibt leer
@@ -279,7 +293,7 @@ struct LocationSearchField: View {
             coordinate: favorite.clCoordinate
         )
         viewModel.queryFragment = favorite.title
-        isFocused = false
+        isPresented = false
     }
 
     /// Wie `select(_ favorite:)` ohne erneute Adressauflösung - meldet die Auswahl zusätzlich über
@@ -291,7 +305,7 @@ struct LocationSearchField: View {
             coordinate: recent.clCoordinate
         )
         viewModel.queryFragment = recent.title
-        isFocused = false
+        isPresented = false
         onPlaceChosen?(recent.title, recent.subtitle, recent.clCoordinate)
     }
 

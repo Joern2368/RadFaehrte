@@ -4964,6 +4964,26 @@ für die ursprüngliche Produktidee.
       [RouteMatcher.swift](FahrradApp/RadFaehrte/Services/RouteMatcher.swift)
       (`isImplausiblyFragmentedSuperroute`), [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
       (`loadNearbyMatches`, `nearbySubtitle`)
+- [x] **Ziel-/Start-Suche als größeres Sheet statt winzigem Dropdown** (2026-08-18, Nutzer-Beobachtung:
+      das Inline-Dropdown unter dem Ziel-Feld war per `.frame(maxHeight: 220)` gedeckelt - geteilt
+      zwischen "Auf Karte wählen", "Aktuelle Position", Favoriten-Leiste, "Zuletzt gesucht" und
+      Live-Suchergebnissen, dadurch besonders das Scrollen durch die letzten Ziele fummelig). Ein
+      erster Entwurf sah vor, das Textfeld an seiner Position zu belassen und nur das Dropdown durch
+      ein Sheet darunter zu ersetzen - verworfen, da SwiftUI bei `.medium`/`.large`-Sheets
+      standardmäßig die Interaktion mit dem Hintergrund blockiert und das Präsentieren eines Sheets
+      die Tastatur eines fokussierten Feldes darunter einreißen kann (Risiko: Sheet schließt sich
+      sofort wieder selbst). Stattdessen wandert das Sucheingabefeld jetzt komplett mit ins Sheet
+      (Standardmuster wie bei Apple/Google Maps): das äußere Feld bleibt ein echtes `TextField` (für
+      Kompatibilität mit `app.textFields["Start"/"Ziel"]` in den UI-Tests) und wird beim Fokussieren
+      durch einen passiven `Text` ersetzt, während gleichzeitig ein `.sheet` mit eigenem, automatisch
+      fokussiertem `TextField` (`isSheetFieldFocused`) plus `.presentationDetents([.medium, .large])`
+      erscheint - nie zwei gleichnamige Textfelder gleichzeitig im Baum, daher keine Mehrdeutigkeit
+      für XCUITest. Favoriten sind jetzt vertikale Listenzeilen statt horizontaler Scroll-Leiste
+      (mehr Platz im Sheet), "Zuletzt gesucht"-Einträge lassen sich per Swipe-to-delete löschen statt
+      über den kleinen "x"-Button direkt neben der Auswahlfläche. Gilt für Start- und Ziel-Feld
+      gleichermaßen (gemeinsame Komponente), `ContentView.swift` musste dafür nicht geändert werden.
+      Live auf dem iPhone getestet und vom Nutzer für gut befunden.
+      → [LocationSearchField.swift](FahrradApp/RadFaehrte/Views/LocationSearchField.swift)
 
 ## Bekannte Probleme
 
