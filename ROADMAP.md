@@ -5022,6 +5022,92 @@ für die ursprüngliche Produktidee.
       Jörn" installiert - **live getestet und für gut befunden**.
       → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`DirectRoute.init(route:)`,
       `loadOnlineDirectRouteAlternative`, `loadDirectRoute`, `matchCuratedRouteSteps`)
+- [x] **Rastplätze auf der Karte (alle 16 Bundesländer)** (2026-08-19): Neue, eigenständige
+      Funktion zeigt Trinkwasserstellen, Cafés, Aussichtspunkte und Fahrrad-Reparaturstationen aus
+      OpenStreetMap als Pins auf der Karte. Erst als Test nur für Bremen + Niedersachsen gebaut,
+      nach positivem Live-Test-Feedback ("gefällt mir gut") auf alle 16 Bundesländer ausgeweitet
+      (`restStopSupportedRegions = Bundesland.allCases`). Technisch **vollständig parallel** zur
+      bestehenden Wege-Graph-Infrastruktur aufgebaut, nicht in sie integriert - eigenes
+      Datenformat/eigene Download-Verwaltung, damit sich das Feature bei Nichtgefallen
+      rückstandsfrei entfernen lässt (reine Neu-Dateien + wenige additive Zeilen in
+      `ContentView`/`SettingsView`/`AppSettings`/`RootTabView`).
+      - **Datenpipeline**: `Scripts/build_rest_stops.py` liest nur einzelne OSM-Knoten
+        (`osmium.FileProcessor` **ohne** `.with_locations()`, da anders als beim Wege-Graph keine
+        Way-Geometrie aufgelöst werden muss) und schreibt sie in eine indizierte SQLite-Tabelle
+        (Schema wie `routes.sqlite`: Zeilen + Bbox-Index, **kein** Blob-Format wie bei den
+        Wege-Graphen, da Rastplätze Punktdaten sind, die live per Bbox abgefragt werden statt
+        komplett in den Speicher geladen zu werden). Release-Tag `rest-stops-v1`, Asset-Name
+        `<bundesland>_reststops.sqlite`.
+      - **App-Seite**: `RestStopStore`/`RestStopRepository`/`RestStopCache`/
+        `RestStopDownloadManager` (eigenständig, nicht generisch über `DownloadableRegion` -
+        für einen 2-Länder-Test wäre das verfrüht; nutzt aber den bestehenden `Bundesland`-Enum
+        direkt weiter). Download-UI: eigener `RestStopsOfflineView`-Screen (kein
+        `OfflineMapsView<Region>`-Aufruf, um die generische Wege-Graph-UI unangetastet zu lassen),
+        verlinkt aus einer neuen "Rastplätze"-Sektion in `SettingsView` mit einem einzelnen
+        Ein/Aus-Schalter (`showRestStops`, Opt-in). Kartenanzeige: eigene `Annotation`+`Button`-Pins
+        (kein `Map(selection:)`, konsistent mit der bestehenden Vermeidung von MapKits eingebauten
+        interaktiven Annotation-APIs), Tippen öffnet ein minimales Detail-Sheet (Kategorie, Name,
+        Koordinate).
+      - **Live-Fund (Performance + UX)**: Ein erster Test *mit* Bänken (`amenity=bench`) zeigte zwei
+        Probleme. Erstens technisch: Schon ein einzelner Stadtteil (Bremen/Findorff-Bürgerpark)
+        lieferte durch die hohe Bankdichte hunderte Treffer gleichzeitig - die Menge eigener
+        SwiftUI-`Annotation`-Views blockierte spürbar die Kartengesten (Pinch-to-Zoom reagierte
+        nicht mehr). Dagegen wurden `restStopMaxLatitudeDelta` (0.02° - nur Straßenzug-Ebene) und
+        ein harter Gesamt-Deckel `restStopMaxResults` (80, nach Nähe zum Kartenzentrum sortiert
+        gekappt) ergänzt. Zweitens, unabhängig von der Performance-Korrektur, **Nutzer-Feedback
+        nach Live-Test**: "zu unruhig auf der Karte, zu viele Pins" - Bänke allein waren in Bremen
+        93 % aller Treffer (4033 von 4388) und für die Routenplanung kaum relevant. Bänke wurden
+        daraufhin komplett aus der Extraktion entfernt (nur noch 4 statt 5 Kategorien) - Bremen
+        schrumpfte dadurch von 4388 auf 357, Niedersachsen von 76.607 auf 5880 Treffer. Zweiter
+        Live-Test **für gut befunden**.
+      - **Öffnungszeiten**: Zusätzliche `opening_hours`-Spalte (OSM-Rohtext, z. B. "Mo-Fr
+        08:00-18:00; Sa 09:00-14:00") im Skript ergänzt, im Detail-Sheet unter dem Namen
+        angezeigt (Uhr-Symbol) - bewusst **nicht** als "gerade geöffnet?"-Auswertung interpretiert,
+        das wäre eine eigene kleine DSL-Interpretation (Feiertage, Sonderfälle) und deutlich mehr
+        Aufwand als der reine Text. `RestStop.openingHoursGerman` übersetzt nur die englischen
+        Wochentags-/Sonderkürzel (`Tu/We/Th/Su/PH/off` → `Di/Mi/Do/So/Feiertag/geschlossen`) per
+        Wortgrenzen-Regex, damit die App trotz englischem OSM-Rohformat komplett deutsch bleibt (s.
+        CLAUDE.md) - Zeiten/Kommas/Semikolons bleiben unverändert. Schema-Änderung, daher
+        `restStopsFormatVersion` auf 2 hochgezählt (verwirft alte heruntergeladene Dateien
+        automatisch). In Bremen haben 199 von 267 Cafés das Tag gesetzt, live getestet und für gut
+        befunden.
+      - **Rollout auf alle 16 Bundesländer**: `Scripts/build_rest_stops_bundeslaender.sh` (neu,
+        analog `process_all_bundeslaender.sh` für die Wege-Graphen) lädt nacheinander jedes
+        `.osm.pbf`, baut die Rastplätze-Datenbank und lädt sie als `rest-stops-v1`-Asset hoch;
+        überspringt den Download, falls die `.pbf`-Datei schon lokal vorliegt (z. B. nach einem
+        zwischenzeitlich abgebrochenen Lauf). Auf Nutzer-Wunsch einmal bewusst nach Bayern
+        gestoppt (Akku laden), später mit den restlichen 12 fortgesetzt. Alle 16 Dateien liegen
+        deutlich unter 1 MB (Bremen 48 KB, Bayern als größte 912 KB, `nordrhein-westfalen` trotz
+        18 Mio. Einwohnern nur 816 KB) - Größe korreliert mit POI-Dichte, nicht mit
+        Fläche/Bevölkerung, deshalb reale Werte statt einer Formel in
+        `RestStopDownloadManager.restStopApproximateSizeKB`. Anzeige in `RestStopsOfflineView`
+        entsprechend auf KB statt MB umgestellt (ein pauschales "~1 MB" für alle 16 wäre keine
+        hilfreiche Unterscheidung gewesen).
+      → [Scripts/build_rest_stops.py](FahrradApp/Scripts/build_rest_stops.py),
+      [Scripts/build_rest_stops_bundeslaender.sh](FahrradApp/Scripts/build_rest_stops_bundeslaender.sh),
+      [RestStop.swift](FahrradApp/RadFaehrte/Models/RestStop.swift),
+      [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift),
+      [RestStopRepository.swift](FahrradApp/RadFaehrte/Services/RestStopRepository.swift),
+      [RestStopCache.swift](FahrradApp/RadFaehrte/Services/RestStopCache.swift),
+      [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift),
+      [RestStopsOfflineView.swift](FahrradApp/RadFaehrte/Views/RestStopsOfflineView.swift),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`restStopOverlayContent`,
+      `reloadNearbyRestStops`, `restStopCandidatePaths`)
+- [x] **Rastplätze auch aus dem Schnelleinstellungen-Sheet während der Navigation** (2026-08-21):
+      Nutzer-Wunsch - der "Rastplätze anzeigen"-Schalter und der Download-Link waren bisher nur über
+      den Einstellungen-Tab erreichbar, der während der Navigation ausgeblendet ist (Tab-Leiste weg).
+      `NavigationQuickSettingsView` (erreichbar über das Zahnrad-Symbol in
+      `ContentView.navigationControlsOverlay`) bekommt dafür eine eigene "Rastplätze"-Sektion,
+      identisch zu der in `SettingsView` (Toggle + `NavigationLink` zu `RestStopsOfflineView`).
+      Bewusst **anders** als die dortige Doc-Kommentar-Regel "Offline-Karten-Downloads o. Ä. wären
+      hier fehl am Platz" (die bezieht sich auf die Wege-Graphen mit bis zu einigen hundert MB) -
+      der Rastplätze-Download pro Bundesland ist mit unter 1 MB winzig, und der Bedarf entsteht
+      typischerweise genau unterwegs ("hier wäre eine Pause gut"). Dafür bekommt
+      `NavigationQuickSettingsView` einen neuen `restStopStore`-Parameter (von `ContentView`
+      durchgereicht, dieselbe Instanz wie die Kartenanzeige, damit ein Download sofort auf der Karte
+      sichtbar wird). Build (Device-Ziel) erfolgreich.
+      → [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`showQuickSettings`-Sheet)
 
 ## Bekannte Probleme
 

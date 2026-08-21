@@ -16,6 +16,7 @@ enum AppSettingsKey {
     static let mapStyle = "mapStyle"
     static let navigationDefaultHeadingUp = "navigationDefaultHeadingUp"
     static let isVoiceGuidanceEnabled = "isVoiceGuidanceEnabled"
+    static let showRestStops = "showRestStops"
 }
 
 enum AppSettingsDefaults {
@@ -48,4 +49,8 @@ enum AppSettingsDefaults {
     static let navigationDefaultHeadingUp: Bool = true
 
     static let isVoiceGuidanceEnabled: Bool = true
+
+    /// Opt-in (nicht standardmäßig an): Rastplätze sind bisher nur als Test für Bremen und
+    /// Niedersachsen verfügbar, s. `restStopSupportedRegions`.
+    static let showRestStops: Bool = false
 }

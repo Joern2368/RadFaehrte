@@ -40,6 +40,7 @@ private enum CuratedRouteStepsAvailability {
 
 struct ContentView: View {
     @AppStorage(AppSettingsKey.averageSpeedKmh) private var averageSpeedKmh = AppSettingsDefaults.averageSpeedKmh
+    @AppStorage(AppSettingsKey.showRestStops) private var showRestStops = AppSettingsDefaults.showRestStops
 
     /// Aus dem Eigene-Routen-Tab per "Starten" gesetzt (siehe `RootTabView`). Wird über `onChange`
     /// konsumiert (`startImportedRoute`) und danach wieder auf `nil` gesetzt.
@@ -64,6 +65,10 @@ struct ContentView: View {
     var italyWayGraphStore = WayGraphStore<ItalyRegion>()
     /// Analog `wayGraphStore`, aber für die 18 spanischen Regionen (s. `SpainRegion`).
     var spainWayGraphStore = WayGraphStore<SpainRegion>()
+    /// Für die App gemeinsame Instanz, um heruntergeladene Rastplätze-Bundesländer zu finden (s.
+    /// `reloadNearbyRestStops`) - unabhängig von den Wege-Graph-Stores oben (s.
+    /// `RestStopStore`-Doc-Kommentar).
+    var restStopStore = RestStopStore()
     /// Von `RootTabView` übergeben, um nach dem Speichern einer Fahrt den Verlauf-Tab zum
     /// Neuladen zu bewegen (siehe `HistoryView.refreshTrigger`).
     var onTourSaved: () -> Void = {}
@@ -167,6 +172,11 @@ struct ContentView: View {
     @State private var curatedRouteStepsDetail: RouteMatch?
     /// Wegearten-Aufschlüsselung der "ruhige Wege"-Offline-Route, s. `wayCategoryDetailSheet`.
     @State private var wayCategoryDetailRoute: DirectRoute?
+    /// Rastplätze (Trinkwasser, Cafés, Aussichtspunkte, Fahrrad-Reparaturstationen) im aktuell
+    /// sichtbaren Kartenausschnitt, s. `reloadNearbyRestStops`/`restStopOverlayContent`.
+    @State private var restStops: [RestStop] = []
+    /// Für das Detail-Sheet nach Antippen eines Rastplatz-Pins, s. `restStopDetailSheet`.
+    @State private var selectedRestStop: RestStop?
     /// `nil` = noch nicht geladen, s. `curatedRouteStepsDetailSheet`/`CuratedRouteStepsAvailability`.
     @State private var curatedRouteStepsResult: CuratedRouteStepsAvailability?
     @State private var isLoadingCuratedRouteSteps = false
@@ -294,6 +304,10 @@ struct ContentView: View {
     @State private var lastRerouteAt: Date?
     @State private var isFollowingUser = true
     @State private var currentRegionSpan: MKCoordinateSpan?
+    /// Zuletzt gemeldeter sichtbarer Kartenausschnitt, s. `handleMapCameraChange`/
+    /// `reloadNearbyRestStops` - anders als `currentRegionSpan` (nur die Zoomstufe) wird hier auch
+    /// das Zentrum gebraucht, um die Bbox für die Rastplatz-Abfrage zu bilden.
+    @State private var lastMapRegion: MKCoordinateRegion?
     @State private var tourStartTime: Date?
     @State private var tourDistanceMeters: Double = 0
     /// Aufsummierte positive/negative Höhenänderung seit Navigationsstart (siehe
@@ -553,6 +567,7 @@ struct ContentView: View {
                         }
                     }
                     routeOverlayContent
+                    restStopOverlayContent
                     if isNavigating && displayedTourTrackPoints.count >= 2 {
                         MapPolyline(coordinates: displayedTourTrackPoints)
                             .stroke(.red, lineWidth: 5)
@@ -561,6 +576,11 @@ struct ContentView: View {
                 .mapControls { } // Eigene Steuerelemente (compassBadge, navigationControlsOverlay) statt MapKits Standard-Overlays.
                 .mapStyle(currentMapStyle)
                 .onMapCameraChange(frequency: .onEnd, handleMapCameraChange)
+                .onChange(of: showRestStops) {
+                    if let lastMapRegion {
+                        reloadNearbyRestStops(for: lastMapRegion)
+                    }
+                }
                 .simultaneousGesture(SpatialTapGesture().onEnded { value in
                     handleMapTap(at: value.location, proxy: proxy)
                 })
@@ -757,10 +777,13 @@ struct ContentView: View {
             curatedRouteStepsDetailSheet(match)
         }
         .sheet(isPresented: $showQuickSettings) {
-            NavigationQuickSettingsView()
+            NavigationQuickSettingsView(restStopStore: restStopStore)
         }
         .sheet(item: $exportFile) { file in
             ActivityView(activityItems: [file.url])
+        }
+        .sheet(item: $selectedRestStop) { stop in
+            restStopDetailSheet(stop)
         }
     }
 
@@ -1722,6 +1745,81 @@ struct ContentView: View {
             + spainRegionen.compactMap { spainWayGraphStore.path(for: $0) }
     }
 
+    /// Minimale Zoomstufe (in `span.latitudeDelta`-Grad), unterhalb derer Rastplatz-Pins geladen
+    /// werden. Live-Fund (2026-08-19, erster Test mit Bänken): Selbst bei einem einzelnen
+    /// Stadtviertel im Blick lieferte ein Park allein schon hunderte POIs - deutlich mehr als ein
+    /// großzügigerer Wert vermuten ließ, die Menge eigener SwiftUI-`Annotation`-Views blockierte
+    /// dabei spürbar die Kartengesten (Pinch-to-Zoom reagierte nicht mehr). Deshalb eng auf reine
+    /// Straßenzug-Ebene begrenzt, zusätzlich zum harten Gesamt-Deckel `restStopMaxResults` unten.
+    private static let restStopMaxLatitudeDelta: Double = 0.02
+    /// Harter Gesamt-Deckel über alle Kategorien/Dateien hinweg (s. Kommentar an
+    /// `restStopMaxLatitudeDelta`) - unabhängig vom Zoom nie mehr Pins gleichzeitig rendern.
+    private static let restStopMaxResults = 80
+
+    /// Pfade aller heruntergeladenen Rastplatz-Datenbanken, deren grobe Bounding-Box den
+    /// sichtbaren Kartenausschnitt überschneiden könnte - geprüft an allen 4 Eckpunkten, da z. B.
+    /// Bremen komplett innerhalb Niedersachsens liegt und ein Ausschnitt nahe der Landesgrenze
+    /// beide Dateien treffen kann.
+    private func restStopCandidatePaths(for region: MKCoordinateRegion) -> [String] {
+        let halfLat = region.span.latitudeDelta / 2
+        let halfLon = region.span.longitudeDelta / 2
+        let corners = [
+            CLLocationCoordinate2D(latitude: region.center.latitude - halfLat, longitude: region.center.longitude - halfLon),
+            CLLocationCoordinate2D(latitude: region.center.latitude - halfLat, longitude: region.center.longitude + halfLon),
+            CLLocationCoordinate2D(latitude: region.center.latitude + halfLat, longitude: region.center.longitude - halfLon),
+            CLLocationCoordinate2D(latitude: region.center.latitude + halfLat, longitude: region.center.longitude + halfLon),
+        ]
+        return restStopSupportedRegions
+            .filter { bundesland in corners.contains { bundesland.boundingBox.contains($0) } }
+            .compactMap { restStopStore.path(for: $0) }
+    }
+
+    /// Lädt Rastplätze im sichtbaren Kartenausschnitt neu - aufgerufen bei jeder Kamerabewegung
+    /// (`handleMapCameraChange`) sowie beim Umschalten von `showRestStops`. Bricht früh ab, wenn
+    /// die Anzeige deaktiviert ist, zu weit herausgezoomt (s. `restStopMaxLatitudeDelta`) oder
+    /// keine unterstützte Region heruntergeladen ist.
+    private func reloadNearbyRestStops(for region: MKCoordinateRegion) {
+        guard showRestStops, region.span.latitudeDelta <= Self.restStopMaxLatitudeDelta else {
+            restStops = []
+            return
+        }
+        let paths = restStopCandidatePaths(for: region)
+        guard !paths.isEmpty else {
+            restStops = []
+            return
+        }
+        let minLat = region.center.latitude - region.span.latitudeDelta / 2
+        let maxLat = region.center.latitude + region.span.latitudeDelta / 2
+        let minLon = region.center.longitude - region.span.longitudeDelta / 2
+        let maxLon = region.center.longitude + region.span.longitudeDelta / 2
+        let centerForSort = region.center
+        Task.detached {
+            var seenIds: Set<Int64> = []
+            var results: [RestStop] = []
+            for path in paths {
+                guard let repository = RestStopCache.shared.repository(for: path) else { continue }
+                for stop in repository.restStops(minLon: minLon, minLat: minLat, maxLon: maxLon, maxLat: maxLat, limit: Self.restStopMaxResults) {
+                    if seenIds.insert(stop.id).inserted {
+                        results.append(stop)
+                    }
+                }
+            }
+            if results.count > Self.restStopMaxResults {
+                results.sort { lhs, rhs in
+                    let dLhs = CLLocation(latitude: lhs.coordinate.latitude, longitude: lhs.coordinate.longitude)
+                        .distance(from: CLLocation(latitude: centerForSort.latitude, longitude: centerForSort.longitude))
+                    let dRhs = CLLocation(latitude: rhs.coordinate.latitude, longitude: rhs.coordinate.longitude)
+                        .distance(from: CLLocation(latitude: centerForSort.latitude, longitude: centerForSort.longitude))
+                    return dLhs < dRhs
+                }
+                results = Array(results.prefix(Self.restStopMaxResults))
+            }
+            await MainActor.run {
+                self.restStops = results
+            }
+        }
+    }
+
     /// Ältester `timestamp`, den ein GPS-Fix für "Aktueller Standort" noch haben darf, um sofort
     /// übernommen zu werden - iOS liefert nach `startUpdating()` häufig zuerst die letzte gecachte
     /// Position (ggf. von einem früheren Aufenthaltsort, Minuten/Stunden/Tage alt), bevor der
@@ -1841,6 +1939,8 @@ struct ContentView: View {
     /// Gesten-Handler auf der `Map`, nicht mehr über einen Kamera-Abgleich hier.
     private func handleMapCameraChange(_ context: MapCameraUpdateContext) {
         currentRegionSpan = context.region.span
+        lastMapRegion = context.region
+        reloadNearbyRestStops(for: context.region)
     }
 
     /// Behandelt Taps auf die Karte außerhalb der Navigation - aktuell nur noch für
@@ -2557,6 +2657,65 @@ struct ContentView: View {
                     .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
             }
         }
+    }
+
+    /// Rastplatz-Pins im aktuell geladenen `restStops` (s. `reloadNearbyRestStops`) - eigener
+    /// `Annotation`+`Button` statt `Map(selection:)`/`.tag()` (dieselbe Begründung wie beim blauen
+    /// Standort-Punkt oben: die App verzichtet bewusst auf MapKits eingebaute interaktive
+    /// Annotation-APIs zugunsten eigener, verlässlicherer Views).
+    @MapContentBuilder
+    private var restStopOverlayContent: some MapContent {
+        if showRestStops {
+            ForEach(restStops) { stop in
+                Annotation(stop.title ?? stop.kind.label, coordinate: stop.clCoordinate) {
+                    Button {
+                        selectedRestStop = stop
+                    } label: {
+                        restStopPinView(stop.kind)
+                    }
+                }
+                .annotationTitles(.hidden)
+            }
+        }
+    }
+
+    private func restStopPinView(_ kind: RestStop.Kind) -> some View {
+        ZStack {
+            Circle()
+                .fill(.white)
+                .frame(width: 26, height: 26)
+                .shadow(radius: 1)
+            Image(systemName: kind.icon)
+                .font(.system(size: 13))
+                .foregroundStyle(.blue)
+        }
+    }
+
+    /// Detail-Sheet nach Antippen eines Rastplatz-Pins - bewusst minimal (Kategorie, Name,
+    /// Öffnungszeiten falls vorhanden, Koordinate), analog `wayCategoryDetailSheet`.
+    private func restStopDetailSheet(_ stop: RestStop) -> some View {
+        NavigationStack {
+            List {
+                Label(stop.kind.label, systemImage: stop.kind.icon)
+                if let title = stop.title {
+                    Text(title)
+                }
+                if let openingHours = stop.openingHoursGerman {
+                    Label(openingHours, systemImage: "clock")
+                }
+                Text(String(format: "%.5f, %.5f", stop.coordinate.latitude, stop.coordinate.longitude))
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+            .navigationTitle(stop.title ?? stop.kind.label)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fertig") { selectedRestStop = nil }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 
     /// Macht eine aus dem Verlauf-Tab gestartete, importierte Tour zur aktiven Route. Baut dafür

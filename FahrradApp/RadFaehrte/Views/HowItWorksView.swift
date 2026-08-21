@@ -81,6 +81,11 @@ struct HowItWorksView: View {
             icon: "list.bullet",
             title: "Alle Routen",
             text: "In den Einstellungen unter \"Alle Routen\" durchsuchst du den kompletten Routenbestand - nach Nähe oder nach Namen. Ein Badge zeigt, ob eine Route international, national, regional oder lokal ist; ein Tipp auf einen Treffer zeigt Streckenverlauf, Länge und geschätzte Fahrzeit."
+        ),
+        Topic(
+            icon: "mappin.and.ellipse",
+            title: "Rastplätze",
+            text: "In den Einstellungen unter \"Rastplätze\" lädst du für jedes Bundesland Trinkwasserstellen, Cafés, Aussichtspunkte und Fahrrad-Reparaturstationen aus OpenStreetMap herunter. Ist eine Region heruntergeladen und der Schalter \"Rastplätze anzeigen\" aktiv, erscheinen sie beim ausreichend nahen Heranzoomen als Pins auf der Karte; ein Tipp auf einen Pin zeigt Kategorie, Name (falls vorhanden) und Koordinate. Während der Navigation erreichst du beides auch über das Zahnrad-Symbol auf der Karte, ohne die Fahrt zu unterbrechen."
         )
     ]
 

@@ -12,11 +12,13 @@ struct SettingsView: View {
     @AppStorage(AppSettingsKey.appearanceMode) private var appearanceModeRaw = AppSettingsDefaults.appearanceMode
     @AppStorage(AppSettingsKey.mapStyle) private var mapStyleRaw = AppSettingsDefaults.mapStyle
     @AppStorage(AppSettingsKey.navigationDefaultHeadingUp) private var navigationDefaultHeadingUp = AppSettingsDefaults.navigationDefaultHeadingUp
+    @AppStorage(AppSettingsKey.showRestStops) private var showRestStops = AppSettingsDefaults.showRestStops
     let wayGraphStore: WayGraphStore<Bundesland>
     let europaWayGraphStore: WayGraphStore<EuropaLand>
     let franceWayGraphStore: WayGraphStore<FranceRegion>
     let italyWayGraphStore: WayGraphStore<ItalyRegion>
     let spainWayGraphStore: WayGraphStore<SpainRegion>
+    let restStopStore: RestStopStore
     private let recentPlaceStore = RecentPlaceStore()
     @State private var showClearRecentsConfirmation = false
 
@@ -25,13 +27,15 @@ struct SettingsView: View {
         europaWayGraphStore: WayGraphStore<EuropaLand> = WayGraphStore(),
         franceWayGraphStore: WayGraphStore<FranceRegion> = WayGraphStore(),
         italyWayGraphStore: WayGraphStore<ItalyRegion> = WayGraphStore(),
-        spainWayGraphStore: WayGraphStore<SpainRegion> = WayGraphStore()
+        spainWayGraphStore: WayGraphStore<SpainRegion> = WayGraphStore(),
+        restStopStore: RestStopStore = RestStopStore()
     ) {
         self.wayGraphStore = wayGraphStore
         self.europaWayGraphStore = europaWayGraphStore
         self.franceWayGraphStore = franceWayGraphStore
         self.italyWayGraphStore = italyWayGraphStore
         self.spainWayGraphStore = spainWayGraphStore
+        self.restStopStore = restStopStore
     }
 
     var body: some View {
@@ -131,6 +135,19 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Offline-Karten")
+                }
+
+                Section {
+                    Toggle("Rastplätze anzeigen", isOn: $showRestStops)
+                    NavigationLink {
+                        RestStopsOfflineView(store: restStopStore)
+                    } label: {
+                        Label("Rastplätze herunterladen", systemImage: "mappin.and.ellipse")
+                    }
+                } header: {
+                    Text("Rastplätze")
+                } footer: {
+                    Text("Trinkwasser, Cafés, Aussichtspunkte und Fahrrad-Reparaturstationen aus OpenStreetMap auf der Karte anzeigen.")
                 }
 
                 Section {

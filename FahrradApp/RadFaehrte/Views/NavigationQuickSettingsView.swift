@@ -9,13 +9,20 @@ import SwiftUI
 /// per Zahnrad-Button erreichbar (`ContentView.navigationControlsOverlay`), da die Tab-Leiste dann
 /// ausgeblendet ist und der Einstellungen-Tab sonst nicht erreichbar wäre (Nutzer-Feedback). Zeigt
 /// nur die unterwegs relevanten Werte (Tempo, Sichtweite, Kartenstil, Statistik-Leiste,
-/// Sprachausgabe) - Offline-Karten-Downloads o. Ä. wären hier fehl am Platz.
+/// Sprachausgabe, Rastplätze) - Offline-Karten-Downloads für Wege-Graphen (bis zu einigen hundert
+/// MB) wären hier fehl am Platz. Der Rastplätze-Download gehört trotzdem dazu (Nutzer-Wunsch,
+/// 2026-08-21): die Dateien sind mit unter 1 MB pro Bundesland winzig, und unterwegs zu merken
+/// "hier wäre eine Pause gut" ist gerade der Moment, in dem man die Anzeige an-/ausschalten oder
+/// das aktuelle Bundesland nachladen möchte - dafür extra in den Einstellungen-Tab wechseln zu
+/// müssen (Tab-Leiste während der Navigation ausgeblendet) wäre unnötig umständlich.
 struct NavigationQuickSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AppSettingsKey.averageSpeedKmh) private var averageSpeedKmh = AppSettingsDefaults.averageSpeedKmh
     @AppStorage(AppSettingsKey.navigationLookaheadMeters) private var navigationLookaheadMeters = AppSettingsDefaults.navigationLookaheadMeters
     @AppStorage(AppSettingsKey.mapStyle) private var mapStyleRaw = AppSettingsDefaults.mapStyle
     @AppStorage(AppSettingsKey.isVoiceGuidanceEnabled) private var isVoiceGuidanceEnabled = AppSettingsDefaults.isVoiceGuidanceEnabled
+    @AppStorage(AppSettingsKey.showRestStops) private var showRestStops = AppSettingsDefaults.showRestStops
+    let restStopStore: RestStopStore
 
     var body: some View {
         NavigationStack {
@@ -70,6 +77,19 @@ struct NavigationQuickSettingsView: View {
                 } footer: {
                     Text("Kündigt Abbiegungen zusätzlich zur Watch-Vibration laut an - wie bei der Watch-Vibration nur für einen ausgewählten Einzeltreffer, eine kombinierte Kette oder die \"Direkte Fahrrad-Route\", jeweils mit heruntergeladenem Wege-Graph bzw. echten Abbiege-Hinweisen.")
                 }
+
+                Section {
+                    Toggle("Rastplätze anzeigen", isOn: $showRestStops)
+                    NavigationLink {
+                        RestStopsOfflineView(store: restStopStore)
+                    } label: {
+                        Label("Rastplätze herunterladen", systemImage: "mappin.and.ellipse")
+                    }
+                } header: {
+                    Text("Rastplätze")
+                } footer: {
+                    Text("Trinkwasser, Cafés, Aussichtspunkte und Fahrrad-Reparaturstationen aus OpenStreetMap auf der Karte anzeigen.")
+                }
             }
             .navigationTitle("Einstellungen")
             .navigationBarTitleDisplayMode(.inline)
@@ -83,5 +103,5 @@ struct NavigationQuickSettingsView: View {
 }
 
 #Preview {
-    NavigationQuickSettingsView()
+    NavigationQuickSettingsView(restStopStore: RestStopStore())
 }
