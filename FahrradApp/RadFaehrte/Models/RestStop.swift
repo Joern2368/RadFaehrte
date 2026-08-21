@@ -81,6 +81,17 @@ struct RestStop: Identifiable, Codable, Equatable {
             case .bench: return "chair.fill"
             }
         }
+
+        /// Persistiert als kommagetrennte `rawValue`-Liste in einem einzelnen `@AppStorage`-String
+        /// (`AppSettingsKey.showRestStopKinds`) - analog `NavigationStatKind`/`navigationStatSlots`
+        /// in `AppSettings.swift`, statt einem eigenen `UserDefaults`-Key pro Kategorie.
+        static func decode(_ raw: String) -> Set<Kind> {
+            Set(raw.split(separator: ",").compactMap { Kind(rawValue: String($0)) })
+        }
+
+        static func encode(_ kinds: Set<Kind>) -> String {
+            Kind.allCases.filter(kinds.contains).map(\.rawValue).joined(separator: ",")
+        }
     }
 
     struct Coordinate: Codable, Equatable {

@@ -81,6 +81,11 @@ struct NavigationQuickSettingsView: View {
                 Section {
                     Toggle("Rastplätze anzeigen", isOn: $showRestStops)
                     NavigationLink {
+                        RestStopKindSettingsView()
+                    } label: {
+                        Label("Rastplatz-Kategorien", systemImage: "line.3.horizontal.decrease.circle")
+                    }
+                    NavigationLink {
                         RestStopsOfflineView(store: restStopStore)
                     } label: {
                         Label("Rastplätze herunterladen", systemImage: "mappin.and.ellipse")
@@ -88,7 +93,7 @@ struct NavigationQuickSettingsView: View {
                 } header: {
                     Text("Rastplätze")
                 } footer: {
-                    Text("Trinkwasser, Cafés, Aussichtspunkte und Fahrrad-Reparaturstationen aus OpenStreetMap auf der Karte anzeigen.")
+                    Text("Trinkwasser, Cafés, Aussichtspunkte, Fahrrad-Reparaturstationen und Bänke aus OpenStreetMap auf der Karte anzeigen.")
                 }
             }
             .navigationTitle("Einstellungen")

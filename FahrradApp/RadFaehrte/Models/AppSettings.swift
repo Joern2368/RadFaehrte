@@ -17,6 +17,7 @@ enum AppSettingsKey {
     static let navigationDefaultHeadingUp = "navigationDefaultHeadingUp"
     static let isVoiceGuidanceEnabled = "isVoiceGuidanceEnabled"
     static let showRestStops = "showRestStops"
+    static let showRestStopKinds = "showRestStopKinds"
 }
 
 enum AppSettingsDefaults {
@@ -53,4 +54,8 @@ enum AppSettingsDefaults {
     /// Opt-in (nicht standardmäßig an): Rastplätze sind bisher nur als Test für Bremen und
     /// Niedersachsen verfügbar, s. `restStopSupportedRegions`.
     static let showRestStops: Bool = false
+
+    /// Standardmäßig alle Kategorien aktiv, damit sich für Nutzer, die die Kategorie-Auswahl nicht
+    /// anfassen, am bisherigen Verhalten (alle Rastplatz-Kategorien sichtbar) nichts ändert.
+    static let showRestStopKinds: String = RestStop.Kind.encode(Set(RestStop.Kind.allCases))
 }

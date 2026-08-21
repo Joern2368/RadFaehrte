@@ -41,6 +41,7 @@ private enum CuratedRouteStepsAvailability {
 struct ContentView: View {
     @AppStorage(AppSettingsKey.averageSpeedKmh) private var averageSpeedKmh = AppSettingsDefaults.averageSpeedKmh
     @AppStorage(AppSettingsKey.showRestStops) private var showRestStops = AppSettingsDefaults.showRestStops
+    @AppStorage(AppSettingsKey.showRestStopKinds) private var showRestStopKindsRaw = AppSettingsDefaults.showRestStopKinds
 
     /// Aus dem Eigene-Routen-Tab per "Starten" gesetzt (siehe `RootTabView`). Wird über `onChange`
     /// konsumiert (`startImportedRoute`) und danach wieder auf `nil` gesetzt.
@@ -577,6 +578,11 @@ struct ContentView: View {
                 .mapStyle(currentMapStyle)
                 .onMapCameraChange(frequency: .onEnd, handleMapCameraChange)
                 .onChange(of: showRestStops) {
+                    if let lastMapRegion {
+                        reloadNearbyRestStops(for: lastMapRegion)
+                    }
+                }
+                .onChange(of: showRestStopKindsRaw) {
                     if let lastMapRegion {
                         reloadNearbyRestStops(for: lastMapRegion)
                     }
@@ -1793,12 +1799,14 @@ struct ContentView: View {
         let minLon = region.center.longitude - region.span.longitudeDelta / 2
         let maxLon = region.center.longitude + region.span.longitudeDelta / 2
         let centerForSort = region.center
+        let enabledKinds = RestStop.Kind.decode(showRestStopKindsRaw)
         Task.detached {
             var seenIds: Set<Int64> = []
             var results: [RestStop] = []
             for path in paths {
                 guard let repository = RestStopCache.shared.repository(for: path) else { continue }
                 for stop in repository.restStops(minLon: minLon, minLat: minLat, maxLon: maxLon, maxLat: maxLat, limit: Self.restStopMaxResults) {
+                    guard enabledKinds.contains(stop.kind) else { continue }
                     if seenIds.insert(stop.id).inserted {
                         results.append(stop)
                     }

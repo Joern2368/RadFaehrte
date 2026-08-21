@@ -5059,7 +5059,10 @@ für die ursprüngliche Produktidee.
         93 % aller Treffer (4033 von 4388) und für die Routenplanung kaum relevant. Bänke wurden
         daraufhin komplett aus der Extraktion entfernt (nur noch 4 statt 5 Kategorien) - Bremen
         schrumpfte dadurch von 4388 auf 357, Niedersachsen von 76.607 auf 5880 Treffer. Zweiter
-        Live-Test **für gut befunden**.
+        Live-Test **für gut befunden**. **Später (im Rollout auf alle 16 Bundesländer, s. u.)
+        wieder als 5. Kategorie ergänzt** - nicht mehr komplett ausgeschlossen, sondern per
+        40×40-m-Raster ausgedünnt (`BENCH_GRID_METERS` in `build_rest_stops.py`, max. eine Bank pro
+        Zelle), um zwischen "gar keine Bänke" und "93 % aller Treffer" einen Mittelweg zu finden.
       - **Öffnungszeiten**: Zusätzliche `opening_hours`-Spalte (OSM-Rohtext, z. B. "Mo-Fr
         08:00-18:00; Sa 09:00-14:00") im Skript ergänzt, im Detail-Sheet unter dem Namen
         angezeigt (Uhr-Symbol) - bewusst **nicht** als "gerade geöffnet?"-Auswertung interpretiert,
@@ -5108,6 +5111,29 @@ für die ursprüngliche Produktidee.
       sichtbar wird). Build (Device-Ziel) erfolgreich.
       → [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
       [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`showQuickSettings`-Sheet)
+- [x] **Rastplatz-Kategorien einzeln ein-/ausschaltbar** (2026-08-21): Nutzer-Wunsch - bisher gab es
+      nur den einen globalen Schalter `showRestStops` für alle 5 Kategorien zusammen. Neuer
+      `@AppStorage`-Key `showRestStopKinds` (kommagetrennte `RestStop.Kind`-`rawValue`-Liste,
+      Default = alle 5, analog dem bestehenden Muster bei `navigationStatSlots`/`NavigationStatKind`
+      - Encode/Decode-Helfer dafür leben direkt auf `RestStop.Kind` statt separat, da eng an die
+      Enum-Fälle gekoppelt). Eigene Unterseite `RestStopKindSettingsView` (analog
+      `NavigationStatSettingsView` - eigener Screen statt 5 zusätzlicher Inline-Toggle-Zeilen in der
+      "Rastplätze"-Sektion), verlinkt sowohl aus `SettingsView` als auch aus
+      `NavigationQuickSettingsView` (dieselbe Dopplung wie beim bestehenden Rastplätze-Toggle, s.
+      Eintrag oben). Filterung passiert in `ContentView.reloadNearbyRestStops` **vor** dem
+      Ergebnis-Cap (`restStopMaxResults`), nicht erst beim Rendern - sonst könnte eine deaktivierte
+      Kategorie (z. B. Bänke) weiterhin den Cap füllen und aktivierte Kategorien (z. B. Cafés) von
+      der Karte verdrängen. `HowItWorksView` entsprechend ergänzt (nannte bis dahin ohnehin nur 4
+      statt 5 Kategorien - Bänke fehlten dort seit deren Wiedereinführung, s. Eintrag oben). Build
+      (Device-Ziel) erfolgreich, auf "iPhone von Jörn" installiert - **live getestet und für gut
+      befunden**.
+      → [RestStop.swift](FahrradApp/RadFaehrte/Models/RestStop.swift) (`Kind.decode`/`Kind.encode`),
+      [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift),
+      [RestStopKindSettingsView.swift](FahrradApp/RadFaehrte/Views/RestStopKindSettingsView.swift),
+      [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
+      [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`reloadNearbyRestStops`),
+      [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
 
 ## Bekannte Probleme
 
