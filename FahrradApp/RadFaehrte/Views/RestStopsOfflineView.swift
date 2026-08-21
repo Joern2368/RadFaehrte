@@ -29,7 +29,7 @@ struct RestStopsOfflineView: View {
                     regionRow(region)
                 }
             } footer: {
-                Text("Trinkwasser, Cafés, Aussichtspunkte und Fahrrad-Reparaturstationen aus OpenStreetMap.")
+                Text("Trinkwasser, Cafés, Aussichtspunkte, Fahrrad-Reparaturstationen, Bänke und Biergärten aus OpenStreetMap.")
             }
         }
         .navigationTitle("Rastplätze")
@@ -62,7 +62,7 @@ struct RestStopsOfflineView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("~\(downloadManager.approximateSizeKB(region)) KB")
+                    Text(downloadManager.approximateSizeDisplay(region))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

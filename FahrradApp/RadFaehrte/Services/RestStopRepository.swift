@@ -98,6 +98,7 @@ private extension RestStop.Kind {
         case 2: self = .viewpoint
         case 3: self = .bicycleRepairStation
         case 4: self = .bench
+        case 5: self = .beerGarden
         default: return nil
         }
     }

@@ -15,28 +15,29 @@ private func restStopDownloadURL(for region: Bundesland) -> URL {
     URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/rest-stops-v1/\(region.rawValue)_reststops.sqlite")!
 }
 
-/// Tatsächliche Release-Asset-Größen in KB (nach dem Bau aller 16 Bundesländer, 2026-08-19) -
-/// anders als die URL kein Formel-Ausdruck, da die Größe (Café-/POI-Dichte) nicht mit der
-/// Bundesland-Fläche oder -Bevölkerung korreliert. KB statt MB (anders als bei den viel größeren
-/// Wege-Graphen), da selbst das größte Bundesland (Bayern) unter 1 MB bleibt - Rastplätze sind
-/// reine Punktdaten ohne Geometrie, "~1 MB" für alle 16 wäre keine hilfreiche Unterscheidung.
+/// Tatsächliche Release-Asset-Größen in KB (nach dem Bau aller 16 Bundesländer mit Bänken +
+/// Biergärten, 2026-08-21) - anders als die URL kein Formel-Ausdruck, da die Größe (POI-Dichte)
+/// nicht mit der Bundesland-Fläche oder -Bevölkerung korreliert. Deutlich größer als die erste
+/// Fassung (z. B. Bayern von 912 KB auf 8 MB): Ein Teil der 16 Regionen hatte die Bänke-
+/// Wiedereinführung (s. `RestStop.swift`) nie mitbekommen und wurde hier zusammen mit den
+/// Biergärten erstmals komplett neu gebaut, s. ROADMAP.md.
 private let restStopApproximateSizeKB: [Bundesland: Int] = [
-    .badenWuerttemberg: 860,
-    .bayern: 912,
-    .berlin: 288,
-    .brandenburg: 436,
-    .bremen: 48,
-    .hamburg: 136,
-    .hessen: 460,
-    .mecklenburgVorpommern: 156,
-    .niedersachsen: 412,
-    .nordrheinWestfalen: 816,
-    .rheinlandPfalz: 428,
-    .saarland: 76,
-    .sachsen: 340,
-    .sachsenAnhalt: 168,
-    .schleswigHolstein: 188,
-    .thueringen: 236,
+    .badenWuerttemberg: 7044,
+    .bayern: 8004,
+    .berlin: 1296,
+    .brandenburg: 2388,
+    .bremen: 200,
+    .hamburg: 592,
+    .hessen: 3792,
+    .mecklenburgVorpommern: 804,
+    .niedersachsen: 3720,
+    .nordrheinWestfalen: 6836,
+    .rheinlandPfalz: 2760,
+    .saarland: 448,
+    .sachsen: 2300,
+    .sachsenAnhalt: 912,
+    .schleswigHolstein: 1384,
+    .thueringen: 1416,
 ]
 
 /// Lädt Rastplatz-Datenbanken herunter und meldet den Fortschritt für `RestStopsOfflineView` -
@@ -65,6 +66,20 @@ final class RestStopDownloadManager {
 
     func approximateSizeKB(_ region: Bundesland) -> Int {
         restStopApproximateSizeKB[region] ?? 0
+    }
+
+    /// "~200 KB" bzw. "~7,0 MB" - seit der Bänke-/Biergarten-Erweiterung liegen etliche Regionen
+    /// im mehrstelligen MB-Bereich (s. `restStopApproximateSizeKB`), eine reine KB-Anzeige wäre dort
+    /// nicht mehr gut lesbar. `Locale(identifier: "de_DE")` explizit gesetzt (s. CLAUDE.md), damit
+    /// das Dezimalkomma unabhängig von der Geräte-Regionseinstellung deutsch bleibt.
+    func approximateSizeDisplay(_ region: Bundesland) -> String {
+        let kb = approximateSizeKB(region)
+        guard kb >= 1000 else { return "~\(kb) KB" }
+        let mb = Double(kb) / 1024
+        let formatted = mb.formatted(
+            .number.precision(.fractionLength(1)).locale(Locale(identifier: "de_DE"))
+        )
+        return "~\(formatted) MB"
     }
 
     func delete(_ region: Bundesland) {

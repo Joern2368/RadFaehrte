@@ -9,7 +9,13 @@ import Foundation
 /// hochzählen - analog `wayGraphFormatVersion` in `WayGraphStore.swift`, aber eigenständig, da
 /// unabhängiges Binärformat. `nonisolated(unsafe)` aus demselben Grund wie dort (Projekt läuft
 /// standardmäßig auf MainActor, `RestStopStore` selbst ist aber bewusst `nonisolated`).
-private nonisolated(unsafe) let restStopsFormatVersion = 2
+///
+/// Version 3 (2026-08-21): Kein Schema-/Spaltenwechsel, sondern ein reiner Inhalts-Refresh - alle
+/// 16 Release-Assets wurden neu gebaut (Bänke-Kategorie, die bei den meisten Bundesländern nie
+/// nachgezogen wurde, plus neue Biergarten-Kategorie, s. ROADMAP.md). Trotzdem hochgezählt, damit
+/// bereits heruntergeladene Regionen beim nächsten Start automatisch verworfen werden statt still
+/// auf altem Datenstand zu bleiben, bis jemand manuell löscht und neu lädt.
+private nonisolated(unsafe) let restStopsFormatVersion = 3
 
 /// Bundesländer, für die eine `rest-stops-v1`-Datei existiert - inzwischen alle 16 (erst als Test
 /// nur Bremen/Niedersachsen, nach positivem Nutzer-Feedback auf ganz Deutschland ausgeweitet, s.

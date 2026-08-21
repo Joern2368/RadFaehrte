@@ -51,8 +51,9 @@ enum AppSettingsDefaults {
 
     static let isVoiceGuidanceEnabled: Bool = true
 
-    /// Opt-in (nicht standardmäßig an): Rastplätze sind bisher nur als Test für Bremen und
-    /// Niedersachsen verfügbar, s. `restStopSupportedRegions`.
+    /// Opt-in (nicht standardmäßig an) - lädt sonst ungefragt Rastplatz-Pins auf die Karte, obwohl
+    /// die zugehörige Region evtl. noch nicht heruntergeladen wurde, s. `restStopSupportedRegions`
+    /// (inzwischen alle 16 Bundesländer).
     static let showRestStops: Bool = false
 
     /// Standardmäßig alle Kategorien aktiv, damit sich für Nutzer, die die Kategorie-Auswahl nicht

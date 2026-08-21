@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Extrahiert Rastplatz-POIs (Trinkwasser, Bänke, Cafés, Aussichtspunkte,
-Fahrrad-Reparaturstationen) aus einem OSM-Bundesland-Extrakt (.osm.pbf) für die
+Fahrrad-Reparaturstationen, Biergärten) aus einem OSM-Bundesland-Extrakt (.osm.pbf) für die
 "Rastplätze"-Kartenanzeige von RadFährte.
 
 Bänke (amenity=bench) waren in einem ersten Test komplett ausgeschlossen: Sie überluden die
@@ -38,6 +38,7 @@ KIND_CAFE = 1
 KIND_VIEWPOINT = 2
 KIND_BICYCLE_REPAIR_STATION = 3
 KIND_BENCH = 4
+KIND_BEER_GARDEN = 5
 
 KIND_LABELS = {
     KIND_DRINKING_WATER: "Trinkwasser",
@@ -45,6 +46,7 @@ KIND_LABELS = {
     KIND_VIEWPOINT: "Aussichtspunkt",
     KIND_BICYCLE_REPAIR_STATION: "Fahrrad-Reparaturstation",
     KIND_BENCH: "Bank",
+    KIND_BEER_GARDEN: "Biergarten",
 }
 
 # Rastergröße für die Bänke-Ausdünnung (s. Modul-Docstring) - grob "eine Sitzgelegenheit pro
@@ -72,6 +74,8 @@ def kind_for(tags):
         return KIND_BICYCLE_REPAIR_STATION
     if tags.get("amenity") == "bench":
         return KIND_BENCH
+    if tags.get("amenity") == "biergarten":
+        return KIND_BEER_GARDEN
     return None
 
 

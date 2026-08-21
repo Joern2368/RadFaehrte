@@ -5134,6 +5134,55 @@ für die ursprüngliche Produktidee.
       [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
       [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`reloadNearbyRestStops`),
       [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
+- [x] **Biergärten als 6. Rastplatz-Kategorie + Nachzieh-Rollout für alle 16 Bundesländer**
+      (2026-08-21): Nutzer-Wunsch. `amenity=biergarten` in `build_rest_stops.py` als `KIND_BEER_GARDEN`
+      ergänzt (Label "Biergarten", Icon `mug.fill`), `RestStop.Kind.beerGarden` +
+      `RestStopRepository.init?(rawKindValue:)`-Fall 5 entsprechend. Erst nur Bremen lokal neu gebaut
+      und **direkt per `xcrun devicectl device copy to`** in den App-Container auf "iPhone von Jörn"
+      geschoben (`Documents/RestStops/bremen.sqlite`) statt über das GitHub-Release - so ließ sich
+      live testen, ohne die anderen 15 Regionen oder Downloads anderer (künftiger) Nutzer anzufassen.
+      **Live-Test für gut befunden**, danach voller Rollout.
+      - **Nebenfund beim Rollout**: Nur Bremen, Bayern (ursprünglich), Baden-Württemberg und
+        Niedersachsen hatten tatsächlich Bank-Daten (`kind=4`) - die Bänke-Wiedereinführung (s.
+        Eintrag "Rastplätze auf der Karte" oben) war nie bei den restlichen 12 Bundesländern
+        angekommen, vermutlich ein unvollständiger Lauf von `build_rest_stops_bundeslaender.sh` beim
+        letzten Mal. Der Biergarten-Rollout hat das automatisch mitgezogen, da jede Region ohnehin
+        komplett aus der `.osm.pbf` neu gebaut wird - entsprechend sind die Dateien für diese 12
+        Regionen jetzt deutlich größer (nicht nur wegen Biergärten, sondern weil sie erstmals
+        überhaupt Bank-Daten enthalten).
+      - **Rollout-Ablauf**: Jedes der 16 Bundesländer einzeln (Nutzer-Wunsch, nach jedem Bundesland
+        gestoppt und auf Freigabe gewartet, s. Roadmap-Konvention weiter oben) - `.osm.pbf` von
+        Geofabrik geladen, `build_rest_stops.py` neu gebaut, direkt per `gh release upload
+        rest-stops-v1 <datei> --clobber` hochgeladen, `.pbf` danach wieder gelöscht (Speicherplatz).
+        `Scripts/build_rest_stops_bundeslaender.sh` selbst nicht verwendet (dessen `STATES`-Liste war
+        ohnehin veraltet, s. o.) - stattdessen jeder Schritt einzeln über die Kommandozeile, passend
+        zum Wunsch nach Pausen zwischen den Bundesländern. Reihenfolge: Bayern, Nordrhein-Westfalen,
+        Baden-Württemberg, Niedersachsen, Rheinland-Pfalz, Thüringen, Sachsen, Brandenburg, Hessen,
+        Schleswig-Holstein, Sachsen-Anhalt, Mecklenburg-Vorpommern, Saarland, Berlin, Hamburg (Bremen
+        vom Test bereits vorher hochgeladen). Alle 16 Assets im Release `rest-stops-v1` aktuell.
+      - **Größen/Zahlen** (Biergärten pro Region, zur Einordnung): Bayern 995, Nordrhein-Westfalen
+        415, Baden-Württemberg 446, Niedersachsen 142, Rheinland-Pfalz 169, Thüringen 136, Sachsen
+        203, Brandenburg 121, Hessen 256, Schleswig-Holstein 31, Sachsen-Anhalt 75,
+        Mecklenburg-Vorpommern 40, Saarland 37, Berlin 48, Hamburg 4, Bremen 10 - Dateigrößen jetzt
+        zwischen 200 KB (Bremen) und 8 MB (Bayern), `RestStopDownloadManager.restStopApproximateSizeKB`
+        entsprechend aktualisiert. Anzeige in `RestStopsOfflineView` wechselt jetzt automatisch zu MB
+        ab 1000 KB (`RestStopDownloadManager.approximateSizeDisplay`, mit explizitem
+        `Locale(identifier: "de_DE")` fürs Dezimalkomma, s. CLAUDE.md) - eine reine KB-Zahl wäre bei
+        8000+ nicht mehr gut lesbar gewesen.
+      - **`restStopsFormatVersion` auf 3 hochgezählt**, obwohl sich am SQLite-Schema selbst nichts
+        geändert hat (reiner Inhalts-Refresh) - damit bereits heruntergeladene Regionen beim nächsten
+        Start automatisch verworfen werden und sich die neuen Kategorien nachladen, statt dass
+        jemand manuell löschen und neu herunterladen muss.
+      → [Scripts/build_rest_stops.py](FahrradApp/Scripts/build_rest_stops.py),
+      [RestStop.swift](FahrradApp/RadFaehrte/Models/RestStop.swift),
+      [RestStopRepository.swift](FahrradApp/RadFaehrte/Services/RestStopRepository.swift),
+      [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift)
+      (`restStopsFormatVersion`),
+      [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift),
+      [RestStopsOfflineView.swift](FahrradApp/RadFaehrte/Views/RestStopsOfflineView.swift),
+      [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
+      [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
+      [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
 
 ## Bekannte Probleme
 
