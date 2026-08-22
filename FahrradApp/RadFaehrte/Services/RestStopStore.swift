@@ -15,7 +15,10 @@ import Foundation
 /// nachgezogen wurde, plus neue Biergarten-Kategorie, s. ROADMAP.md). Trotzdem hochgezählt, damit
 /// bereits heruntergeladene Regionen beim nächsten Start automatisch verworfen werden statt still
 /// auf altem Datenstand zu bleiben, bis jemand manuell löscht und neu lädt.
-private nonisolated(unsafe) let restStopsFormatVersion = 3
+///
+/// Version 4 (2026-08-22): Gleiches Muster für die neue Toiletten-Kategorie - wieder alle 16 Assets
+/// neu gebaut, wieder nur Inhalts-Refresh ohne Schema-Änderung.
+private nonisolated(unsafe) let restStopsFormatVersion = 4
 
 /// Bundesländer, für die eine `rest-stops-v1`-Datei existiert - inzwischen alle 16 (erst als Test
 /// nur Bremen/Niedersachsen, nach positivem Nutzer-Feedback auf ganz Deutschland ausgeweitet, s.

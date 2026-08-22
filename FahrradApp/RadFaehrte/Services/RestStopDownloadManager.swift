@@ -15,29 +15,26 @@ private func restStopDownloadURL(for region: Bundesland) -> URL {
     URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/rest-stops-v1/\(region.rawValue)_reststops.sqlite")!
 }
 
-/// Tatsächliche Release-Asset-Größen in KB (nach dem Bau aller 16 Bundesländer mit Bänken +
-/// Biergärten, 2026-08-21) - anders als die URL kein Formel-Ausdruck, da die Größe (POI-Dichte)
-/// nicht mit der Bundesland-Fläche oder -Bevölkerung korreliert. Deutlich größer als die erste
-/// Fassung (z. B. Bayern von 912 KB auf 8 MB): Ein Teil der 16 Regionen hatte die Bänke-
-/// Wiedereinführung (s. `RestStop.swift`) nie mitbekommen und wurde hier zusammen mit den
-/// Biergärten erstmals komplett neu gebaut, s. ROADMAP.md.
+/// Tatsächliche Release-Asset-Größen in KB (nach dem Bau aller 16 Bundesländer mit Bänken,
+/// Biergärten + Toiletten, 2026-08-22) - anders als die URL kein Formel-Ausdruck, da die Größe
+/// (POI-Dichte) nicht mit der Bundesland-Fläche oder -Bevölkerung korreliert.
 private let restStopApproximateSizeKB: [Bundesland: Int] = [
-    .badenWuerttemberg: 7044,
-    .bayern: 8004,
-    .berlin: 1296,
-    .brandenburg: 2388,
-    .bremen: 200,
-    .hamburg: 592,
-    .hessen: 3792,
-    .mecklenburgVorpommern: 804,
-    .niedersachsen: 3720,
-    .nordrheinWestfalen: 6836,
-    .rheinlandPfalz: 2760,
-    .saarland: 448,
-    .sachsen: 2300,
-    .sachsenAnhalt: 912,
-    .schleswigHolstein: 1384,
-    .thueringen: 1416,
+    .badenWuerttemberg: 7272,
+    .bayern: 8336,
+    .berlin: 1332,
+    .brandenburg: 2488,
+    .bremen: 212,
+    .hamburg: 620,
+    .hessen: 3908,
+    .mecklenburgVorpommern: 872,
+    .niedersachsen: 3880,
+    .nordrheinWestfalen: 7052,
+    .rheinlandPfalz: 2844,
+    .saarland: 460,
+    .sachsen: 2384,
+    .sachsenAnhalt: 948,
+    .schleswigHolstein: 1476,
+    .thueringen: 1460,
 ]
 
 /// Lädt Rastplatz-Datenbanken herunter und meldet den Fortschritt für `RestStopsOfflineView` -

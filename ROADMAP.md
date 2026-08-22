@@ -5183,6 +5183,35 @@ für die ursprüngliche Produktidee.
       [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
       [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
       [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
+- [x] **Toiletten als 7. Rastplatz-Kategorie** (2026-08-22): Nutzer-Wunsch, nach Nachfrage "was wäre
+      noch cool" (Alternativen Picknickplätze und Rastplätze-entlang-der-Route abgewogen, Nutzer
+      wollte nur Toiletten). `amenity=toilets` in `build_rest_stops.py` als `KIND_TOILETS = 6`
+      ergänzt (Label "Toilette", Icon `toilet.fill`), `RestStop.Kind.toilets` +
+      `RestStopRepository.init?(rawKindValue:)`-Fall 6 entsprechend - identisches Muster wie beim
+      Biergarten-Eintrag oben. Genauso erst nur Bremen lokal neu gebaut und live getestet (**für gut
+      befunden**), danach voller Rollout über alle 16 Bundesländer einzeln mit Pause nach jedem
+      (Bayern, Nordrhein-Westfalen, Baden-Württemberg, Niedersachsen, Rheinland-Pfalz, Thüringen,
+      Sachsen, Brandenburg, Hessen, Schleswig-Holstein, Sachsen-Anhalt, Mecklenburg-Vorpommern,
+      Saarland, Berlin, Hamburg - Bremen vorher schon hochgeladen).
+      - **Toiletten pro Region**: Bayern 5295, Nordrhein-Westfalen 3426, Baden-Württemberg 3643,
+        Niedersachsen 2469, Rheinland-Pfalz 1242, Thüringen 672, Sachsen 1315, Brandenburg 1523,
+        Hessen 1829, Schleswig-Holstein 1482, Sachsen-Anhalt 593, Mecklenburg-Vorpommern 1022,
+        Saarland 257, Berlin 626, Hamburg 348, Bremen 143 - deutlich seltener kartiert als Bänke,
+        daher ohne eigenes Ausdünnen übernommen (anders als bei `KIND_BENCH`).
+      - `restStopsFormatVersion` erneut hochgezählt (auf 4, gleiche Begründung wie beim
+        Biergarten-Eintrag: reiner Inhalts-Refresh, aber automatische Aktualisierung bereits
+        heruntergeladener Regionen gewünscht). Größentabelle in `RestStopDownloadManager.swift`
+        entsprechend aktualisiert (z. B. Bayern jetzt 8,3 MB).
+      → [Scripts/build_rest_stops.py](FahrradApp/Scripts/build_rest_stops.py),
+      [RestStop.swift](FahrradApp/RadFaehrte/Models/RestStop.swift),
+      [RestStopRepository.swift](FahrradApp/RadFaehrte/Services/RestStopRepository.swift),
+      [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift)
+      (`restStopsFormatVersion`),
+      [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift),
+      [RestStopsOfflineView.swift](FahrradApp/RadFaehrte/Views/RestStopsOfflineView.swift),
+      [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
+      [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
+      [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
 
 ## Bekannte Probleme
 

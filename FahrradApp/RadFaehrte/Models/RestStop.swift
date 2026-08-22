@@ -58,7 +58,7 @@ struct RestStop: Identifiable, Codable, Equatable {
     ]
 
     enum Kind: String, CaseIterable, Codable, Identifiable {
-        case drinkingWater, cafe, viewpoint, bicycleRepairStation, bench, beerGarden
+        case drinkingWater, cafe, viewpoint, bicycleRepairStation, bench, beerGarden, toilets
 
         var id: String { rawValue }
 
@@ -70,6 +70,7 @@ struct RestStop: Identifiable, Codable, Equatable {
             case .bicycleRepairStation: return "Fahrrad-Reparaturstation"
             case .bench: return "Bank"
             case .beerGarden: return "Biergarten"
+            case .toilets: return "Toilette"
             }
         }
 
@@ -81,6 +82,7 @@ struct RestStop: Identifiable, Codable, Equatable {
             case .bicycleRepairStation: return "wrench.and.screwdriver.fill"
             case .bench: return "chair.fill"
             case .beerGarden: return "mug.fill"
+            case .toilets: return "toilet.fill"
             }
         }
 

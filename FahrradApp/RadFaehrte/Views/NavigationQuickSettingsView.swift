@@ -93,7 +93,7 @@ struct NavigationQuickSettingsView: View {
                 } header: {
                     Text("Rastplätze")
                 } footer: {
-                    Text("Trinkwasser, Cafés, Aussichtspunkte, Fahrrad-Reparaturstationen, Bänke und Biergärten aus OpenStreetMap auf der Karte anzeigen.")
+                    Text("Trinkwasser, Cafés, Aussichtspunkte, Fahrrad-Reparaturstationen, Bänke, Biergärten und Toiletten aus OpenStreetMap auf der Karte anzeigen.")
                 }
             }
             .navigationTitle("Einstellungen")
