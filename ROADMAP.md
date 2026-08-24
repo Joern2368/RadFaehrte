@@ -5259,6 +5259,14 @@ für die ursprüngliche Produktidee.
       [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
       [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
       [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
+- [x] **Sichtweite-Regler: Obergrenze von 200 m auf 300 m erhöht** (2026-08-24, Nutzerwunsch):
+      Reine Bereichsänderung in `AppSettingsDefaults.navigationLookaheadRange` (50...200 →
+      50...300) - Stepper in `NavigationSettingsView`/`NavigationQuickSettingsView` sowie die
+      Kamera-Distanz-Umrechnung (`ContentView.navigationCameraDistance`) übernehmen den neuen
+      Bereich automatisch, da beide den zentralen Range-Wert referenzieren statt eigener
+      Grenzen. Auf dem iPhone des Nutzers gebaut und installiert.
+      → [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift)
+      (`navigationLookaheadRange`)
 
 ## Bekannte Probleme
 

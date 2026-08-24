@@ -28,7 +28,7 @@ enum AppSettingsDefaults {
     /// `ContentView.navigationCameraDistance`), damit sich für Nutzer, die den neuen Regler nicht
     /// anfassen, an der Sichtweite nichts ändert.
     static let navigationLookaheadMeters: Double = 80
-    static let navigationLookaheadRange: ClosedRange<Double> = 50...200
+    static let navigationLookaheadRange: ClosedRange<Double> = 50...300
 
     static let navigationStatFieldCount: Int = 3
     /// Reihenfolge entspricht der bisherigen festen Leiste (Aktuell/Strecke/Ziel) plus drei neuen
