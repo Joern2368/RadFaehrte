@@ -5306,7 +5306,7 @@ für die ursprüngliche Produktidee.
       [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`statDisplay`,
       `progressPercentDisplay`, `sunsetDate`, `compassDirectionText`, `shortTimeFormatter`,
       `navigationStat`), [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
-- [x] **POIs für Länder außerhalb Deutschlands (Luxemburg + Liechtenstein als Testländer)**
+- [x] **POIs für Länder außerhalb Deutschlands (Luxemburg, Liechtenstein, Andorra als Testländer)**
       (2026-08-24, Nutzerfrage "geht das auch für die europäischen Länder"): Bisher waren POIs fest
       auf `Bundesland` zugeschnitten (s. `RestStopStore`-Doc-Kommentar, "für einen 2-Länder-Test wäre
       die generische Abstraktion verfrüht") - mit einem zweiten Land war genau dieser Punkt erreicht.
@@ -5332,12 +5332,13 @@ für die ursprüngliche Produktidee.
       - **UI**: In "Einstellungen" und im Navigations-Schnelleinstellungen-Sheet aus einem
         "POIs herunterladen"-Link zwei geworden ("POIs Deutschland" / "POIs Europa"), analog dem
         bestehenden "Offline-Karten Deutschland"/"Offline-Karten Europa"-Muster.
-      - **Testländer**: Luxemburg (8669 POIs, Release-Asset 544 KB) und Liechtenstein (608 POIs,
-        56 KB) - beide pbf-Dateien lagen bereits lokal vor (aus der früheren Wege-Graph-
-        Onboarding), `build_rest_stops.py` selbst brauchte keine Änderung (war schon
-        länderunabhängig). Auf Nutzerwunsch bewusst nur diese zwei kleinen Länder jetzt, die
-        größeren (Andorra, Malta, Monaco, ... - pbf-Dateien liegen ebenfalls schon lokal vor)
-        macht der Nutzer selbst zu einem späteren Zeitpunkt mit schnellerem Internet. Beide auf dem
+      - **Testländer**: Luxemburg (8669 POIs, Release-Asset 544 KB), Liechtenstein (608 POIs,
+        56 KB) und Andorra (300 POIs, 36 KB) - alle drei pbf-Dateien lagen bereits lokal vor (aus
+        der früheren Wege-Graph-Onboarding), `build_rest_stops.py` selbst brauchte keine Änderung
+        (war schon länderunabhängig). Auf Nutzerwunsch schrittweise, ein Land nach dem anderen mit
+        Zwischen-Check auf dem Gerät (analog dem Bundesländer-Rollout). Weitere kleine Länder
+        (Malta, Monaco, ... - pbf liegt ebenfalls schon lokal vor) sowie die größeren macht der
+        Nutzer selbst zu einem späteren Zeitpunkt mit schnellerem Internet. Alle drei auf dem
         iPhone des Nutzers live getestet ("läuft gut").
       → [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift),
       [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
