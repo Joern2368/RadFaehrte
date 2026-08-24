@@ -5267,6 +5267,45 @@ für die ursprüngliche Produktidee.
       Grenzen. Auf dem iPhone des Nutzers gebaut und installiert.
       → [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift)
       (`navigationLookaheadRange`)
+- [x] **Statistik-Leiste um sechs weitere Werte ergänzt** (2026-08-24, Nutzer-Brainstorm "was
+      könnte man noch hinzufügen" - sechs der vorgeschlagenen Ideen ausgewählt; anders als beim
+      Drei-Werte-Batch vom 2026-08-07 brauchte einer davon (Sonnenuntergang) eine neue, komplett
+      lokale Berechnung statt nur vorhandener Rohdaten):
+      - **Netto-Höhenmeter** (`netElevation`): `tourElevationGainMeters − tourElevationLossMeters`,
+        mit Vorzeichen dargestellt.
+      - **Fahrtrichtung/Himmelsrichtung** (`heading`): `LocationManager.currentHeading` (bereits für
+        die Kamera-Ausrichtung vorhanden) auf 8 Himmelsrichtungen (N/NO/O/SO/S/SW/W/NW) gerundet.
+      - **Fortschritt in %** (`progressPercent`): zurückgelegte Strecke im Verhältnis zur Summe aus
+        zurückgelegter Strecke und Luftlinie zum Ziel (`distanceToDestinationKm`) - dieselbe
+        Luftlinien-Näherung wie beim bereits bestehenden Feld "Entfernung zum Ziel", da die
+        tatsächliche Routenlänge je nach Navigationsmodus (kuratierte Route, Ketten-Match,
+        Direktroute, importierte GPX) aus komplett unterschiedlichen Quellen käme.
+      - **Akkustand des Telefons** (`batteryLevel`): `UIDevice.current.batteryLevel`, dafür
+        `UIDevice.current.isBatteryMonitoringEnabled = true` einmalig in `ContentView.onAppear`
+        gesetzt (ohne das liefert `batteryLevel` dauerhaft -1).
+      - **Aktuelle Uhrzeit** (`currentTime`): einfache `DateFormatter`-Ausgabe.
+      - **Sonnenuntergangszeit / Restzeit bis Sonnenuntergang** (`sunsetTime`/`timeUntilSunset`):
+        neue Datei `SunCalculator.swift` mit einer Low-Precision-Variante des NOAA-Sonnenstand-
+        Algorithmus (Meeus) - läuft komplett lokal aus Standort + Gerätedatum, keine Wetter-/
+        Astronomie-API nötig. Genauigkeit im Bereich weniger Minuten, für eine
+        Orientierungshilfe auf dem Rad ausreichend.
+      - Für die durch die Ergänzungen auf 24 Einträge gewachsene Auswahl-Liste zusätzlich
+        `NavigationStatKind`s Deklarationsreihenfolge (= Reihenfolge in der Einstellungen-Liste)
+        von chronologisch/unsortiert auf thematisch gruppiert umgestellt (Geschwindigkeit → Strecke/
+        Fortschritt → Zeit → Höhe → Sonstiges) - persistierte Auswahl (`rawValue`-Strings) davon
+        unberührt. `arrivalTimeText` nutzt jetzt denselben neuen statischen `shortTimeFormatter` wie
+        `currentTime`/`sunsetTime` statt eine eigene `DateFormatter`-Instanz pro Aufruf anzulegen.
+        Build (Device-Ziel) erfolgreich, auf "iPhone von Jörn" installiert und gestartet - Nutzer
+        hat die neuen Felder live gegengeprüft. Danach noch die Beschriftung unter dem Wert (z. B.
+        "Aktuell", "Strecke", "Ziel") auf Nutzerwunsch von `.caption2` (11 pt) schrittweise auf
+        `.system(size: 14)` vergrößert - benannte Textstile springen in zu großen Stufen (`.caption`
+        = 12 pt, `.footnote` = 13 pt, kein Stil bei genau 14 pt), für pixelgenaue Anpassungswünsche
+        ist eine feste `.system(size:)`-Punktgröße statt eines benannten Stils die passendere Wahl.
+      → [NavigationStat.swift](FahrradApp/RadFaehrte/Models/NavigationStat.swift),
+      [SunCalculator.swift](FahrradApp/RadFaehrte/Services/SunCalculator.swift) (neu),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`statDisplay`,
+      `progressPercentDisplay`, `sunsetDate`, `compassDirectionText`, `shortTimeFormatter`,
+      `navigationStat`), [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
 
 ## Bekannte Probleme
 

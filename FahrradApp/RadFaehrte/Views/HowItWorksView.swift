@@ -35,7 +35,7 @@ struct HowItWorksView: View {
         Topic(
             icon: "square.grid.3x2",
             title: "Statistik-Leiste anpassen",
-            text: "Die Zeile unter der Anweisung während der Navigation zeigt 3 oder 6 frei wählbare Werte, z. B. Tempo, Strecke, Höhenmeter, Fahrzeit oder Ankunftszeit. Anzahl und Belegung stellst du unter Einstellungen > Navigation > Statistik-Leiste ein."
+            text: "Die Zeile unter der Anweisung während der Navigation zeigt 3 oder 6 frei wählbare Werte, z. B. Tempo, Strecke, Höhenmeter, Fahrzeit, Ankunftszeit, Fortschritt in %, Fahrtrichtung, Akkustand, Uhrzeit oder Sonnenuntergangszeit. Anzahl und Belegung stellst du unter Einstellungen > Navigation > Statistik-Leiste ein."
         ),
         Topic(
             icon: "hand.tap",

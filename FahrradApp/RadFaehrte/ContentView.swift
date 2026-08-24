@@ -5,6 +5,7 @@
 
 import SwiftUI
 import MapKit
+import UIKit
 
 /// Ergebnis der Straßennamen-Suche für einen kuratierten Treffer/eine kombinierte Kette (s.
 /// `curatedRouteStepsDetailSheet`/`combinedRouteDetailSheet`) - unterscheidet zwei grundverschiedene
@@ -664,6 +665,9 @@ struct ContentView: View {
             }
             favoritePlaces = favoritePlaceStore.loadAll()
             recentPlaces = recentPlaceStore.loadAll()
+            // Ohne das liefert `UIDevice.current.batteryLevel` immer -1 (unbekannt) - Grundlage für
+            // `NavigationStatKind.batteryLevel` in `statDisplay(for:)`.
+            UIDevice.current.isBatteryMonitoringEnabled = true
         }
         .onChange(of: startPlace) { runMatching(); updateCamera(); loadNearbyMatches() }
         .onChange(of: zielPlace) { runMatching(); updateCamera(); loadNearbyMatches() }
@@ -2208,7 +2212,7 @@ struct ContentView: View {
             Text(unit.isEmpty ? value : "\(value) \(unit)")
                 .font(.headline)
             Text(label)
-                .font(.caption2)
+                .font(.system(size: 14))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -2257,8 +2261,67 @@ struct ContentView: View {
             return (String(format: "%.0f", tourMaxAltitudeMeters), "m")
         case .pausedTime:
             return pausedTimeDisplay
+        case .progressPercent:
+            return progressPercentDisplay
+        case .netElevation:
+            let net = (tourElevationGainMeters - tourElevationLossMeters).rounded()
+            return (net == 0 ? "0" : String(format: "%+.0f", net), "hm")
+        case .heading:
+            guard let heading = locationManager.currentHeading else { return ("–", "") }
+            return (Self.compassDirectionText(headingDegrees: heading), "")
+        case .currentTime:
+            return (Self.shortTimeFormatter.string(from: Date()), "")
+        case .sunsetTime:
+            guard let sunsetDate else { return ("–", "") }
+            return (Self.shortTimeFormatter.string(from: sunsetDate), "")
+        case .timeUntilSunset:
+            guard let sunsetDate else { return ("–", "") }
+            let remainingSeconds = sunsetDate.timeIntervalSince(Date())
+            guard remainingSeconds > 0 else { return ("–", "") }
+            return durationDisplay(seconds: Int(remainingSeconds))
+        case .batteryLevel:
+            let level = UIDevice.current.batteryLevel
+            guard level >= 0 else { return ("–", "") }
+            return (String(format: "%.0f", level * 100), "%")
         }
     }
+
+    /// Fortschritt der Fahrt in Prozent, geschätzt aus zurückgelegter Strecke im Verhältnis zur
+    /// Summe aus zurückgelegter Strecke und Luftlinie zum Ziel (`distanceToDestinationKm`) - genau
+    /// wie `distanceToDestination` selbst nutzt das die Luftlinie statt der tatsächlichen
+    /// Routenlänge, da Letztere je nach Modus (kuratierte Route, Ketten-Match, Direktroute,
+    /// importierte GPX) aus komplett unterschiedlichen Quellen käme. Für eine grobe
+    /// Fortschrittsanzeige reicht die Näherung.
+    private var progressPercentDisplay: (value: String, unit: String) {
+        guard let distanceToDestinationKm, tourStartTime != nil else { return ("–", "") }
+        let traveledKm = tourDistanceMeters / 1000
+        let totalKm = traveledKm + distanceToDestinationKm
+        guard totalKm > 0 else { return ("–", "") }
+        let percent = min(100, max(0, traveledKm / totalKm * 100))
+        return (String(format: "%.0f", percent), "%")
+    }
+
+    private var sunsetDate: Date? {
+        guard let coordinate = locationManager.currentLocation?.coordinate else { return nil }
+        return SunCalculator.sunset(for: coordinate, on: Date())
+    }
+
+    private static let compassDirectionLabels = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
+
+    private static func compassDirectionText(headingDegrees: CLLocationDirection) -> String {
+        let normalized = headingDegrees.truncatingRemainder(dividingBy: 360)
+        let adjusted = normalized < 0 ? normalized + 360 : normalized
+        let index = Int((adjusted / 45).rounded()) % 8
+        return compassDirectionLabels[index]
+    }
+
+    private static let shortTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "de_DE")
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }()
 
     /// Durchschnittstempo der laufenden Fahrt, bezogen auf die reine Bewegungszeit
     /// (`tourMovingSeconds`) statt der Gesamtzeit seit `tourStartTime` - sonst würde jede Pause
@@ -2347,11 +2410,7 @@ struct ContentView: View {
     private func arrivalTimeText(speedKmh: Double) -> String? {
         guard let remainingHours = remainingHours(speedKmh: speedKmh) else { return nil }
         let arrival = Date().addingTimeInterval(remainingHours * 3600)
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "de_DE")
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter.string(from: arrival)
+        return Self.shortTimeFormatter.string(from: arrival)
     }
 
     private func remainingTimeDisplay(speedKmh: Double) -> (value: String, unit: String) {
