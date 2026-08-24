@@ -18,7 +18,8 @@ struct SettingsView: View {
     let franceWayGraphStore: WayGraphStore<FranceRegion>
     let italyWayGraphStore: WayGraphStore<ItalyRegion>
     let spainWayGraphStore: WayGraphStore<SpainRegion>
-    let restStopStore: RestStopStore
+    let restStopStore: RestStopStore<Bundesland>
+    let europaRestStopStore: RestStopStore<EuropaLand>
     private let recentPlaceStore = RecentPlaceStore()
     @State private var showClearRecentsConfirmation = false
 
@@ -28,7 +29,8 @@ struct SettingsView: View {
         franceWayGraphStore: WayGraphStore<FranceRegion> = WayGraphStore(),
         italyWayGraphStore: WayGraphStore<ItalyRegion> = WayGraphStore(),
         spainWayGraphStore: WayGraphStore<SpainRegion> = WayGraphStore(),
-        restStopStore: RestStopStore = RestStopStore()
+        restStopStore: RestStopStore<Bundesland> = RestStopStore(),
+        europaRestStopStore: RestStopStore<EuropaLand> = RestStopStore()
     ) {
         self.wayGraphStore = wayGraphStore
         self.europaWayGraphStore = europaWayGraphStore
@@ -36,6 +38,7 @@ struct SettingsView: View {
         self.italyWayGraphStore = italyWayGraphStore
         self.spainWayGraphStore = spainWayGraphStore
         self.restStopStore = restStopStore
+        self.europaRestStopStore = europaRestStopStore
     }
 
     var body: some View {
@@ -145,9 +148,14 @@ struct SettingsView: View {
                         Label("POI-Kategorien", systemImage: "line.3.horizontal.decrease.circle")
                     }
                     NavigationLink {
-                        RestStopsOfflineView(store: restStopStore)
+                        RestStopsOfflineView(store: restStopStore, title: "POIs Deutschland", regions: restStopSupportedRegions)
                     } label: {
-                        Label("POIs herunterladen", systemImage: "mappin.and.ellipse")
+                        Label("POIs Deutschland herunterladen", systemImage: "mappin.and.ellipse")
+                    }
+                    NavigationLink {
+                        RestStopsOfflineView(store: europaRestStopStore, title: "POIs Europa", regions: restStopSupportedEuropaLands)
+                    } label: {
+                        Label("POIs Europa herunterladen", systemImage: "mappin.and.ellipse")
                     }
                 } header: {
                     Text("POIs")

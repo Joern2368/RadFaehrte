@@ -48,8 +48,11 @@ struct RootTabView: View {
     private let spainWayGraphStore = WayGraphStore<SpainRegion>()
     /// Eine Instanz für die ganze App, damit ein in den Einstellungen heruntergeladenes
     /// Rastplätze-Bundesland sofort auf der Karte in `ContentView` sichtbar wird - analog
-    /// `wayGraphStore`, aber eigenständig (s. `RestStopStore`-Doc-Kommentar).
-    private let restStopStore = RestStopStore()
+    /// `wayGraphStore`.
+    private let restStopStore = RestStopStore<Bundesland>()
+    /// Analog `restStopStore`, aber für Länder außerhalb Deutschlands (aktuell nur Luxemburg, s.
+    /// `restStopSupportedEuropaLands`).
+    private let europaRestStopStore = RestStopStore<EuropaLand>()
 
     var body: some View {
         ZStack {
@@ -64,6 +67,7 @@ struct RootTabView: View {
                         italyWayGraphStore: italyWayGraphStore,
                         spainWayGraphStore: spainWayGraphStore,
                         restStopStore: restStopStore,
+                        europaRestStopStore: europaRestStopStore,
                         onTourSaved: { drivenToursVersion += 1 }
                     )
                 }
@@ -94,7 +98,8 @@ struct RootTabView: View {
                         franceWayGraphStore: franceWayGraphStore,
                         italyWayGraphStore: italyWayGraphStore,
                         spainWayGraphStore: spainWayGraphStore,
-                        restStopStore: restStopStore
+                        restStopStore: restStopStore,
+                        europaRestStopStore: europaRestStopStore
                     )
                 }
             }

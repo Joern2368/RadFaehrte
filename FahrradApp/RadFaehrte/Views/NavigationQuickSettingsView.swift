@@ -22,7 +22,8 @@ struct NavigationQuickSettingsView: View {
     @AppStorage(AppSettingsKey.mapStyle) private var mapStyleRaw = AppSettingsDefaults.mapStyle
     @AppStorage(AppSettingsKey.isVoiceGuidanceEnabled) private var isVoiceGuidanceEnabled = AppSettingsDefaults.isVoiceGuidanceEnabled
     @AppStorage(AppSettingsKey.showRestStops) private var showRestStops = AppSettingsDefaults.showRestStops
-    let restStopStore: RestStopStore
+    let restStopStore: RestStopStore<Bundesland>
+    let europaRestStopStore: RestStopStore<EuropaLand>
 
     var body: some View {
         NavigationStack {
@@ -86,9 +87,14 @@ struct NavigationQuickSettingsView: View {
                         Label("POI-Kategorien", systemImage: "line.3.horizontal.decrease.circle")
                     }
                     NavigationLink {
-                        RestStopsOfflineView(store: restStopStore)
+                        RestStopsOfflineView(store: restStopStore, title: "POIs Deutschland", regions: restStopSupportedRegions)
                     } label: {
-                        Label("POIs herunterladen", systemImage: "mappin.and.ellipse")
+                        Label("POIs Deutschland herunterladen", systemImage: "mappin.and.ellipse")
+                    }
+                    NavigationLink {
+                        RestStopsOfflineView(store: europaRestStopStore, title: "POIs Europa", regions: restStopSupportedEuropaLands)
+                    } label: {
+                        Label("POIs Europa herunterladen", systemImage: "mappin.and.ellipse")
                     }
                 } header: {
                     Text("POIs")
@@ -108,5 +114,5 @@ struct NavigationQuickSettingsView: View {
 }
 
 #Preview {
-    NavigationQuickSettingsView(restStopStore: RestStopStore())
+    NavigationQuickSettingsView(restStopStore: RestStopStore(), europaRestStopStore: RestStopStore())
 }

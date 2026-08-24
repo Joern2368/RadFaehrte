@@ -5306,6 +5306,48 @@ für die ursprüngliche Produktidee.
       [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`statDisplay`,
       `progressPercentDisplay`, `sunsetDate`, `compassDirectionText`, `shortTimeFormatter`,
       `navigationStat`), [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
+- [x] **POIs für Länder außerhalb Deutschlands (Luxemburg + Liechtenstein als Testländer)**
+      (2026-08-24, Nutzerfrage "geht das auch für die europäischen Länder"): Bisher waren POIs fest
+      auf `Bundesland` zugeschnitten (s. `RestStopStore`-Doc-Kommentar, "für einen 2-Länder-Test wäre
+      die generische Abstraktion verfrüht") - mit einem zweiten Land war genau dieser Punkt erreicht.
+      - **Genericisierung**: `RestStopStore`/`RestStopDownloadManager`/`RestStopsOfflineView` von fest
+        `Bundesland` auf `<Region: DownloadableRegion>` bzw. dem neuen, engeren
+        `RestStopDownloadableRegion`-Protokoll (`restStopDownloadURL`/`restStopApproximateSizeKB` -
+        eigene Requirements statt `DownloadableRegion.downloadURL`/`.approximateSizeMB`, die bereits
+        für die Wege-Graphen reserviert sind) umgestellt - direkt analog zu `WayGraphStore<Region>`,
+        das für die Wege-Graphen bereits denselben Weg (Bundesland → +EuropaLand → +Frankreich/
+        Italien/Spanien) gegangen ist. Koppelt die POI-Funktion nicht an die Wege-Graph-Klassen
+        selbst, bleibt also weiterhin unabhängig entfernbar.
+      - **Neue Konstante** `restStopSupportedEuropaLands: [EuropaLand]` (analog
+        `restStopSupportedRegions`), bewusst nicht `EuropaLand.allCases` (von 34 Fällen haben bisher
+        nur zwei eine gebaute POI-Datei). Zweite `RestStopStore<EuropaLand>`-Instanz app-weit in
+        `RootTabView`, durchgereicht an `ContentView`/`SettingsView`/`NavigationQuickSettingsView` -
+        gemeinsamer physischer Ordner `Documents/RestStops/` mit den Bundesland-Dateien (keine
+        `rawValue`-Kollision).
+      - **Neuer Release-Tag** `rest-stops-eu-v1` (statt `rest-stops-v1`, das implizit
+        Bundesland-only ist) - analog `way-graphs-eu-v1` bei den Wege-Graphen.
+      - **`ContentView.restStopCandidatePaths`** aggregiert jetzt Pfade aus beiden Regionstypen
+        (Bundesland-Liste + Europa-Liste, je mit eigenem `boundingBox`-Vorfilter), analog dem
+        bestehenden Mehrfach-Typ-Muster in `offlineGraphCandidatePaths`.
+      - **UI**: In "Einstellungen" und im Navigations-Schnelleinstellungen-Sheet aus einem
+        "POIs herunterladen"-Link zwei geworden ("POIs Deutschland" / "POIs Europa"), analog dem
+        bestehenden "Offline-Karten Deutschland"/"Offline-Karten Europa"-Muster.
+      - **Testländer**: Luxemburg (8669 POIs, Release-Asset 544 KB) und Liechtenstein (608 POIs,
+        56 KB) - beide pbf-Dateien lagen bereits lokal vor (aus der früheren Wege-Graph-
+        Onboarding), `build_rest_stops.py` selbst brauchte keine Änderung (war schon
+        länderunabhängig). Auf Nutzerwunsch bewusst nur diese zwei kleinen Länder jetzt, die
+        größeren (Andorra, Malta, Monaco, ... - pbf-Dateien liegen ebenfalls schon lokal vor)
+        macht der Nutzer selbst zu einem späteren Zeitpunkt mit schnellerem Internet. Beide auf dem
+        iPhone des Nutzers live getestet ("läuft gut").
+      → [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift),
+      [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
+      (`RestStopDownloadableRegion`, `Bundesland`/`EuropaLand`-Konformitäten),
+      [RestStopsOfflineView.swift](FahrradApp/RadFaehrte/Views/RestStopsOfflineView.swift),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`restStopCandidatePaths`,
+      `europaRestStopStore`), [RootTabView.swift](FahrradApp/RadFaehrte/RootTabView.swift),
+      [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
+      [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
+      [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
 
 ## Bekannte Probleme
 

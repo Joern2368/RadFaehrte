@@ -70,7 +70,10 @@ struct ContentView: View {
     /// Für die App gemeinsame Instanz, um heruntergeladene Rastplätze-Bundesländer zu finden (s.
     /// `reloadNearbyRestStops`) - unabhängig von den Wege-Graph-Stores oben (s.
     /// `RestStopStore`-Doc-Kommentar).
-    var restStopStore = RestStopStore()
+    var restStopStore = RestStopStore<Bundesland>()
+    /// Analog `restStopStore`, aber für Länder außerhalb Deutschlands (aktuell nur Luxemburg, s.
+    /// `restStopSupportedEuropaLands`).
+    var europaRestStopStore = RestStopStore<EuropaLand>()
     /// Von `RootTabView` übergeben, um nach dem Speichern einer Fahrt den Verlauf-Tab zum
     /// Neuladen zu bewegen (siehe `HistoryView.refreshTrigger`).
     var onTourSaved: () -> Void = {}
@@ -787,7 +790,7 @@ struct ContentView: View {
             curatedRouteStepsDetailSheet(match)
         }
         .sheet(isPresented: $showQuickSettings) {
-            NavigationQuickSettingsView(restStopStore: restStopStore)
+            NavigationQuickSettingsView(restStopStore: restStopStore, europaRestStopStore: europaRestStopStore)
         }
         .sheet(item: $exportFile) { file in
             ActivityView(activityItems: [file.url])
@@ -1779,9 +1782,13 @@ struct ContentView: View {
             CLLocationCoordinate2D(latitude: region.center.latitude + halfLat, longitude: region.center.longitude - halfLon),
             CLLocationCoordinate2D(latitude: region.center.latitude + halfLat, longitude: region.center.longitude + halfLon),
         ]
-        return restStopSupportedRegions
+        let bundeslaender = restStopSupportedRegions
             .filter { bundesland in corners.contains { bundesland.boundingBox.contains($0) } }
             .compactMap { restStopStore.path(for: $0) }
+        let laender = restStopSupportedEuropaLands
+            .filter { land in corners.contains { land.boundingBox.contains($0) } }
+            .compactMap { europaRestStopStore.path(for: $0) }
+        return bundeslaender + laender
     }
 
     /// Lädt Rastplätze im sichtbaren Kartenausschnitt neu - aufgerufen bei jeder Kamerabewegung

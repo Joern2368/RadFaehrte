@@ -6,70 +6,107 @@
 import Foundation
 import Observation
 
-/// GitHub-Release-Adresse der Rastplatz-Datenbanken (s. `Scripts/build_rest_stops.py`), separat
-/// vom Wege-Graph-Release (`way-graphs-v5`) und von `Bundesland`s dort reservierter `downloadURL`.
-/// Formel statt Dictionary (analog `Bundesland.downloadURL` in `WayGraphDownloadManager.swift`),
-/// da inzwischen alle 16 Bundesländer denselben `rest-stops-v1`-Tag nutzen, s.
-/// `restStopSupportedRegions`.
-private func restStopDownloadURL(for region: Bundesland) -> URL {
-    URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/rest-stops-v1/\(region.rawValue)_reststops.sqlite")!
+/// Ergänzt `DownloadableRegion` um die POI-spezifische Download-Adresse/-Größe - eigenes, kleines
+/// Protokoll statt Wiederverwendung von `DownloadableRegion.downloadURL`/`.approximateSizeMB`, da
+/// diese bereits für die (unabhängigen) Wege-Graph-Release-Assets reserviert sind und andere
+/// Werte/Release-Tags hätten.
+nonisolated protocol RestStopDownloadableRegion: DownloadableRegion {
+    var restStopDownloadURL: URL { get }
+    /// Tatsächliche Release-Asset-Größe in KB, für die Anzeige vor dem Download - reine
+    /// Nachschlagewerte statt Formel, da die POI-Dichte nicht mit Fläche/Bevölkerung korreliert
+    /// (s. `Bundesland`/`EuropaLand`-Konformitäten unten).
+    var restStopApproximateSizeKB: Int { get }
 }
 
-/// Tatsächliche Release-Asset-Größen in KB (nach dem Bau aller 16 Bundesländer mit E-Bike-
-/// Ladestationen + Bäckereien, 2026-08-24) - anders als die URL kein Formel-Ausdruck, da die Größe
-/// (POI-Dichte) nicht mit der Bundesland-Fläche oder -Bevölkerung korreliert.
-private let restStopApproximateSizeKB: [Bundesland: Int] = [
-    .badenWuerttemberg: 7768,
-    .bayern: 8932,
-    .berlin: 1456,
-    .brandenburg: 2704,
-    .bremen: 232,
-    .hamburg: 680,
-    .hessen: 4156,
-    .mecklenburgVorpommern: 920,
-    .niedersachsen: 4240,
-    .nordrheinWestfalen: 7684,
-    .rheinlandPfalz: 3008,
-    .saarland: 508,
-    .sachsen: 2624,
-    .sachsenAnhalt: 1044,
-    .schleswigHolstein: 1596,
-    .thueringen: 1568,
-]
-
-/// Lädt Rastplatz-Datenbanken herunter und meldet den Fortschritt für `RestStopsOfflineView` -
-/// analog `WayGraphDownloadManager`, aber fest auf `Bundesland` zugeschnitten (statt generisch über
-/// `Region: DownloadableRegion`) und nur über `restStopSupportedRegions` iterierend, nicht über
-/// `restStopSupportedRegions` statt direkt `Bundesland.allCases`, s. dessen Doc-Kommentar.
-@Observable
-final class RestStopDownloadManager {
-    private let store: RestStopStore
-    private(set) var downloaded: Set<Bundesland>
-    private(set) var progress: [Bundesland: Double] = [:]
-    private(set) var deletingRegions: Set<Bundesland> = []
-    var errorMessage: String?
-
-    private var observations: [Bundesland: NSKeyValueObservation] = [:]
-    private var tasks: [Bundesland: URLSessionDownloadTask] = [:]
-
-    init(store: RestStopStore) {
-        self.store = store
-        downloaded = Set(restStopSupportedRegions.filter { store.isDownloaded($0) })
+/// `rest-stops-v1`-Release, separat vom Wege-Graph-Release (`way-graphs-v5`) und von `Bundesland`s
+/// dort reservierter `downloadURL`. Formel statt Dictionary (analog `Bundesland.downloadURL` in
+/// `WayGraphDownloadManager.swift`), da inzwischen alle 16 Bundesländer denselben Tag nutzen, s.
+/// `restStopSupportedRegions`.
+nonisolated extension Bundesland: RestStopDownloadableRegion {
+    var restStopDownloadURL: URL {
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/rest-stops-v1/\(rawValue)_reststops.sqlite")!
     }
 
-    func isDownloaded(_ region: Bundesland) -> Bool {
+    /// Tatsächliche Release-Asset-Größen in KB (nach dem Bau aller 16 Bundesländer mit E-Bike-
+    /// Ladestationen + Bäckereien, 2026-08-24).
+    var restStopApproximateSizeKB: Int {
+        switch self {
+        case .badenWuerttemberg: return 7768
+        case .bayern: return 8932
+        case .berlin: return 1456
+        case .brandenburg: return 2704
+        case .bremen: return 232
+        case .hamburg: return 680
+        case .hessen: return 4156
+        case .mecklenburgVorpommern: return 920
+        case .niedersachsen: return 4240
+        case .nordrheinWestfalen: return 7684
+        case .rheinlandPfalz: return 3008
+        case .saarland: return 508
+        case .sachsen: return 2624
+        case .sachsenAnhalt: return 1044
+        case .schleswigHolstein: return 1596
+        case .thueringen: return 1568
+        }
+    }
+}
+
+/// Eigener Release-Tag `rest-stops-eu-v1` statt `rest-stops-v1` (analog dem Wege-Graph-Muster
+/// `way-graphs-v5` für Bundesländer vs. `way-graphs-eu-v1` für `EuropaLand`) - bisher nur Luxemburg
+/// als Testland gebaut, s. `restStopSupportedEuropaLands`.
+nonisolated extension EuropaLand: RestStopDownloadableRegion {
+    var restStopDownloadURL: URL {
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/rest-stops-eu-v1/\(rawValue)_reststops.sqlite")!
+    }
+
+    var restStopApproximateSizeKB: Int {
+        switch self {
+        case .luxembourg: return 544
+        case .liechtenstein: return 56
+        default:
+            // Nur Luxemburg/Liechtenstein haben bisher eine gebaute POI-Datei (s.
+            // `restStopSupportedEuropaLands`) - dieser Zweig wird praktisch nie erreicht, ist aber
+            // wegen der Exhaustiveness-Prüfung über alle 34 `EuropaLand`-Fälle nötig.
+            return 0
+        }
+    }
+}
+
+/// Lädt Rastplatz-Datenbanken herunter und meldet den Fortschritt für `RestStopsOfflineView` -
+/// analog `WayGraphDownloadManager<Region>`, generisch über `Region: RestStopDownloadableRegion`
+/// seit Luxemburg als zweitem unterstützten Land (s. `RestStopStore`-Doc-Kommentar). Anders als bei
+/// `WayGraphDownloadManager` liest der Initialisierer die unterstützten Regionen nicht selbst aus
+/// einer einzigen globalen Konstante, sondern bekommt sie übergeben (`restStopSupportedRegions` bzw.
+/// `restStopSupportedEuropaLands` - zwei getrennte Listen, eine pro Regionstyp).
+@Observable
+final class RestStopDownloadManager<Region: RestStopDownloadableRegion> {
+    private let store: RestStopStore<Region>
+    private(set) var downloaded: Set<Region>
+    private(set) var progress: [Region: Double] = [:]
+    private(set) var deletingRegions: Set<Region> = []
+    var errorMessage: String?
+
+    private var observations: [Region: NSKeyValueObservation] = [:]
+    private var tasks: [Region: URLSessionDownloadTask] = [:]
+
+    init(store: RestStopStore<Region>, supportedRegions: [Region]) {
+        self.store = store
+        downloaded = Set(supportedRegions.filter { store.isDownloaded($0) })
+    }
+
+    func isDownloaded(_ region: Region) -> Bool {
         downloaded.contains(region)
     }
 
-    func approximateSizeKB(_ region: Bundesland) -> Int {
-        restStopApproximateSizeKB[region] ?? 0
+    func approximateSizeKB(_ region: Region) -> Int {
+        region.restStopApproximateSizeKB
     }
 
     /// "~200 KB" bzw. "~7,0 MB" - seit der Bänke-/Biergarten-Erweiterung liegen etliche Regionen
     /// im mehrstelligen MB-Bereich (s. `restStopApproximateSizeKB`), eine reine KB-Anzeige wäre dort
     /// nicht mehr gut lesbar. `Locale(identifier: "de_DE")` explizit gesetzt (s. CLAUDE.md), damit
     /// das Dezimalkomma unabhängig von der Geräte-Regionseinstellung deutsch bleibt.
-    func approximateSizeDisplay(_ region: Bundesland) -> String {
+    func approximateSizeDisplay(_ region: Region) -> String {
         let kb = approximateSizeKB(region)
         guard kb >= 1000 else { return "~\(kb) KB" }
         let mb = Double(kb) / 1024
@@ -79,7 +116,7 @@ final class RestStopDownloadManager {
         return "~\(formatted) MB"
     }
 
-    func delete(_ region: Bundesland) {
+    func delete(_ region: Region) {
         guard !deletingRegions.contains(region) else { return }
         let path = store.path(for: region)
         deletingRegions.insert(region)
@@ -95,15 +132,15 @@ final class RestStopDownloadManager {
         }
     }
 
-    func cancel(_ region: Bundesland) {
+    func cancel(_ region: Region) {
         tasks[region]?.cancel()
     }
 
-    func download(_ region: Bundesland) {
+    func download(_ region: Region) {
         guard progress[region] == nil else { return }
         progress[region] = 0
 
-        let task = URLSession.shared.downloadTask(with: restStopDownloadURL(for: region)) { [store] tempURL, _, error in
+        let task = URLSession.shared.downloadTask(with: region.restStopDownloadURL) { [store] tempURL, _, error in
             // Synchron im Completion-Handler übernehmen, nicht erst nach einem Hop auf den
             // MainActor - URLSession löscht die temporäre Datei sofort nach Rückkehr des Handlers
             // (s. ausführlicher Kommentar in `WayGraphDownloadManager.download`).

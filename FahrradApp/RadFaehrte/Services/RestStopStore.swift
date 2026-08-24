@@ -32,13 +32,23 @@ private nonisolated(unsafe) let restStopsFormatVersion = 5
 /// Stelle ausgeschlossen werden kann.
 let restStopSupportedRegions: [Bundesland] = Bundesland.allCases
 
+/// Länder außerhalb Deutschlands, für die eine `rest-stops-eu-v1`-Datei existiert - bisher zwei
+/// kleine Testländer, Luxemburg und Liechtenstein (beide 2026-08-24), analog dem ursprünglichen
+/// Bremen/Niedersachsen-Test bei den Bundesländern. Bewusst nicht `EuropaLand.allCases` (von dessen
+/// 34 Fällen hat bisher nur diese beiden eine gebaute POI-Datei) - Erweiterung auf weitere Länder
+/// erfolgt hier, analog `restStopSupportedRegions`.
+let restStopSupportedEuropaLands: [EuropaLand] = [.luxembourg, .liechtenstein]
+
 /// Verwaltet heruntergeladene Rastplatz-Datenbanken (s. `RestStopRepository`), jeweils eine
-/// SQLite-Datei pro Bundesland in `Documents/RestStops/` - analog `WayGraphStore`, aber bewusst
-/// eigenständig statt generisch über `Region: DownloadableRegion`: Für einen 2-Länder-Test wäre
-/// die generische Abstraktion verfrüht, und ein eigenständiger Typ hält diese neue, experimentelle
-/// Funktion sauber von der bestehenden Wege-Graph-Maschinerie getrennt (leicht rückbaubar, falls
-/// sich das Feature nicht bewährt).
-nonisolated final class RestStopStore {
+/// SQLite-Datei pro Region in `Documents/RestStops/` - analog `WayGraphStore<Region>`, generisch
+/// über `Region: DownloadableRegion` seit Luxemburg als zweitem unterstützten Land (2026-08-24;
+/// zuvor bewusst fest auf `Bundesland`, s. Versionsgeschichte in ROADMAP.md, da eine generische
+/// Abstraktion für einen reinen 2-Länder-Test verfrüht gewesen wäre). Die Genericisierung über
+/// `DownloadableRegion` koppelt nicht an die Wege-Graph-Klassen (`WayGraphStore` o. Ä.) - das
+/// Protokoll ist eine eigenständige, bereits von `Bundesland`/`EuropaLand` für andere Zwecke erfüllte
+/// Abstraktion. Die POI-Funktion bleibt dadurch weiterhin ein eigener, unabhängig entfernbarer
+/// Klassenbaum, getrennt von der Wege-Graph-Maschinerie.
+nonisolated final class RestStopStore<Region: DownloadableRegion> {
     private let directory: URL
 
     init() {
@@ -59,21 +69,21 @@ nonisolated final class RestStopStore {
         try? "\(restStopsFormatVersion)".write(to: versionFile, atomically: true, encoding: .utf8)
     }
 
-    func isDownloaded(_ region: Bundesland) -> Bool {
+    func isDownloaded(_ region: Region) -> Bool {
         FileManager.default.fileExists(atPath: fileURL(for: region).path)
     }
 
-    func path(for region: Bundesland) -> String? {
+    func path(for region: Region) -> String? {
         isDownloaded(region) ? fileURL(for: region).path : nil
     }
 
-    func delete(_ region: Bundesland) {
+    func delete(_ region: Region) {
         try? FileManager.default.removeItem(at: fileURL(for: region))
     }
 
     /// Übernimmt eine fertig heruntergeladene Datei an ihren endgültigen Platz - analog
     /// `WayGraphStore.save(downloadedFile:for:)`.
-    func save(downloadedFile tempURL: URL, for region: Bundesland) throws {
+    func save(downloadedFile tempURL: URL, for region: Region) throws {
         let destination = fileURL(for: region)
         if FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
@@ -81,7 +91,7 @@ nonisolated final class RestStopStore {
         try FileManager.default.moveItem(at: tempURL, to: destination)
     }
 
-    private func fileURL(for region: Bundesland) -> URL {
+    private func fileURL(for region: Region) -> URL {
         directory.appendingPathComponent("\(region.rawValue).sqlite")
     }
 }
