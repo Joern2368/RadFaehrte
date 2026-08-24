@@ -187,6 +187,25 @@ nonisolated extension SpainRegion {
     }
 }
 
+/// GitHub-Release-Adresse und tatsächliche Downloadgröße der Wege-Graphen für die 6
+/// norwegischen Regionen - eigener Release-Tag (`way-graphs-no-v1`), analog `way-graphs-es-v1`.
+nonisolated extension NorwayRegion {
+    var downloadURL: URL {
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/way-graphs-no-v1/\(rawValue)_ways.sqlite")!
+    }
+
+    var approximateSizeMB: Int {
+        switch self {
+        case .nordNorge: return 144
+        case .ostlandet: return 536
+        case .sorlandet: return 73
+        case .svalbardJanMayen: return 1
+        case .trondelag: return 118
+        case .vestlandet: return 279
+        }
+    }
+}
+
 /// Lädt Wege-Graphen für die "ruhige Wege"-Offline-Routing-Engine herunter (siehe
 /// `WayGraphStore`, `BikeRoutingEngine`) und meldet den Fortschritt für die Einstellungen-UI.
 /// Generisch über `Region` (`Bundesland`, `EuropaLand`, `FranceRegion` oder `ItalyRegion`), analog `WayGraphStore`.

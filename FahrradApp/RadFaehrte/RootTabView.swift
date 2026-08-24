@@ -46,6 +46,9 @@ struct RootTabView: View {
     /// Analog `franceWayGraphStore`/`italyWayGraphStore`, aber für die 18 spanischen Regionen (s.
     /// `SpainRegion`-Doc-Kommentar).
     private let spainWayGraphStore = WayGraphStore<SpainRegion>()
+    /// Analog `franceWayGraphStore`/`italyWayGraphStore`/`spainWayGraphStore`, aber für die 6
+    /// norwegischen Regionen (s. `NorwayRegion`-Doc-Kommentar).
+    private let norwayWayGraphStore = WayGraphStore<NorwayRegion>()
     /// Eine Instanz für die ganze App, damit ein in den Einstellungen heruntergeladenes
     /// Rastplätze-Bundesland sofort auf der Karte in `ContentView` sichtbar wird - analog
     /// `wayGraphStore`.
@@ -66,6 +69,7 @@ struct RootTabView: View {
                         franceWayGraphStore: franceWayGraphStore,
                         italyWayGraphStore: italyWayGraphStore,
                         spainWayGraphStore: spainWayGraphStore,
+                        norwayWayGraphStore: norwayWayGraphStore,
                         restStopStore: restStopStore,
                         europaRestStopStore: europaRestStopStore,
                         onTourSaved: { drivenToursVersion += 1 }
@@ -98,6 +102,7 @@ struct RootTabView: View {
                         franceWayGraphStore: franceWayGraphStore,
                         italyWayGraphStore: italyWayGraphStore,
                         spainWayGraphStore: spainWayGraphStore,
+                        norwayWayGraphStore: norwayWayGraphStore,
                         restStopStore: restStopStore,
                         europaRestStopStore: europaRestStopStore
                     )
@@ -144,6 +149,7 @@ struct RootTabView: View {
             + FranceRegion.allCases.compactMap { franceWayGraphStore.path(for: $0) }
             + ItalyRegion.allCases.compactMap { italyWayGraphStore.path(for: $0) }
             + SpainRegion.allCases.compactMap { spainWayGraphStore.path(for: $0) }
+            + NorwayRegion.allCases.compactMap { norwayWayGraphStore.path(for: $0) }
         guard !paths.isEmpty else { return }
         Task.detached(priority: .background) {
             for path in paths {

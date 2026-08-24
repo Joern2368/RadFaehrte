@@ -4629,6 +4629,53 @@ für die ursprüngliche Produktidee.
       [RadFaehrteTests.swift](FahrradApp/RadFaehrteTests/RadFaehrteTests.swift),
       [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift),
       [github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-eu-v1](https://github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-eu-v1)
+- [x] **Norwegen als neununddreißigstes Land ergänzt - vorsorglich in 6 Regionen aufgeteilt**
+      (Nutzerwunsch 2026-08-24, "wir müssen es bestimmt teilen bei der Größe so wie spanien und
+      Frankreich und Italien"): Gesamt-PBF ~1,31 GB (ähnliche Größenordnung wie Spanien) - analog
+      dessen Vorgehen direkt vorsorglich aufgeteilt statt als Einzeldatei zu versuchen (Italiens
+      Lehre: Ausgabe teils größer als PBF durch dichte Kartierung, s. o. "Italien als vierzehntes
+      Land").
+      - **Kuratierte Routen**: `extract_bicycle_routes.py` auf den Gesamt-Norwegen-Extrakt
+        angewendet (unabhängig von der Regionen-Aufteilung des Wege-Graphen) - **491 Routen**
+        (u. a. EuroVelo 1 - Atlantic Coast Route, EuroVelo 3 - Pilgrim's Route, EuroVelo 12 -
+        North Sea Cycle Route), **3,1 MB** als `Resources/norway.sqlite` gebündelt, `"norway"` in
+        `RouteRepository.bundledResourceNames` ergänzt. Bauzeit ca. 5 Min. Getestet per neuem
+        Unit-Test `routeRepositoryFindsEuroVeloRouteNearOslo` (EuroVelo 3 - Pilgrim's Route
+        verläuft direkt durch Oslo; analog Rotterdam/Krakau/.../Athen/Nikosia/Tallinn/Riga/
+        Vilnius/Reykjavík/Dublin/Helsinki).
+      - **6 Regionen-Wege-Graphen direkt in Format v2** (`build_way_graph_v2.py`, analog
+        `Scripts/build_spain_regions.sh` → neues `Scripts/build_norway_regions.sh`) - Geofabrik
+        bietet Norwegen in 5 "echten" Regionen (Fylker-Gruppierungen: Nord-Norge, Østlandet,
+        Sørlandet, Trøndelag, Vestlandet) plus der Exklave Svalbard/Jan Mayen an. **Alle 6 liefen
+        beim ersten Durchlauf glatt durch, kein einziger Fehlschlag** - zusammen nur **~18:42 Min
+        Gesamtbauzeit**. Größte Region Østlandet (Oslo-Region): 536 MB (11,6 Mio. Knoten,
+        7:14 Min) - spürbar dichter kartiert als der Rest Norwegens, allein größer als alle
+        anderen 5 Regionen zusammen. Kleinste "echte" Region Sørlandet: 73 MB (1:12 Min). Die
+        Exklave Svalbard/Jan Mayen war erwartungsgemäß winzig (1,1 MB, 2 s Bauzeit) - trotzdem
+        sauber durchgelaufen, kein Sonderfall im Skript nötig (analog Ceuta/Melilla bei Spanien).
+      - **Neuer Typ `NorwayRegion`** (`DownloadableRegion`-konform wie `FranceRegion`/
+        `ItalyRegion`/`SpainRegion`), neuer Release-Tag `way-graphs-no-v1`. `boundingBox` je
+        Region wieder per HTTP-Range-Request ermittelt (s. Frankreich-Eintrag). Vierter
+        `OfflineMapsView.ExtraRow` in der Europa-Liste ("Norwegen"), landet automatisch an seiner
+        korrekten alphabetischen Position (nach "Niederlande", vor "Polen").
+      - **Verifiziert**: Build (Device-Ziel) erfolgreich, auf "iPhone von Jörn" installiert.
+        Komplette Test-Suite (inkl. neuem Test) auf dem iPhone des Nutzers grün bis auf einen
+        einzelnen, bereits vorher fehlschlagenden Test
+        (`nearbyWellKnownRouteMatchesFindsEuroVelo3NearMuenster`, betrifft ausschließlich
+        deutsche Streckendaten bei Münster/Köln) - per Vergleichslauf auf demselben Gerät gegen
+        den ungeänderten `main`-Stand (`git stash`) bestätigt, dass dieser Test unabhängig von der
+        Norwegen-Änderung bereits vorher fehlschlägt; separates, vorbestehendes Problem, hier
+        nicht behoben. Live-Offline-Routing in Norwegen vom Nutzer noch nicht getestet (kein
+        konkreter Reiseanlass bisher).
+      → [Scripts/build_norway_regions.sh](FahrradApp/Scripts/build_norway_regions.sh) (neu),
+      [WayGraphStore.swift](FahrradApp/RadFaehrte/Services/WayGraphStore.swift) (`NorwayRegion`),
+      [WayGraphDownloadManager.swift](FahrradApp/RadFaehrte/Services/WayGraphDownloadManager.swift),
+      [RootTabView.swift](FahrradApp/RadFaehrte/RootTabView.swift),
+      [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`offlineGraphCandidatePaths`,
+      `regionDisplayName`), [RouteRepository.swift](FahrradApp/RadFaehrte/Services/RouteRepository.swift),
+      [RadFaehrteTests.swift](FahrradApp/RadFaehrteTests/RadFaehrteTests.swift),
+      [github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-no-v1](https://github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-no-v1)
 - [x] **"Wie funktioniert's"-Texte gekürzt** (2026-08-07): Nutzer-Feedback, dass die Erklärtexte
       (v. a. "Route suchen" und "Offline-Karten", die über die Zeit durch viele Feature-Ergänzungen
       auf mehrere hundert Wörter je Abschnitt angewachsen waren) zu lang seien. Alle Topic-Texte auf
@@ -5889,9 +5936,8 @@ kommentiert.
       achtunddreißigstes Land ergänzt")
 
 **Vermutlich Regionen-Split nötig (>1 GB, vorsorglich wie Frankreich/Italien/Spanien prüfen):**
-- [ ] **Norwegen** (~1,37 GB, `norway`) - läge in der Größenordnung von Polen/Schweden (beide
-      erfolgreich als Einzeldatei), Italiens Lehre (dichte Kartierung → Ausgabe größer als PBF)
-      macht vorsichtiges Vorgehen trotzdem sinnvoll
+- [x] **Norwegen** (~1,31 GB, `norway`) - erledigt, s. "Aktueller Stand" oben ("Norwegen als
+      neununddreißigstes Land ergänzt - in 6 Regionen aufgeteilt")
 - [ ] **Großbritannien** (~2,16 GB, `great-britain`) - **zurückgestellt (Nutzerentscheidung
       2026-08-07)**. Über Italiens gescheiterter Einzeldatei-Größe (und schon jetzt über GitHubs
       2-GiB-Asset-Limit). Frühere Notiz hier war falsch: Geofabrik bietet England/Schottland/Wales

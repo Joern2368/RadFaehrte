@@ -563,6 +563,58 @@ nonisolated enum SpainRegion: String, CaseIterable, Identifiable, DownloadableRe
     }
 }
 
+/// Norwegische Regionen (Geofabrik-Einteilung: download.geofabrik.de/europe/norway/<region>), für
+/// die ein Wege-Graph heruntergeladen werden kann - eigener Typ statt eines Falls in `EuropaLand`
+/// (analog zu `FranceRegion`/`ItalyRegion`/`SpainRegion`). Wie bei Spanien **vorsorglich**
+/// aufgeteilt statt erst nach einem gescheiterten Gesamt-Versuch: Norwegens PBF (~1,37 GB) läge
+/// zwar in der Größenordnung von Polen/Schweden (beide erfolgreich als Einzeldatei gebaut), aber
+/// Italiens Muster (Ausgabe teils größer als PBF durch dichte Kartierung, s. ROADMAP.md "Italien
+/// als vierzehntes Land") macht das Risiko real genug, direkt aufzuteilen. Geofabrik bietet 5
+/// "echte" Regionen (Fylker-Gruppierungen) plus der Exklave Svalbard/Jan Mayen, zwischen ~1 MB
+/// (Svalbard/Jan Mayen) und 536 MB (Østlandet, Oslo-Region - dichter kartiert als der Rest
+/// Norwegens, allein deshalb schon größer als der gesamte Norden Nord-Norge) - analog Ceuta/
+/// Melilla bei Spanien wird die winzige Exklave mit aufgenommen statt gesondert behandelt.
+/// Kuratierte Routen (`norway.sqlite`) sind davon unabhängig für ganz Norwegen extrahiert.
+nonisolated enum NorwayRegion: String, CaseIterable, Identifiable, DownloadableRegion {
+    case nordNorge = "nord-norge"
+    case ostlandet
+    case sorlandet
+    case svalbardJanMayen = "svalbard-janmayen"
+    case trondelag
+    case vestlandet
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .nordNorge: return "Nord-Norge"
+        case .ostlandet: return "Østlandet"
+        case .sorlandet: return "Sørlandet"
+        case .svalbardJanMayen: return "Svalbard und Jan Mayen"
+        case .trondelag: return "Trøndelag"
+        case .vestlandet: return "Vestlandet"
+        }
+    }
+
+    /// Aus den PBF-Headern per HTTP-Range-Request ermittelt (analog `SpainRegion.boundingBox`).
+    var boundingBox: RegionBoundingBox {
+        switch self {
+        case .nordNorge:
+            return RegionBoundingBox(minLat: 64.94, maxLat: 72.41, minLon: 7.84, maxLon: 40.07)
+        case .ostlandet:
+            return RegionBoundingBox(minLat: 58.60, maxLat: 62.70, minLon: 7.10, maxLon: 14.40)
+        case .sorlandet:
+            return RegionBoundingBox(minLat: 57.58, maxLat: 59.67, minLon: 5.70, maxLon: 10.59)
+        case .svalbardJanMayen:
+            return RegionBoundingBox(minLat: 70.15, maxLat: 81.11, minLon: -11.37, maxLon: 35.35)
+        case .trondelag:
+            return RegionBoundingBox(minLat: 62.26, maxLat: 65.95, minLon: 5.79, maxLon: 14.40)
+        case .vestlandet:
+            return RegionBoundingBox(minLat: 56.39, maxLat: 65.12, minLon: 2.33, maxLon: 9.37)
+        }
+    }
+}
+
 /// Verwaltet heruntergeladene Wege-Graphen (siehe `WayGraphRepository`) für die
 /// "ruhige Wege"-Offline-Routing-Engine, jeweils eine SQLite-Datei pro Region in
 /// `Documents/WayGraphs/` (read-only gebündelte Ressourcen wie `routes.sqlite` liegen dagegen im

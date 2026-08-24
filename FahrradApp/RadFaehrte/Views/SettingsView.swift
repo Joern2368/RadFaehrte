@@ -18,6 +18,7 @@ struct SettingsView: View {
     let franceWayGraphStore: WayGraphStore<FranceRegion>
     let italyWayGraphStore: WayGraphStore<ItalyRegion>
     let spainWayGraphStore: WayGraphStore<SpainRegion>
+    let norwayWayGraphStore: WayGraphStore<NorwayRegion>
     let restStopStore: RestStopStore<Bundesland>
     let europaRestStopStore: RestStopStore<EuropaLand>
     private let recentPlaceStore = RecentPlaceStore()
@@ -29,6 +30,7 @@ struct SettingsView: View {
         franceWayGraphStore: WayGraphStore<FranceRegion> = WayGraphStore(),
         italyWayGraphStore: WayGraphStore<ItalyRegion> = WayGraphStore(),
         spainWayGraphStore: WayGraphStore<SpainRegion> = WayGraphStore(),
+        norwayWayGraphStore: WayGraphStore<NorwayRegion> = WayGraphStore(),
         restStopStore: RestStopStore<Bundesland> = RestStopStore(),
         europaRestStopStore: RestStopStore<EuropaLand> = RestStopStore()
     ) {
@@ -37,6 +39,7 @@ struct SettingsView: View {
         self.franceWayGraphStore = franceWayGraphStore
         self.italyWayGraphStore = italyWayGraphStore
         self.spainWayGraphStore = spainWayGraphStore
+        self.norwayWayGraphStore = norwayWayGraphStore
         self.restStopStore = restStopStore
         self.europaRestStopStore = europaRestStopStore
     }
@@ -96,7 +99,7 @@ struct SettingsView: View {
                         OfflineMapsView(
                             store: europaWayGraphStore,
                             title: "Offline-Karten Europa",
-                            footer: "Wie bei den Bundesländern: Für ein heruntergeladenes Land nutzt \"Direkte Fahrrad-Route\" dort eine eigene Offline-Engine statt online über Apple zu routen - funktioniert auch ganz ohne Internetverbindung. Frankreich, Italien und Spanien sind für eine einzelne Datei zu groß und deshalb wie bei den Bundesländern nach Regionen aufgeteilt - die Einträge führen zu deren eigenen Listen.",
+                            footer: "Wie bei den Bundesländern: Für ein heruntergeladenes Land nutzt \"Direkte Fahrrad-Route\" dort eine eigene Offline-Engine statt online über Apple zu routen - funktioniert auch ganz ohne Internetverbindung. Frankreich, Italien, Spanien und Norwegen sind für eine einzelne Datei zu groß und deshalb wie bei den Bundesländern nach Regionen aufgeteilt - die Einträge führen zu deren eigenen Listen.",
                             extraRows: [
                                 OfflineMapsView<EuropaLand>.ExtraRow(label: "Frankreich") {
                                     NavigationLink {
@@ -129,6 +132,17 @@ struct SettingsView: View {
                                         )
                                     } label: {
                                         Text("Spanien")
+                                    }
+                                },
+                                OfflineMapsView<EuropaLand>.ExtraRow(label: "Norwegen") {
+                                    NavigationLink {
+                                        OfflineMapsView(
+                                            store: norwayWayGraphStore,
+                                            title: "Offline-Karten Norwegen",
+                                            footer: "Norwegen ist für den Wege-Graph-Bau zu groß für eine einzelne Datei - daher in 6 Regionen aufgeteilt. Für heruntergeladene Regionen nutzt \"Direkte Fahrrad-Route\" dieselbe Offline-Engine wie bei Bundesländern/anderen Ländern."
+                                        )
+                                    } label: {
+                                        Text("Norwegen")
                                     }
                                 }
                             ]
