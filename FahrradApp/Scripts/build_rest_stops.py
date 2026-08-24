@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 """
 Extrahiert Rastplatz-POIs (Trinkwasser, Bänke, Cafés, Aussichtspunkte,
-Fahrrad-Reparaturstationen, Biergärten, Toiletten) aus einem OSM-Bundesland-Extrakt (.osm.pbf) für
-die "Rastplätze"-Kartenanzeige von RadFährte.
+Fahrrad-Reparaturstationen, Biergärten, Toiletten, E-Bike-Ladestationen, Bäckereien) aus einem
+OSM-Bundesland-Extrakt (.osm.pbf) für die "POIs"-Kartenanzeige von RadFährte.
+
+`amenity=bicycle_pump` (Fahrrad-Luftpumpe) wurde testweise ergänzt und nach 0 Treffern in sowohl
+Bremen als auch Bayern (Live-Test 2026-08-23) wieder entfernt - in Deutschland offenbar kaum als
+eigener OSM-Knoten kartiert (vermutlich meist Teil der Beschreibung von
+`bicycle_repair_station`-Punkten statt eigenständig getaggt). `KIND_BICYCLE_PUMP = 8` bewusst nicht
+wiederverwendet (Lücke in der Nummerierung), da bereits hochgeladene Regionen (Bremen, Bayern) bei
+diesem Wert ohnehin nie Zeilen hatten - kein Grund, `KIND_BAKERY` umzunummerieren.
 
 Bänke (amenity=bench) waren in einem ersten Test komplett ausgeschlossen: Sie überluden die
 Kartenanzeige (in Bremen allein 4033 von 4388 Treffern, 93 % - Nutzer-Feedback 2026-08-19 "zu
@@ -40,6 +47,8 @@ KIND_BICYCLE_REPAIR_STATION = 3
 KIND_BENCH = 4
 KIND_BEER_GARDEN = 5
 KIND_TOILETS = 6
+KIND_EBIKE_CHARGING = 7
+KIND_BAKERY = 9
 
 KIND_LABELS = {
     KIND_DRINKING_WATER: "Trinkwasser",
@@ -49,6 +58,8 @@ KIND_LABELS = {
     KIND_BENCH: "Bank",
     KIND_BEER_GARDEN: "Biergarten",
     KIND_TOILETS: "Toilette",
+    KIND_EBIKE_CHARGING: "E-Bike-Ladestation",
+    KIND_BAKERY: "Bäckerei",
 }
 
 # Rastergröße für die Bänke-Ausdünnung (s. Modul-Docstring) - grob "eine Sitzgelegenheit pro
@@ -80,6 +91,10 @@ def kind_for(tags):
         return KIND_BEER_GARDEN
     if tags.get("amenity") == "toilets":
         return KIND_TOILETS
+    if tags.get("amenity") == "charging_station" and tags.get("bicycle") in ("yes", "designated"):
+        return KIND_EBIKE_CHARGING
+    if tags.get("shop") == "bakery":
+        return KIND_BAKERY
     return None
 
 

@@ -100,6 +100,10 @@ private extension RestStop.Kind {
         case 4: self = .bench
         case 5: self = .beerGarden
         case 6: self = .toilets
+        case 7: self = .ebikeCharging
+        // 8 (KIND_BICYCLE_PUMP) bewusst nicht mehr vergeben - 0 Treffer in Bremen+Bayern, s.
+        // build_rest_stops.py.
+        case 9: self = .bakery
         default: return nil
         }
     }

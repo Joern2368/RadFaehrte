@@ -5212,6 +5212,53 @@ für die ursprüngliche Produktidee.
       [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
       [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
       [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
+- [x] **Feature umbenannt zu "POI" + E-Bike-Ladestation/Bäckerei als neue Kategorien** (2026-08-24):
+      Nutzer fand den Namen "Rastplätze" inzwischen unpassend (Kategorien wie Bäckerei/E-Bike-
+      Ladestation sind keine "Rastplätze" im engeren Sinn) - nach kurzem Zwischenstand
+      "Unterwegs-Punkte" (Nutzer-Auswahl aus 4 Vorschlägen) landete die endgültige Wahl auf **POI**.
+      Alle UI-Strings in `SettingsView`, `NavigationQuickSettingsView`, `RestStopsOfflineView`,
+      `RestStopKindSettingsView` und `HowItWorksView` entsprechend umbenannt ("POIs anzeigen",
+      "POI-Kategorien", "POIs herunterladen") - interne Swift-Typnamen (`RestStop`, `RestStopStore`
+      usw.) und Dateinamen bewusst **nicht** mit umbenannt (rein interne Bezeichner, kein
+      Nutzernutzen, hätte nur unnötig viele Dateien angefasst).
+      - **Neue Kategorien**: `amenity=charging_station` + `bicycle=yes`/`designated` als
+        E-Bike-Ladestation (Icon `bolt.fill`) und `shop=bakery` als Bäckerei (Icon
+        `takeoutbag.and.cup.and.straw.fill`). Auf Nutzer-Nachfrage "was gibt es noch für nette
+        Sachen" auch Fahrrad-Luftpumpe (`amenity=bicycle_pump`) probiert, aber nach 0 Treffern in
+        sowohl Bremen als auch Bayern (Live-Test) auf Nutzer-Entscheid wieder entfernt - offenbar in
+        Deutschland kaum als eigener OSM-Knoten kartiert. `KIND_BICYCLE_PUMP = 8` bewusst nicht neu
+        vergeben (Nummerierungslücke), da weder Bremen noch Bayern je eine Zeile mit diesem Wert
+        hatten.
+      - **Live-Fund (Cache-Bug)**: Beim Testen fiel auf, dass ein erneuter Download einer bereits im
+        laufenden Prozess gecachten Region (`RestStopCache`) die alte, im Speicher gehaltene
+        Repository weiterverwendete statt die neu heruntergeladene Datei zu lesen - bis zum
+        nächsten App-Neustart. Betraf konkret den Testablauf: Testdaten per `devicectl copy`
+        aufs Gerät geschoben, dann versehentlich nochmal reguär über die Einstellungen
+        heruntergeladen (zog die zu dem Zeitpunkt noch alte Release-Version) - Bäckereien blieben
+        unsichtbar, obwohl der Nutzer täglich an mehreren vorbeifährt. Gefixt in
+        `RestStopDownloadManager.download`: `RestStopCache.shared.invalidate(path:)` direkt nach
+        `store.save(...)`, bevor die Repository erneut warmgeladen wird.
+      - **Rollout**: Wie gehabt alle 16 Bundesländer einzeln mit Pause, beginnend mit Bayern.
+        E-Bike-Ladestationen pro Region: Bayern 1019, Baden-Württemberg 788, Nordrhein-Westfalen
+        1018, Niedersachsen 431, Hessen 318, Rheinland-Pfalz 274, Schleswig-Holstein 189, Sachsen
+        175, Sachsen-Anhalt 160, Brandenburg 147, Thüringen 113, Saarland 85, Mecklenburg-
+        Vorpommern 74, Hamburg 47, Berlin 15, Bremen 3 - auffällig wenige in den Stadtstaaten
+        Berlin/Hamburg trotz hoher POI-Dichte sonst, evtl. andere Tagging-Konvention dort oder
+        tatsächlich seltener. `restStopsFormatVersion` auf 5 erhöht (reiner Inhalts-Refresh, wie
+        bei den vorherigen beiden Rollouts).
+      → [Scripts/build_rest_stops.py](FahrradApp/Scripts/build_rest_stops.py),
+      [RestStop.swift](FahrradApp/RadFaehrte/Models/RestStop.swift),
+      [RestStopRepository.swift](FahrradApp/RadFaehrte/Services/RestStopRepository.swift),
+      [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift)
+      (`restStopsFormatVersion`),
+      [RestStopCache.swift](FahrradApp/RadFaehrte/Services/RestStopCache.swift),
+      [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
+      (`download` - Cache-Invalidierung),
+      [RestStopKindSettingsView.swift](FahrradApp/RadFaehrte/Views/RestStopKindSettingsView.swift),
+      [RestStopsOfflineView.swift](FahrradApp/RadFaehrte/Views/RestStopsOfflineView.swift),
+      [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
+      [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
+      [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
 
 ## Bekannte Probleme
 

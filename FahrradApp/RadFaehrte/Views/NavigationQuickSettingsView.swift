@@ -79,21 +79,21 @@ struct NavigationQuickSettingsView: View {
                 }
 
                 Section {
-                    Toggle("Rastplätze anzeigen", isOn: $showRestStops)
+                    Toggle("POIs anzeigen", isOn: $showRestStops)
                     NavigationLink {
                         RestStopKindSettingsView()
                     } label: {
-                        Label("Rastplatz-Kategorien", systemImage: "line.3.horizontal.decrease.circle")
+                        Label("POI-Kategorien", systemImage: "line.3.horizontal.decrease.circle")
                     }
                     NavigationLink {
                         RestStopsOfflineView(store: restStopStore)
                     } label: {
-                        Label("Rastplätze herunterladen", systemImage: "mappin.and.ellipse")
+                        Label("POIs herunterladen", systemImage: "mappin.and.ellipse")
                     }
                 } header: {
-                    Text("Rastplätze")
+                    Text("POIs")
                 } footer: {
-                    Text("Trinkwasser, Cafés, Aussichtspunkte, Fahrrad-Reparaturstationen, Bänke, Biergärten und Toiletten aus OpenStreetMap auf der Karte anzeigen.")
+                    Text("Trinkwasser, Cafés, Aussichtspunkte, Fahrrad-Reparaturstationen, Bänke, Biergärten, Toiletten, E-Bike-Ladestationen und Bäckereien aus OpenStreetMap auf der Karte anzeigen.")
                 }
             }
             .navigationTitle("Einstellungen")

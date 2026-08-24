@@ -84,8 +84,8 @@ struct HowItWorksView: View {
         ),
         Topic(
             icon: "mappin.and.ellipse",
-            title: "Rastplätze",
-            text: "In den Einstellungen unter \"Rastplätze\" lädst du für jedes Bundesland Trinkwasserstellen, Cafés, Aussichtspunkte, Fahrrad-Reparaturstationen, Bänke, Biergärten und Toiletten aus OpenStreetMap herunter. Unter \"Rastplatz-Kategorien\" schaltest du jede dieser sieben Kategorien einzeln ein oder aus. Ist eine Region heruntergeladen und der Schalter \"Rastplätze anzeigen\" aktiv, erscheinen die aktivierten Kategorien beim ausreichend nahen Heranzoomen als Pins auf der Karte; ein Tipp auf einen Pin zeigt Kategorie, Name (falls vorhanden) und Koordinate. Während der Navigation erreichst du alles auch über das Zahnrad-Symbol auf der Karte, ohne die Fahrt zu unterbrechen."
+            title: "POIs",
+            text: "In den Einstellungen unter \"POIs\" lädst du für jedes Bundesland Trinkwasserstellen, Cafés, Aussichtspunkte, Fahrrad-Reparaturstationen, Bänke, Biergärten, Toiletten, E-Bike-Ladestationen und Bäckereien aus OpenStreetMap herunter. Unter \"POI-Kategorien\" schaltest du jede dieser neun Kategorien einzeln ein oder aus. Ist eine Region heruntergeladen und der Schalter \"POIs anzeigen\" aktiv, erscheinen die aktivierten Kategorien beim ausreichend nahen Heranzoomen als Pins auf der Karte; ein Tipp auf einen Pin zeigt Kategorie, Name (falls vorhanden) und Koordinate. Während der Navigation erreichst du alles auch über das Zahnrad-Symbol auf der Karte, ohne die Fahrt zu unterbrechen."
         )
     ]
 

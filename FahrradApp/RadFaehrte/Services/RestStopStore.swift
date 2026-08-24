@@ -18,7 +18,12 @@ import Foundation
 ///
 /// Version 4 (2026-08-22): Gleiches Muster für die neue Toiletten-Kategorie - wieder alle 16 Assets
 /// neu gebaut, wieder nur Inhalts-Refresh ohne Schema-Änderung.
-private nonisolated(unsafe) let restStopsFormatVersion = 4
+///
+/// Version 5 (2026-08-24): Gleiches Muster für E-Bike-Ladestationen und Bäckereien (die dabei
+/// ebenfalls getestete Fahrrad-Luftpumpen-Kategorie wurde nach 0 Treffern in Bremen+Bayern wieder
+/// verworfen, s. `Scripts/build_rest_stops.py`) - wieder alle 16 Assets neu gebaut, wieder nur
+/// Inhalts-Refresh ohne Schema-Änderung.
+private nonisolated(unsafe) let restStopsFormatVersion = 5
 
 /// Bundesländer, für die eine `rest-stops-v1`-Datei existiert - inzwischen alle 16 (erst als Test
 /// nur Bremen/Niedersachsen, nach positivem Nutzer-Feedback auf ganz Deutschland ausgeweitet, s.

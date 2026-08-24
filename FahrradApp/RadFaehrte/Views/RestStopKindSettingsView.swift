@@ -6,8 +6,8 @@
 import SwiftUI
 
 /// Eigene Unterseite statt Inline-Toggles in `SettingsView`/`NavigationQuickSettingsView` - analog
-/// `NavigationStatSettingsView`, um die dortigen "Rastplätze"-Sektionen nicht um 5 zusätzliche
-/// Toggle-Zeilen zu verlängern.
+/// `NavigationStatSettingsView`, um die dortigen "POIs"-Sektionen nicht um zusätzliche
+/// Toggle-Zeilen (eine pro Kategorie) zu verlängern.
 struct RestStopKindSettingsView: View {
     @AppStorage(AppSettingsKey.showRestStopKinds) private var showRestStopKindsRaw = AppSettingsDefaults.showRestStopKinds
 
@@ -39,10 +39,10 @@ struct RestStopKindSettingsView: View {
                     }
                 }
             } footer: {
-                Text("Legt fest, welche Rastplatz-Kategorien als Pins auf der Karte angezeigt werden.")
+                Text("Legt fest, welche POI-Kategorien als Pins auf der Karte angezeigt werden.")
             }
         }
-        .navigationTitle("Rastplatz-Kategorien")
+        .navigationTitle("POI-Kategorien")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -15,26 +15,26 @@ private func restStopDownloadURL(for region: Bundesland) -> URL {
     URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/rest-stops-v1/\(region.rawValue)_reststops.sqlite")!
 }
 
-/// Tatsächliche Release-Asset-Größen in KB (nach dem Bau aller 16 Bundesländer mit Bänken,
-/// Biergärten + Toiletten, 2026-08-22) - anders als die URL kein Formel-Ausdruck, da die Größe
+/// Tatsächliche Release-Asset-Größen in KB (nach dem Bau aller 16 Bundesländer mit E-Bike-
+/// Ladestationen + Bäckereien, 2026-08-24) - anders als die URL kein Formel-Ausdruck, da die Größe
 /// (POI-Dichte) nicht mit der Bundesland-Fläche oder -Bevölkerung korreliert.
 private let restStopApproximateSizeKB: [Bundesland: Int] = [
-    .badenWuerttemberg: 7272,
-    .bayern: 8336,
-    .berlin: 1332,
-    .brandenburg: 2488,
-    .bremen: 212,
-    .hamburg: 620,
-    .hessen: 3908,
-    .mecklenburgVorpommern: 872,
-    .niedersachsen: 3880,
-    .nordrheinWestfalen: 7052,
-    .rheinlandPfalz: 2844,
-    .saarland: 460,
-    .sachsen: 2384,
-    .sachsenAnhalt: 948,
-    .schleswigHolstein: 1476,
-    .thueringen: 1460,
+    .badenWuerttemberg: 7768,
+    .bayern: 8932,
+    .berlin: 1456,
+    .brandenburg: 2704,
+    .bremen: 232,
+    .hamburg: 680,
+    .hessen: 4156,
+    .mecklenburgVorpommern: 920,
+    .niedersachsen: 4240,
+    .nordrheinWestfalen: 7684,
+    .rheinlandPfalz: 3008,
+    .saarland: 508,
+    .sachsen: 2624,
+    .sachsenAnhalt: 1044,
+    .schleswigHolstein: 1596,
+    .thueringen: 1568,
 ]
 
 /// Lädt Rastplatz-Datenbanken herunter und meldet den Fortschritt für `RestStopsOfflineView` -
@@ -117,6 +117,12 @@ final class RestStopDownloadManager {
                 do {
                     try store.save(downloadedFile: tempURL, for: region)
                     if let path = store.path(for: region) {
+                        // Ohne `invalidate` würde ein erneuter Download derselben, bereits im
+                        // laufenden Prozess gecachten Region (z. B. um neue Kategorien
+                        // nachzuladen) stillschweigend die alte, im Speicher gehaltene Repository
+                        // weiterverwenden statt die neu heruntergeladene Datei zu lesen - bis zum
+                        // nächsten App-Neustart. Live-Fund 2026-08-23.
+                        RestStopCache.shared.invalidate(path: path)
                         Task.detached(priority: .background) {
                             _ = RestStopCache.shared.repository(for: path)
                         }
