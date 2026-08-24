@@ -5349,6 +5349,20 @@ für die ursprüngliche Produktidee.
       [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
       [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
       [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
+- [x] **"Radrouten in der Nähe"-Vorschau wieder nach Anfahrt statt Streckenlänge sortiert**
+      (2026-08-24, Nutzer-Fund am Beispiel Oldenburg: "Radroute der Megalithkultur" (0,3 km Anfahrt)
+      erschien hinter der "3-Seen-Route" (6,2 km Anfahrt), weil seit dem 2026-08-14-Wunsch nach
+      Streckenlänge absteigend sortiert wurde). Reine Rückkehr zu aufsteigend nach Anfahrt hätte aber
+      kurze, unbedeutende Stadtradwege direkt am Start vor echte, etwas weiter entfernte Fernrouten
+      gesetzt - auf Nutzer-Nachfrage daher **Mindestlänge 20 km** als Filter vorgeschaltet: Treffer
+      unter 20 km (`route.distanceKm ?? route.geometryLengthKm`, s. Eintrag vom 2026-08-14 zum
+      Längen-Fallback) werden aus `loadNearbyMatches` herausgefiltert, der Rest aufsteigend nach
+      `distanceToStartKm` sortiert. Bleibt nach dem Filtern nichts übrig (z. B. ländliche Gegend ohne
+      nahe Fernroute), Fallback auf die ungefilterte Liste, damit die Vorschau nicht leer bleibt.
+      `RouteMatcher.findNearby` selbst (Kandidatenauswahl per Suchradius + `limit`) unverändert. Live
+      auf dem iPhone getestet und vom Nutzer bestätigt ("sortiert richtig").
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`loadNearbyMatches`,
+      `minimumNearbyRouteLengthKm`)
 
 ## Bekannte Probleme
 

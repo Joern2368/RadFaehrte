@@ -4316,6 +4316,14 @@ struct ContentView: View {
         loadRouteSegmentDistances(for: additional, generation: generation)
     }
 
+    /// Unterhalb dieser Streckenlänge wird ein Treffer aus der ziellosen Nähe-Vorschau
+    /// (`nearbyMatches`) herausgefiltert, bevor nach Anfahrt sortiert wird - sonst würden kurze
+    /// Stadtradwege direkt am Start echte Fernrouten mit etwas längerer Anfahrt verdrängen
+    /// (Nutzer-Wunsch 2026-08-24). Bleibt nach dem Filtern nichts übrig (z. B. ländliche Gegend
+    /// ohne nahe Fernroute), wird auf die ungefilterte, nach Anfahrt sortierte Liste
+    /// zurückgefallen, damit die Vorschau nicht leer bleibt.
+    private static let minimumNearbyRouteLengthKm: Double = 20
+
     /// Radrouten rund um den gewählten Start, solange noch kein Ziel eingegeben ist - Vorschau
     /// direkt nach der Standortwahl statt erst nach vollständiger Start+Ziel-Eingabe. Sobald ein
     /// Ziel gesetzt wird, übernimmt `runMatching()` wieder die normale Suche.
@@ -4325,13 +4333,18 @@ struct ContentView: View {
             return
         }
         // `findNearby` selektiert die Kandidaten selbst noch nach Nähe (Suchradius + `limit`,
-        // s. dortigen Kommentar) - hier nur die Anzeige-Reihenfolge der bereits gefundenen Treffer
-        // geändert (Nutzer-Wunsch 2026-08-14: längste Route zuerst statt nächstgelegene zuerst).
+        // s. dortigen Kommentar) - hier die Anzeige-Reihenfolge der bereits gefundenen Treffer
+        // bestimmt: nach Mindestlänge gefiltert, dann aufsteigend nach Anfahrt sortiert
+        // (Nutzer-Wunsch 2026-08-24: kürzeste Anfahrt zuerst, aber keine trivialen Kurzwege).
         // `route.distanceKm` (OSM-`distance`-Tag) fehlt bei vielen, auch bekannten langen Routen
         // (Live-Fund: Ammerseeradweg landete per fehlendem Tag ganz hinten) - `geometryLengthKm`
         // als Fallback aus der Streckengeometrie selbst berechnet, s. dort.
-        nearbyMatches = matcher.findNearby(around: start)
-            .sorted { ($0.route.distanceKm ?? $0.route.geometryLengthKm) > ($1.route.distanceKm ?? $1.route.geometryLengthKm) }
+        let candidates = matcher.findNearby(around: start)
+        let bySubstantialLength = candidates.filter {
+            ($0.route.distanceKm ?? $0.route.geometryLengthKm) >= Self.minimumNearbyRouteLengthKm
+        }
+        let relevant = bySubstantialLength.isEmpty ? candidates : bySubstantialLength
+        nearbyMatches = relevant.sorted { $0.distanceToStartKm < $1.distanceToStartKm }
         pagedMatchIndex = 0
         selectedMatch = nearbyMatches.first
     }
