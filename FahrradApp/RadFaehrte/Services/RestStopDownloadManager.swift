@@ -64,10 +64,15 @@ nonisolated extension EuropaLand: RestStopDownloadableRegion {
         case .luxembourg: return 544
         case .liechtenstein: return 56
         case .andorra: return 36
+        case .austria: return 6244
+        case .netherlands: return 6040
+        case .switzerland: return 6336
+        case .belgium: return 3492
+        case .denmark: return 1812
         default:
-            // Nur Luxemburg/Liechtenstein/Andorra haben bisher eine gebaute POI-Datei (s.
-            // `restStopSupportedEuropaLands`) - dieser Zweig wird praktisch nie erreicht, ist aber
-            // wegen der Exhaustiveness-Prüfung über alle 34 `EuropaLand`-Fälle nötig.
+            // Nur die in `restStopSupportedEuropaLands` gelisteten Länder haben bisher eine gebaute
+            // POI-Datei - dieser Zweig wird praktisch nie erreicht, ist aber wegen der
+            // Exhaustiveness-Prüfung über alle 34 `EuropaLand`-Fälle nötig.
             return 0
         }
     }

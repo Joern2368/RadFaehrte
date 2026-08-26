@@ -32,12 +32,13 @@ private nonisolated(unsafe) let restStopsFormatVersion = 5
 /// Stelle ausgeschlossen werden kann.
 let restStopSupportedRegions: [Bundesland] = Bundesland.allCases
 
-/// Länder außerhalb Deutschlands, für die eine `rest-stops-eu-v1`-Datei existiert - bisher drei
-/// kleine Testländer, Luxemburg, Liechtenstein und Andorra (alle 2026-08-24), analog dem
-/// ursprünglichen Bremen/Niedersachsen-Test bei den Bundesländern. Bewusst nicht
-/// `EuropaLand.allCases` (von dessen 34 Fällen hat bisher nur diese drei eine gebaute POI-Datei) -
-/// Erweiterung auf weitere Länder erfolgt hier, analog `restStopSupportedRegions`.
-let restStopSupportedEuropaLands: [EuropaLand] = [.luxembourg, .liechtenstein, .andorra]
+/// Länder außerhalb Deutschlands, für die eine `rest-stops-eu-v1`-Datei existiert - begonnen mit
+/// drei kleinen Testländern, Luxemburg, Liechtenstein und Andorra (2026-08-24), analog dem
+/// ursprünglichen Bremen/Niedersachsen-Test bei den Bundesländern, seither auf weitere Länder
+/// ausgeweitet. Bewusst nicht `EuropaLand.allCases` (von dessen 34 Fällen hat noch nicht jedes eine
+/// gebaute POI-Datei) - Erweiterung auf weitere Länder erfolgt hier, analog
+/// `restStopSupportedRegions`.
+let restStopSupportedEuropaLands: [EuropaLand] = [.luxembourg, .liechtenstein, .andorra, .austria, .netherlands, .switzerland, .belgium, .denmark]
 
 /// Verwaltet heruntergeladene Rastplatz-Datenbanken (s. `RestStopRepository`), jeweils eine
 /// SQLite-Datei pro Region in `Documents/RestStops/` - analog `WayGraphStore<Region>`, generisch
