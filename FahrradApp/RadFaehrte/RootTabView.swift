@@ -49,6 +49,9 @@ struct RootTabView: View {
     /// Analog `franceWayGraphStore`/`italyWayGraphStore`/`spainWayGraphStore`, aber für die 6
     /// norwegischen Regionen (s. `NorwayRegion`-Doc-Kommentar).
     private let norwayWayGraphStore = WayGraphStore<NorwayRegion>()
+    /// Analog `franceWayGraphStore`/.../`norwayWayGraphStore`, aber für die 49 großbritannischen
+    /// Regionen (s. `GreatBritainRegion`-Doc-Kommentar).
+    private let greatBritainWayGraphStore = WayGraphStore<GreatBritainRegion>()
     /// Eine Instanz für die ganze App, damit ein in den Einstellungen heruntergeladenes
     /// Rastplätze-Bundesland sofort auf der Karte in `ContentView` sichtbar wird - analog
     /// `wayGraphStore`.
@@ -70,6 +73,7 @@ struct RootTabView: View {
                         italyWayGraphStore: italyWayGraphStore,
                         spainWayGraphStore: spainWayGraphStore,
                         norwayWayGraphStore: norwayWayGraphStore,
+                        greatBritainWayGraphStore: greatBritainWayGraphStore,
                         restStopStore: restStopStore,
                         europaRestStopStore: europaRestStopStore,
                         onTourSaved: { drivenToursVersion += 1 }
@@ -103,6 +107,7 @@ struct RootTabView: View {
                         italyWayGraphStore: italyWayGraphStore,
                         spainWayGraphStore: spainWayGraphStore,
                         norwayWayGraphStore: norwayWayGraphStore,
+                        greatBritainWayGraphStore: greatBritainWayGraphStore,
                         restStopStore: restStopStore,
                         europaRestStopStore: europaRestStopStore
                     )
@@ -150,6 +155,7 @@ struct RootTabView: View {
             + ItalyRegion.allCases.compactMap { italyWayGraphStore.path(for: $0) }
             + SpainRegion.allCases.compactMap { spainWayGraphStore.path(for: $0) }
             + NorwayRegion.allCases.compactMap { norwayWayGraphStore.path(for: $0) }
+            + GreatBritainRegion.allCases.compactMap { greatBritainWayGraphStore.path(for: $0) }
         guard !paths.isEmpty else { return }
         Task.detached(priority: .background) {
             for path in paths {

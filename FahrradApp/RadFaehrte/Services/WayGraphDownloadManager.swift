@@ -206,6 +206,70 @@ nonisolated extension NorwayRegion {
     }
 }
 
+/// GitHub-Release-Adresse und tatsächliche Downloadgröße der Wege-Graphen für die 49
+/// großbritannischen Regionen - eigener Release-Tag (`way-graphs-gb-v1`), analog
+/// `way-graphs-no-v1`. Größen nach dem Batch-Build (`Scripts/build_great_britain_regions.sh`, s.
+/// ROADMAP.md) mit den tatsächlich gemessenen Werten befüllt.
+nonisolated extension GreatBritainRegion {
+    var downloadURL: URL {
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/way-graphs-gb-v1/\(rawValue)_ways.sqlite")!
+    }
+
+    var approximateSizeMB: Int {
+        switch self {
+        case .bedfordshire: return 12
+        case .berkshire: return 17
+        case .bristol: return 5
+        case .buckinghamshire: return 18
+        case .cambridgeshire: return 21
+        case .cheshire: return 28
+        case .cornwall: return 31
+        case .cumbria: return 32
+        case .derbyshire: return 26
+        case .devon: return 54
+        case .dorset: return 22
+        case .durham: return 22
+        case .eastSussex: return 15
+        case .eastYorkshireWithHull: return 12
+        case .essex: return 34
+        case .gloucestershire: return 28
+        case .greaterLondon: return 60
+        case .greaterManchester: return 37
+        case .hampshire: return 47
+        case .herefordshire: return 10
+        case .hertfordshire: return 23
+        case .isleOfWight: return 3
+        case .kent: return 44
+        case .lancashire: return 32
+        case .leicestershire: return 19
+        case .lincolnshire: return 36
+        case .merseyside: return 16
+        case .norfolk: return 36
+        case .northYorkshire: return 46
+        case .northamptonshire: return 20
+        case .northumberland: return 16
+        case .nottinghamshire: return 23
+        case .oxfordshire: return 19
+        case .rutland: return 2
+        case .shropshire: return 22
+        case .somerset: return 41
+        case .southYorkshire: return 21
+        case .staffordshire: return 25
+        case .suffolk: return 26
+        case .surrey: return 28
+        case .tyneAndWear: return 15
+        case .warwickshire: return 17
+        case .westMidlands: return 28
+        case .westSussex: return 27
+        case .westYorkshire: return 36
+        case .wiltshire: return 29
+        case .worcestershire: return 16
+        case .scotland: return 282
+        case .wales: return 141
+        }
+    }
+}
+
 /// Lädt Wege-Graphen für die "ruhige Wege"-Offline-Routing-Engine herunter (siehe
 /// `WayGraphStore`, `BikeRoutingEngine`) und meldet den Fortschritt für die Einstellungen-UI.
 /// Generisch über `Region` (`Bundesland`, `EuropaLand`, `FranceRegion` oder `ItalyRegion`), analog `WayGraphStore`.

@@ -4676,6 +4676,67 @@ für die ursprüngliche Produktidee.
       `regionDisplayName`), [RouteRepository.swift](FahrradApp/RadFaehrte/Services/RouteRepository.swift),
       [RadFaehrteTests.swift](FahrradApp/RadFaehrteTests/RadFaehrteTests.swift),
       [github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-no-v1](https://github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-no-v1)
+- [x] **Großbritannien als vierzigstes Land ergänzt - in 49 Regionen aufgeteilt** (Nutzerwunsch
+      2026-08-24/26, "Großbritannien angehen"): Frühere ROADMAP-Notiz ("Vermutlich Regionen-Split
+      nötig") ging noch davon aus, dass Geofabrik England/Schottland/Wales nicht einzeln anbietet
+      und ein Split nur per selbst gebautem Grenz-Zuschnitt möglich wäre - inzwischen hat sich
+      Geofabrik umstrukturiert (`europe/great-britain` → `europe/united-kingdom`) und bietet
+      England (1,69 GB), Schottland (325 MB) und Wales (147 MB) jetzt als fertige Extrakte an,
+      England zusätzlich granular in 47 Grafschaften (Counties) - keine gröbere Zwischenstufe.
+      Schottland/Wales wären als Einzeldatei sicher gewesen, England allein (sehr dicht kartiert)
+      dagegen ein hohes Risiko fürs GitHub-2-GiB-Limit (Italiens Lehre) - deshalb durchgängig auf
+      Grafschafts-Ebene aufgeteilt: 49 Regionen insgesamt. Bermuda und die Falklandinseln (bei
+      Geofabrik unter "united-kingdom" mitgeführt) bewusst ausgeklammert - geographisch nicht Teil
+      Großbritanniens. Nordirland ebenfalls ausgeklammert (bereits über die bestehende
+      Irland-Datenbank abgedeckt) - dafür `great-britain-latest.osm.pbf` (ohne Nordirland) statt
+      `united-kingdom-latest.osm.pbf` (mit Nordirland) als Quelle für die kuratierten Routen
+      verwendet, um doppelte Nordirland-Routen zu vermeiden.
+      - **Pausen-Takt für den Batch-Bau**: Auf Nutzerwunsch ("können wir nach jeder region Pause
+        machen") bei dieser deutlich größeren Regionenzahl (49 statt bisher max. 21 bei
+        Frankreich) alle 5 Regionen pausiert und Zwischenstand gemeldet, statt wie bei
+        Spanien/Norwegen alle unbeaufsichtigt am Stück durchlaufen zu lassen -
+        `Scripts/build_great_britain_regions.sh` nimmt die zu bauenden Slugs deshalb als
+        Kommandozeilen-Argumente statt intern immer alle 49 zu durchlaufen.
+      - **Kuratierte Routen**: `extract_bicycle_routes.py` auf den Großbritannien-Extrakt (ohne
+        Nordirland) angewendet - **6.563 Routen** (u. a. EuroVelo 1 - Atlantic Coast Route,
+        EuroVelo 2 - Capitals Route durch London, EuroVelo 12 - North Sea Cycle Route), **12,2 MB**
+        als `Resources/great-britain.sqlite` gebündelt, `"great-britain"` in
+        `RouteRepository.bundledResourceNames` ergänzt. Getestet per neuem Unit-Test
+        `routeRepositoryFindsEuroVeloRouteNearLondon` (EuroVelo 2 verläuft ca. 1,2 km von der
+        Londoner Innenstadt entfernt vorbei; analog Rotterdam/Krakau/.../Helsinki/Oslo).
+      - **49 Regionen-Wege-Graphen direkt in Format v2** (`build_way_graph_v2.py`, analog
+        `Scripts/build_norway_regions.sh` → neues `Scripts/build_great_britain_regions.sh`, mit
+        Pfad-Unterscheidung Grafschaften (`europe/united-kingdom/england/<slug>`) vs.
+        Schottland/Wales (`europe/united-kingdom/<slug>`)). **Alle 49 liefen beim ersten
+        Durchlauf glatt durch, kein einziger Fehlschlag** - zusammen nur **~34:05 Min
+        Gesamtbauzeit** trotz der großen Anzahl. Größte/dichteste Region Schottland: 282 MB
+        (6,1 Mio. Knoten, 4:48 Min). Greater London mit Abstand am dichtesten kartiert (60 MB bei
+        nur mittlerer Fläche, 40.719 eindeutige Straßennamen - mehr als jede andere bisherige
+        Region/jedes andere bisherige Land). Kleinste Region Rutland (kleinste englische
+        Grafschaft überhaupt): 2 MB, nur 1 Sekunde Bauzeit.
+      - **Neuer Typ `GreatBritainRegion`** (`DownloadableRegion`-konform wie `FranceRegion`/
+        `ItalyRegion`/`SpainRegion`/`NorwayRegion`), neuer Release-Tag `way-graphs-gb-v1`.
+        `boundingBox` je Region wieder per HTTP-Range-Request ermittelt (analog Spanien/Norwegen).
+        Fünfter `OfflineMapsView.ExtraRow` in der Europa-Liste ("Großbritannien").
+      - **Verifiziert**: Build (Device-Ziel) erfolgreich, auf "iPhone von Jörn" installiert.
+        Komplette Test-Suite (inkl. neuem Test) auf dem iPhone des Nutzers grün bis auf denselben
+        bereits vorbestehenden, unabhängigen Test-Fehlschlag wie beim Norwegen-Eintrag
+        (`nearbyWellKnownRouteMatchesFindsEuroVelo3NearMuenster`, betrifft ausschließlich deutsche
+        Streckendaten, hier nicht erneut geprüft da bereits als eigenständiges Problem
+        dokumentiert). Erster Testlauf-Versuch scheiterte an einem Geräteverbindungsabbruch
+        ("The connection was invalidated") - reiner Verbindungs-Flake, zweiter Versuch lief
+        sauber durch. Live-Offline-Routing in Großbritannien vom Nutzer noch nicht getestet (kein
+        konkreter Reiseanlass bisher).
+      → [Scripts/build_great_britain_regions.sh](FahrradApp/Scripts/build_great_britain_regions.sh)
+      (neu), [WayGraphStore.swift](FahrradApp/RadFaehrte/Services/WayGraphStore.swift)
+      (`GreatBritainRegion`),
+      [WayGraphDownloadManager.swift](FahrradApp/RadFaehrte/Services/WayGraphDownloadManager.swift),
+      [RootTabView.swift](FahrradApp/RadFaehrte/RootTabView.swift),
+      [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`offlineGraphCandidatePaths`,
+      `regionDisplayName`), [RouteRepository.swift](FahrradApp/RadFaehrte/Services/RouteRepository.swift),
+      [RadFaehrteTests.swift](FahrradApp/RadFaehrteTests/RadFaehrteTests.swift),
+      [github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-gb-v1](https://github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-gb-v1)
 - [x] **"Wie funktioniert's"-Texte gekürzt** (2026-08-07): Nutzer-Feedback, dass die Erklärtexte
       (v. a. "Route suchen" und "Offline-Karten", die über die Zeit durch viele Feature-Ergänzungen
       auf mehrere hundert Wörter je Abschnitt angewachsen waren) zu lang seien. Alle Topic-Texte auf
@@ -5938,16 +5999,12 @@ kommentiert.
 **Vermutlich Regionen-Split nötig (>1 GB, vorsorglich wie Frankreich/Italien/Spanien prüfen):**
 - [x] **Norwegen** (~1,31 GB, `norway`) - erledigt, s. "Aktueller Stand" oben ("Norwegen als
       neununddreißigstes Land ergänzt - in 6 Regionen aufgeteilt")
-- [ ] **Großbritannien** (~2,16 GB, `great-britain`) - **zurückgestellt (Nutzerentscheidung
-      2026-08-07)**. Über Italiens gescheiterter Einzeldatei-Größe (und schon jetzt über GitHubs
-      2-GiB-Asset-Limit). Frühere Notiz hier war falsch: Geofabrik bietet England/Schottland/Wales
-      **nicht** als eigene Extrakte an (geprüft per `curl` gegen
-      `europe/great-britain/england-latest.osm.pbf` etc. - alle liefern 302 auf die Startseite,
-      es existiert nur `great-britain-latest.osm.pbf` als Gesamtdatei). Ein Split wäre daher nur
-      per selbst gebautem Zuschnitt entlang von OSM-Verwaltungsgrenzen (`osmium extract --polygon`
-      mit England/Schottland/Wales-Grenzpolygonen) möglich, nicht per fertigen
-      Geofabrik-Regionen wie bei Frankreich/Italien/Spanien - deutlich mehr Aufwand. Vor Angehen
-      mit Nutzer klären, ob dieser Aufwand gewünscht ist.
+- [x] **Großbritannien** (~2,16 GB, `great-britain`) - erledigt, s. "Aktueller Stand" oben
+      ("Großbritannien als vierzigstes Land ergänzt - in 49 Regionen aufgeteilt"). Frühere Notiz
+      hier ("Geofabrik bietet England/Schottland/Wales nicht als eigene Extrakte an") war durch
+      eine zwischenzeitliche Geofabrik-Umstrukturierung (`great-britain` → `united-kingdom`)
+      überholt - inzwischen liefert Geofabrik fertige Extrakte, kein manueller Grenz-Zuschnitt
+      nötig.
 
 **Nicht separat verfügbar**: San Marino und Vatikanstadt haben bei Geofabrik keinen eigenen
 Extrakt (in `italy.osm.pbf` enthalten) - für sie wäre eine eigene Route-Extraktion aus dem

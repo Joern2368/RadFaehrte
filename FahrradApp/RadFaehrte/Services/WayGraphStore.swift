@@ -615,6 +615,236 @@ nonisolated enum NorwayRegion: String, CaseIterable, Identifiable, DownloadableR
     }
 }
 
+/// Großbritannische Regionen (Geofabrik-Einteilung:
+/// download.geofabrik.de/europe/united-kingdom/england/<county>, .../scotland, .../wales), für die
+/// ein Wege-Graph heruntergeladen werden kann - eigener Typ statt eines Falls in `EuropaLand`
+/// (analog zu `FranceRegion`/`ItalyRegion`/`SpainRegion`/`NorwayRegion`). Geofabrik bot
+/// England/Schottland/Wales lange nur als Gesamtdatei an (s. ROADMAP.md "Vermutlich Regionen-Split
+/// nötig") - inzwischen (Umbenennung von "great-britain" zu "united-kingdom") liefert Geofabrik
+/// England zusätzlich granular in 47 Grafschaften (Counties), Schottland und Wales bleiben je eine
+/// Datei (325 MB bzw. 147 MB - beide klein genug für eine Einzeldatei). England allein (1,69 GB
+/// PBF, sehr dicht kartiert) wäre dagegen ein hohes Risiko fürs GitHub-2-GiB-Limit (Italiens
+/// Lehre: Ausgabe teils größer als PBF, s. ROADMAP.md "Italien als vierzehntes Land") - deshalb
+/// durchgängig auf Grafschafts-Ebene aufgeteilt, keine gröbere Zwischenstufe verfügbar. Insgesamt
+/// 49 Regionen (47 Grafschaften + Schottland + Wales); tatsächliche Wege-Graph-Größen nach dem
+/// Build zwischen 2 MB (Rutland) und 282 MB (Schottland). Alle 49 liefen im ersten Durchlauf glatt
+/// durch (~34 Min Gesamtbauzeit). Kuratierte Routen (`great-britain.sqlite`) sind davon unabhängig
+/// für ganz
+/// Großbritannien (ohne Nordirland - das deckt bereits die bestehende Irland-Datenbank ab) aus dem
+/// `great-britain`-Gesamtextrakt (nicht `united-kingdom`, der zusätzlich Nordirland enthält)
+/// extrahiert.
+nonisolated enum GreatBritainRegion: String, CaseIterable, Identifiable, DownloadableRegion {
+    case bedfordshire
+    case berkshire
+    case bristol
+    case buckinghamshire
+    case cambridgeshire
+    case cheshire
+    case cornwall
+    case cumbria
+    case derbyshire
+    case devon
+    case dorset
+    case durham
+    case eastSussex = "east-sussex"
+    case eastYorkshireWithHull = "east-yorkshire-with-hull"
+    case essex
+    case gloucestershire
+    case greaterLondon = "greater-london"
+    case greaterManchester = "greater-manchester"
+    case hampshire
+    case herefordshire
+    case hertfordshire
+    case isleOfWight = "isle-of-wight"
+    case kent
+    case lancashire
+    case leicestershire
+    case lincolnshire
+    case merseyside
+    case norfolk
+    case northYorkshire = "north-yorkshire"
+    case northamptonshire
+    case northumberland
+    case nottinghamshire
+    case oxfordshire
+    case rutland
+    case shropshire
+    case somerset
+    case southYorkshire = "south-yorkshire"
+    case staffordshire
+    case suffolk
+    case surrey
+    case tyneAndWear = "tyne-and-wear"
+    case warwickshire
+    case westMidlands = "west-midlands"
+    case westSussex = "west-sussex"
+    case westYorkshire = "west-yorkshire"
+    case wiltshire
+    case worcestershire
+    case scotland
+    case wales
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .bedfordshire: return "Bedfordshire"
+        case .berkshire: return "Berkshire"
+        case .bristol: return "Bristol"
+        case .buckinghamshire: return "Buckinghamshire"
+        case .cambridgeshire: return "Cambridgeshire"
+        case .cheshire: return "Cheshire"
+        case .cornwall: return "Cornwall"
+        case .cumbria: return "Cumbria"
+        case .derbyshire: return "Derbyshire"
+        case .devon: return "Devon"
+        case .dorset: return "Dorset"
+        case .durham: return "Durham"
+        case .eastSussex: return "East Sussex"
+        case .eastYorkshireWithHull: return "East Yorkshire mit Hull"
+        case .essex: return "Essex"
+        case .gloucestershire: return "Gloucestershire"
+        case .greaterLondon: return "Greater London"
+        case .greaterManchester: return "Greater Manchester"
+        case .hampshire: return "Hampshire"
+        case .herefordshire: return "Herefordshire"
+        case .hertfordshire: return "Hertfordshire"
+        case .isleOfWight: return "Isle of Wight"
+        case .kent: return "Kent"
+        case .lancashire: return "Lancashire"
+        case .leicestershire: return "Leicestershire"
+        case .lincolnshire: return "Lincolnshire"
+        case .merseyside: return "Merseyside"
+        case .norfolk: return "Norfolk"
+        case .northYorkshire: return "North Yorkshire"
+        case .northamptonshire: return "Northamptonshire"
+        case .northumberland: return "Northumberland"
+        case .nottinghamshire: return "Nottinghamshire"
+        case .oxfordshire: return "Oxfordshire"
+        case .rutland: return "Rutland"
+        case .shropshire: return "Shropshire"
+        case .somerset: return "Somerset"
+        case .southYorkshire: return "South Yorkshire"
+        case .staffordshire: return "Staffordshire"
+        case .suffolk: return "Suffolk"
+        case .surrey: return "Surrey"
+        case .tyneAndWear: return "Tyne and Wear"
+        case .warwickshire: return "Warwickshire"
+        case .westMidlands: return "West Midlands"
+        case .westSussex: return "West Sussex"
+        case .westYorkshire: return "West Yorkshire"
+        case .wiltshire: return "Wiltshire"
+        case .worcestershire: return "Worcestershire"
+        case .scotland: return "Schottland"
+        case .wales: return "Wales"
+        }
+    }
+
+    /// Aus den PBF-Headern per HTTP-Range-Request ermittelt (analog `SpainRegion.boundingBox`).
+    var boundingBox: RegionBoundingBox {
+        switch self {
+        case .bedfordshire:
+            return RegionBoundingBox(minLat: 51.80, maxLat: 52.32, minLon: -0.70, maxLon: -0.14)
+        case .berkshire:
+            return RegionBoundingBox(minLat: 51.33, maxLat: 51.58, minLon: -1.59, maxLon: -0.49)
+        case .bristol:
+            return RegionBoundingBox(minLat: 51.40, maxLat: 51.55, minLon: -2.73, maxLon: -2.51)
+        case .buckinghamshire:
+            return RegionBoundingBox(minLat: 51.49, maxLat: 52.20, minLon: -1.14, maxLon: -0.48)
+        case .cambridgeshire:
+            return RegionBoundingBox(minLat: 52.01, maxLat: 52.74, minLon: -0.50, maxLon: 0.52)
+        case .cheshire:
+            return RegionBoundingBox(minLat: 52.95, maxLat: 53.48, minLon: -3.13, maxLon: -1.97)
+        case .cornwall:
+            return RegionBoundingBox(minLat: 49.42, maxLat: 50.93, minLon: -6.85, maxLon: -4.15)
+        case .cumbria:
+            return RegionBoundingBox(minLat: 53.90, maxLat: 55.19, minLon: -3.91, maxLon: -2.16)
+        case .derbyshire:
+            return RegionBoundingBox(minLat: 52.70, maxLat: 53.54, minLon: -2.04, maxLon: -1.16)
+        case .devon:
+            return RegionBoundingBox(minLat: 50.11, maxLat: 51.31, minLon: -4.75, maxLon: -2.88)
+        case .dorset:
+            return RegionBoundingBox(minLat: 50.50, maxLat: 51.08, minLon: -2.96, maxLon: -1.68)
+        case .durham:
+            return RegionBoundingBox(minLat: 54.45, maxLat: 54.92, minLon: -2.36, maxLon: -1.10)
+        case .eastSussex:
+            return RegionBoundingBox(minLat: 50.70, maxLat: 51.15, minLon: -0.14, maxLon: 0.87)
+        case .eastYorkshireWithHull:
+            return RegionBoundingBox(minLat: 53.55, maxLat: 54.21, minLon: -1.11, maxLon: 0.49)
+        case .essex:
+            return RegionBoundingBox(minLat: 51.45, maxLat: 52.09, minLon: -0.02, maxLon: 1.31)
+        case .gloucestershire:
+            return RegionBoundingBox(minLat: 51.41, maxLat: 52.12, minLon: -2.71, maxLon: -1.61)
+        case .greaterLondon:
+            return RegionBoundingBox(minLat: 51.29, maxLat: 51.69, minLon: -0.51, maxLon: 0.34)
+        case .greaterManchester:
+            return RegionBoundingBox(minLat: 53.33, maxLat: 53.69, minLon: -2.73, maxLon: -1.91)
+        case .hampshire:
+            return RegionBoundingBox(minLat: 50.69, maxLat: 51.39, minLon: -1.96, maxLon: -0.73)
+        case .herefordshire:
+            return RegionBoundingBox(minLat: 51.83, maxLat: 52.40, minLon: -3.14, maxLon: -2.34)
+        case .hertfordshire:
+            return RegionBoundingBox(minLat: 51.60, maxLat: 52.08, minLon: -0.75, maxLon: 0.20)
+        case .isleOfWight:
+            return RegionBoundingBox(minLat: 50.51, maxLat: 50.80, minLon: -1.66, maxLon: -1.03)
+        case .kent:
+            return RegionBoundingBox(minLat: 50.81, maxLat: 51.50, minLon: 0.03, maxLon: 1.52)
+        case .lancashire:
+            return RegionBoundingBox(minLat: 53.48, maxLat: 54.25, minLon: -3.09, maxLon: -2.04)
+        case .leicestershire:
+            return RegionBoundingBox(minLat: 52.39, maxLat: 52.98, minLon: -1.60, maxLon: -0.66)
+        case .lincolnshire:
+            return RegionBoundingBox(minLat: 52.64, maxLat: 53.73, minLon: -0.95, maxLon: 0.49)
+        case .merseyside:
+            return RegionBoundingBox(minLat: 53.29, maxLat: 53.71, minLon: -3.34, maxLon: -2.58)
+        case .norfolk:
+            return RegionBoundingBox(minLat: 52.35, maxLat: 53.36, minLon: 0.15, maxLon: 1.99)
+        case .northYorkshire:
+            return RegionBoundingBox(minLat: 53.62, maxLat: 54.70, minLon: -2.57, maxLon: -0.04)
+        case .northamptonshire:
+            return RegionBoundingBox(minLat: 51.98, maxLat: 52.64, minLon: -1.33, maxLon: -0.34)
+        case .northumberland:
+            return RegionBoundingBox(minLat: 54.78, maxLat: 55.85, minLon: -2.69, maxLon: -1.22)
+        case .nottinghamshire:
+            return RegionBoundingBox(minLat: 52.78, maxLat: 53.50, minLon: -1.34, maxLon: -0.67)
+        case .oxfordshire:
+            return RegionBoundingBox(minLat: 51.46, maxLat: 52.17, minLon: -1.72, maxLon: -0.87)
+        case .rutland:
+            return RegionBoundingBox(minLat: 52.52, maxLat: 52.76, minLon: -0.82, maxLon: -0.43)
+        case .shropshire:
+            return RegionBoundingBox(minLat: 52.31, maxLat: 53.00, minLon: -3.24, maxLon: -2.23)
+        case .somerset:
+            return RegionBoundingBox(minLat: 50.82, maxLat: 51.50, minLon: -3.84, maxLon: -2.24)
+        case .southYorkshire:
+            return RegionBoundingBox(minLat: 53.30, maxLat: 53.66, minLon: -1.83, maxLon: -0.85)
+        case .staffordshire:
+            return RegionBoundingBox(minLat: 52.42, maxLat: 53.23, minLon: -2.47, maxLon: -1.58)
+        case .suffolk:
+            return RegionBoundingBox(minLat: 51.93, maxLat: 52.55, minLon: 0.34, maxLon: 1.76)
+        case .surrey:
+            return RegionBoundingBox(minLat: 51.07, maxLat: 51.47, minLon: -0.85, maxLon: 0.06)
+        case .tyneAndWear:
+            return RegionBoundingBox(minLat: 54.80, maxLat: 55.11, minLon: -1.85, maxLon: -1.26)
+        case .warwickshire:
+            return RegionBoundingBox(minLat: 51.95, maxLat: 52.69, minLon: -1.96, maxLon: -1.17)
+        case .westMidlands:
+            return RegionBoundingBox(minLat: 52.35, maxLat: 52.66, minLon: -2.21, maxLon: -1.42)
+        case .westSussex:
+            return RegionBoundingBox(minLat: 50.71, maxLat: 51.17, minLon: -0.96, maxLon: 0.04)
+        case .westYorkshire:
+            return RegionBoundingBox(minLat: 53.52, maxLat: 53.96, minLon: -2.18, maxLon: -1.20)
+        case .wiltshire:
+            return RegionBoundingBox(minLat: 50.95, maxLat: 51.71, minLon: -2.36, maxLon: -1.49)
+        case .worcestershire:
+            return RegionBoundingBox(minLat: 51.97, maxLat: 52.46, minLon: -2.66, maxLon: -1.76)
+        case .scotland:
+            return RegionBoundingBox(minLat: 54.54, maxLat: 61.35, minLon: -14.86, maxLon: 0.73)
+        case .wales:
+            return RegionBoundingBox(minLat: 51.04, maxLat: 53.77, minLon: -6.18, maxLon: -2.65)
+        }
+    }
+}
+
 /// Verwaltet heruntergeladene Wege-Graphen (siehe `WayGraphRepository`) für die
 /// "ruhige Wege"-Offline-Routing-Engine, jeweils eine SQLite-Datei pro Region in
 /// `Documents/WayGraphs/` (read-only gebündelte Ressourcen wie `routes.sqlite` liegen dagegen im

@@ -69,6 +69,8 @@ struct ContentView: View {
     var spainWayGraphStore = WayGraphStore<SpainRegion>()
     /// Analog `wayGraphStore`, aber für die 6 norwegischen Regionen (s. `NorwayRegion`).
     var norwayWayGraphStore = WayGraphStore<NorwayRegion>()
+    /// Analog `wayGraphStore`, aber für die 49 großbritannischen Regionen (s. `GreatBritainRegion`).
+    var greatBritainWayGraphStore = WayGraphStore<GreatBritainRegion>()
     /// Für die App gemeinsame Instanz, um heruntergeladene Rastplätze-Bundesländer zu finden (s.
     /// `reloadNearbyRestStops`) - unabhängig von den Wege-Graph-Stores oben (s.
     /// `RestStopStore`-Doc-Kommentar).
@@ -1716,6 +1718,7 @@ struct ContentView: View {
             + ItalyRegion.allCases.compactMap { italyWayGraphStore.path(for: $0) }
             + SpainRegion.allCases.compactMap { spainWayGraphStore.path(for: $0) }
             + NorwayRegion.allCases.compactMap { norwayWayGraphStore.path(for: $0) }
+            + GreatBritainRegion.allCases.compactMap { greatBritainWayGraphStore.path(for: $0) }
     }
 
     /// Wie `offlineGraphCandidatePaths()`, aber vorgefiltert auf Regionen, deren grobe Bounding-Box
@@ -1757,12 +1760,16 @@ struct ContentView: View {
         let norwayRegionen = NorwayRegion.allCases.filter {
             $0.boundingBox.contains(start) || $0.boundingBox.contains(ziel)
         }
+        let greatBritainRegionen = GreatBritainRegion.allCases.filter {
+            $0.boundingBox.contains(start) || $0.boundingBox.contains(ziel)
+        }
         return bundeslaender.compactMap { wayGraphStore.path(for: $0) }
             + laender.compactMap { europaWayGraphStore.path(for: $0) }
             + franceRegionen.compactMap { franceWayGraphStore.path(for: $0) }
             + italyRegionen.compactMap { italyWayGraphStore.path(for: $0) }
             + spainRegionen.compactMap { spainWayGraphStore.path(for: $0) }
             + norwayRegionen.compactMap { norwayWayGraphStore.path(for: $0) }
+            + greatBritainRegionen.compactMap { greatBritainWayGraphStore.path(for: $0) }
     }
 
     /// Minimale Zoomstufe (in `span.latitudeDelta`-Grad), unterhalb derer Rastplatz-Pins geladen
@@ -2978,6 +2985,7 @@ struct ContentView: View {
         if let region = ItalyRegion(rawValue: fileName) { return region.displayName }
         if let region = SpainRegion(rawValue: fileName) { return region.displayName }
         if let region = NorwayRegion(rawValue: fileName) { return region.displayName }
+        if let region = GreatBritainRegion(rawValue: fileName) { return region.displayName }
         return "der Nachbarregion"
     }
 
