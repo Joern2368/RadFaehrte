@@ -4737,6 +4737,44 @@ für die ursprüngliche Produktidee.
       `regionDisplayName`), [RouteRepository.swift](FahrradApp/RadFaehrte/Services/RouteRepository.swift),
       [RadFaehrteTests.swift](FahrradApp/RadFaehrteTests/RadFaehrteTests.swift),
       [github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-gb-v1](https://github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-gb-v1)
+- [x] **San Marino und Vatikanstadt als einundvierzigstes/zweiundvierzigstes Land ergänzt**
+      (Nutzerwunsch, "die beiden fehlenden Länder San Marino und Vatikanstadt noch"): Beide haben
+      bei Geofabrik keinen eigenen Extrakt (in `italy.osm.pbf` enthalten, s. ROADMAP.md "noch
+      fehlende Länder" - "Nicht separat verfügbar"). Da osmium-tool (das eigentliche Werkzeug für
+      `osmium extract --polygon`) auf dem Baurechner nicht installiert ist, nur die Python-Bindings
+      pyosmium, dafür ein eigenes kleines Extraktions-Skript gebaut statt den Aufwand einer
+      osmium-tool-Installation: `Scripts/extract_micro_country.py` schneidet ein Land per echtem
+      Verwaltungsgrenz-Polygon (von Nominatim, `Scripts/data/<land>-boundary.json`) aus einem
+      größeren Gesamtextrakt (hier: `italy-latest.osm.pbf`, bereits lokal vorhanden) aus - vier
+      Durchgänge über die 2,2-GB-Datei (Knoten im Polygon sammeln → referenzierende Ways →
+      route=bicycle/superroute-Relationen → fehlende Knoten-Koordinaten), je ca. 18 Min pro Land.
+      Echtes Grenz-Polygon statt nur Bounding-Box, damit an der Grenze nicht unnötig viel
+      italienisches Straßennetz mitgenommen wird.
+      - **San Marino**: 158.703 Knoten/18.642 Ways innerhalb der Grenze gefunden, daraus **1,5 MB**
+        Wege-Graph (33.164 Knoten, 65.503 Kanten, 980 Straßennamen). **0 kuratierte
+        Fahrrad-Routen** (die 82 gefundenen `route`-Relationen sind Wander-/Busrouten o. Ä., keine
+        `route=bicycle`) - analog Monaco nur der Wege-Graph gebaut, kein `Resources/*.sqlite`
+        gebündelt, kein Eintrag in `RouteRepository.bundledResourceNames`.
+      - **Vatikanstadt**: 17.340 Knoten/2.114 Ways, daraus **17 KB** Wege-Graph (377 Knoten,
+        698 Kanten, 11 Straßennamen) - erwartungsgemäß winzig, im ummauerten Stadtstaat gibt es
+        praktisch nur Fußwege. Ebenfalls **0 kuratierte Fahrrad-Routen**.
+      - **Zwei neue Fälle `EuropaLand.sanMarino`/`.vaticanCity`** (kein eigener Regionstyp nötig,
+        beide klein genug für einen einzelnen Fall wie Andorra/Liechtenstein/Monaco) -
+        `boundingBox` aus dem Nominatim-Verwaltungsgrenz-Polygon übernommen (präziser als ein
+        PBF-Header, der bei einem selbst geschriebenen Extrakt ohnehin nicht gesetzt ist). Da
+        `EuropaLand` (anders als die Regionstypen `SpainRegion`/`NorwayRegion`/...) generisch über
+        `CaseIterable` in `ContentView`/`RootTabView`/`SettingsView`/`OfflineMapsView` eingebunden
+        ist, war **keine einzige Änderung** an diesen Dateien nötig - die beiden neuen Länder
+        erscheinen automatisch in der bestehenden "Offline-Karten Europa"-Liste.
+      - Release-Assets `san-marino_ways.sqlite`/`vatican_ways.sqlite` unter dem bestehenden
+        `way-graphs-eu-v1` hochgeladen (kein neuer Tag nötig, beide sind Einzeldateien wie
+        Andorra/Liechtenstein/Monaco).
+      - **Verifiziert**: Build (generisches iOS-Ziel, `CODE_SIGNING_ALLOWED=NO`) erfolgreich.
+      → [Scripts/extract_micro_country.py](FahrradApp/Scripts/extract_micro_country.py) (neu),
+      [WayGraphStore.swift](FahrradApp/RadFaehrte/Services/WayGraphStore.swift)
+      (`EuropaLand.sanMarino`/`.vaticanCity`),
+      [WayGraphDownloadManager.swift](FahrradApp/RadFaehrte/Services/WayGraphDownloadManager.swift),
+      [github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-eu-v1](https://github.com/Joern2368/RadFaehrte/releases/tag/way-graphs-eu-v1)
 - [x] **"Wie funktioniert's"-Texte gekürzt** (2026-08-07): Nutzer-Feedback, dass die Erklärtexte
       (v. a. "Route suchen" und "Offline-Karten", die über die Zeit durch viele Feature-Ergänzungen
       auf mehrere hundert Wörter je Abschnitt angewachsen waren) zu lang seien. Alle Topic-Texte auf
@@ -6006,9 +6044,10 @@ kommentiert.
       überholt - inzwischen liefert Geofabrik fertige Extrakte, kein manueller Grenz-Zuschnitt
       nötig.
 
-**Nicht separat verfügbar**: San Marino und Vatikanstadt haben bei Geofabrik keinen eigenen
-Extrakt (in `italy.osm.pbf` enthalten) - für sie wäre eine eigene Route-Extraktion aus dem
-Italien-Gesamtextrakt nötig, falls gewünscht.
+**Nicht separat verfügbar (bei Geofabrik) - erledigt**: San Marino und Vatikanstadt hatten bei
+Geofabrik keinen eigenen Extrakt (in `italy.osm.pbf` enthalten) - s. "Aktueller Stand" oben ("San
+Marino und Vatikanstadt als einundvierzigstes/zweiundvierzigstes Land ergänzt"), per selbst
+gebauter Grenz-Polygon-Extraktion aus dem Italien-Gesamtextrakt gelöst.
 
 ### Phase 1 – schnelle, unabhängige Verbesserungen
 Keine Änderung an der Datenbank nötig, jeweils in sich abgeschlossen.

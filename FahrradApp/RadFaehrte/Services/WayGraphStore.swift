@@ -151,6 +151,15 @@ nonisolated enum Bundesland: String, CaseIterable, Identifiable, DownloadableReg
 /// (download.geofabrik.de/europe/germany/<bundesland>), hier nicht
 /// (download.geofabrik.de/europe/<land-englisch>). `displayName` liefert trotzdem die deutsche
 /// UI-Bezeichnung.
+///
+/// Sonderfall `sanMarino`/`vaticanCity`: Beide haben bei Geofabrik keinen eigenen Extrakt (in
+/// `italy.osm.pbf` enthalten) - stattdessen per `Scripts/extract_micro_country.py` (eigener
+/// Ersatz für "osmium extract --polygon", da osmium-tool auf dem Baurechner nicht installiert
+/// ist, nur die Python-Bindings) mit dem echten Verwaltungsgrenz-Polygon (von Nominatim, s.
+/// `Scripts/data/<land>-boundary.json`) aus dem Italien-Gesamtextrakt herausgeschnitten - nicht
+/// nur eine Bounding-Box, damit an der Grenze nicht unnötig viel italienisches Straßennetz
+/// mitgenommen wird. Kein eigener Release-Tag nötig, beide sind wie Andorra/Liechtenstein/Monaco
+/// klein genug für `way-graphs-eu-v1`.
 nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableRegion {
     case albania
     case andorra
@@ -181,11 +190,13 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
     case poland
     case portugal
     case romania
+    case sanMarino = "san-marino"
     case serbia
     case slovakia
     case slovenia
     case sweden
     case switzerland
+    case vaticanCity = "vatican"
 
     var id: String { rawValue }
 
@@ -220,11 +231,13 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
         case .poland: return "Polen"
         case .portugal: return "Portugal"
         case .romania: return "Rumänien"
+        case .sanMarino: return "San Marino"
         case .serbia: return "Serbien"
         case .slovakia: return "Slowakei"
         case .slovenia: return "Slowenien"
         case .sweden: return "Schweden"
         case .switzerland: return "Schweiz"
+        case .vaticanCity: return "Vatikanstadt"
         }
     }
 
@@ -290,6 +303,8 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
             return RegionBoundingBox(minLat: 29.25, maxLat: 42.16, minLon: -33.62, maxLon: -6.18)
         case .romania:
             return RegionBoundingBox(minLat: 43.61, maxLat: 48.27, minLon: 20.24, maxLon: 30.28)
+        case .sanMarino:
+            return RegionBoundingBox(minLat: 43.89, maxLat: 43.99, minLon: 12.40, maxLon: 12.52)
         case .serbia:
             return RegionBoundingBox(minLat: 42.23, maxLat: 46.19, minLon: 18.81, maxLon: 23.01)
         case .slovakia:
@@ -300,6 +315,8 @@ nonisolated enum EuropaLand: String, CaseIterable, Identifiable, DownloadableReg
             return RegionBoundingBox(minLat: 55.34, maxLat: 69.06, minLon: 11.11, maxLon: 24.17)
         case .switzerland:
             return RegionBoundingBox(minLat: 45.82, maxLat: 47.81, minLon: 5.95, maxLon: 10.50)
+        case .vaticanCity:
+            return RegionBoundingBox(minLat: 41.90, maxLat: 41.91, minLon: 12.45, maxLon: 12.46)
         }
     }
 }

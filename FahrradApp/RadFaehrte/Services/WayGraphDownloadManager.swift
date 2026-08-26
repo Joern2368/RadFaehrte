@@ -91,11 +91,13 @@ nonisolated extension EuropaLand {
         case .poland: return 1409
         case .portugal: return 724
         case .romania: return 507
+        case .sanMarino: return 2
         case .serbia: return 355
         case .slovakia: return 318
         case .slovenia: return 255
         case .sweden: return 1060
         case .switzerland: return 645
+        case .vaticanCity: return 1
         }
     }
 }
