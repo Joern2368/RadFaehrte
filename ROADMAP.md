@@ -5621,6 +5621,14 @@ für die ursprüngliche Produktidee.
       [RootTabView.swift](FahrradApp/RadFaehrte/RootTabView.swift),
       [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
       [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift)
+- [x] **HowItWorksView: POI-Text an breite Länderabdeckung angepasst (2026-08-27)**: Der
+      Erklärtext unter "POIs" verwies noch auf "dein Bundesland oder ein unterstütztes Land
+      außerhalb Deutschlands" - nach Abschluss des POI-Europa-Rollouts (34 `EuropaLand`-Länder +
+      5 Ganz-Land-Typen) inzwischen unpassend zurückhaltend formuliert. Angeglichen an die bereits
+      bestehende Formulierung im "Offline-Karten"-Abschnitt derselben View ("deutsche
+      Bundesländer sowie zahlreiche europäische Länder"): jetzt "dein Bundesland oder eines von
+      zahlreichen europäischen Ländern".
+      → [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
 - [x] **"Radrouten in der Nähe"-Vorschau wieder nach Anfahrt statt Streckenlänge sortiert**
       (2026-08-24, Nutzer-Fund am Beispiel Oldenburg: "Radroute der Megalithkultur" (0,3 km Anfahrt)
       erschien hinter der "3-Seen-Route" (6,2 km Anfahrt), weil seit dem 2026-08-14-Wunsch nach
