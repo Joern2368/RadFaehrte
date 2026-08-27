@@ -69,6 +69,11 @@ nonisolated extension EuropaLand: RestStopDownloadableRegion {
         case .switzerland: return 6336
         case .belgium: return 3492
         case .denmark: return 1812
+        case .slovakia: return 1700
+        case .greece: return 1956
+        case .portugal: return 2352
+        case .czechia: return 4008
+        case .poland: return 7572
         default:
             // Nur die in `restStopSupportedEuropaLands` gelisteten Länder haben bisher eine gebaute
             // POI-Datei - dieser Zweig wird praktisch nie erreicht, ist aber wegen der

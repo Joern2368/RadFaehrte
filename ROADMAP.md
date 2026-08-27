@@ -5452,7 +5452,7 @@ für die ursprüngliche Produktidee.
       [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`statDisplay`,
       `progressPercentDisplay`, `sunsetDate`, `compassDirectionText`, `shortTimeFormatter`,
       `navigationStat`), [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
-- [x] **POIs für Länder außerhalb Deutschlands ergänzt (bisher 8 Länder)**
+- [x] **POIs für Länder außerhalb Deutschlands ergänzt (bisher 13 Länder)**
       (2026-08-24, Nutzerfrage "geht das auch für die europäischen Länder"): Bisher waren POIs fest
       auf `Bundesland` zugeschnitten (s. `RestStopStore`-Doc-Kommentar, "für einen 2-Länder-Test wäre
       die generische Abstraktion verfrüht") - mit einem zweiten Land war genau dieser Punkt erreicht.
@@ -5466,7 +5466,7 @@ für die ursprüngliche Produktidee.
         selbst, bleibt also weiterhin unabhängig entfernbar.
       - **Neue Konstante** `restStopSupportedEuropaLands: [EuropaLand]` (analog
         `restStopSupportedRegions`), bewusst nicht `EuropaLand.allCases` (von 34 Fällen haben bisher
-        erst 8 eine gebaute POI-Datei). Zweite `RestStopStore<EuropaLand>`-Instanz app-weit in
+        erst 13 eine gebaute POI-Datei). Zweite `RestStopStore<EuropaLand>`-Instanz app-weit in
         `RootTabView`, durchgereicht an `ContentView`/`SettingsView`/`NavigationQuickSettingsView` -
         gemeinsamer physischer Ordner `Documents/RestStops/` mit den Bundesland-Dateien (keine
         `rawValue`-Kollision).
@@ -5478,20 +5478,24 @@ für die ursprüngliche Produktidee.
       - **UI**: In "Einstellungen" und im Navigations-Schnelleinstellungen-Sheet aus einem
         "POIs herunterladen"-Link zwei geworden ("POIs Deutschland" / "POIs Europa"), analog dem
         bestehenden "Offline-Karten Deutschland"/"Offline-Karten Europa"-Muster.
-      - **Länder, in zwei Schüben**: Erst drei kleine Testländer - Luxemburg (8669 POIs, 544 KB),
+      - **Länder, in drei Schüben**: Erst drei kleine Testländer - Luxemburg (8669 POIs, 544 KB),
         Liechtenstein (608 POIs, 56 KB), Andorra (300 POIs, 36 KB) - einzeln mit Zwischen-Check auf
         dem Gerät (analog dem Bundesländer-Rollout), jeweils sofort committet+gepusht. Danach, als
         Nutzer im Büro-WLAN war, ein Batch aus fünf größeren Ländern - Österreich (99646 POIs,
         6,1 MB), Niederlande (96075 POIs, 5,9 MB), Schweiz (101760 POIs, 6,2 MB), Belgien
-        (55253 POIs, 3,4 MB), Dänemark (27655 POIs, 1,8 MB) - alle acht Länder-pbf-Dateien lagen
-        bereits lokal vor (aus der früheren Wege-Graph-Onboarding), `build_rest_stops.py` selbst
-        brauchte keine Änderung (war schon länderunabhängig; die großen pbf liefen als
-        Hintergrund-Jobs, teils parallel, je 5-15 Minuten). **Ab dem zweiten Schub geänderter
+        (55253 POIs, 3,4 MB), Dänemark (27655 POIs, 1,8 MB). **Ab diesem zweiten Schub geänderter
         Rhythmus** (Nutzerwunsch): Build+Release-Upload+Code-Änderung pro Land, aber Geräte-Transfer
         und `git commit`/`push` nur noch einmal pro 5er-Batch statt pro Land (s.
-        `feedback-batch-commit-every-5-countries`-Notiz). Weitere kleine Länder (Malta, Monaco, ...
-        - pbf liegt ebenfalls schon lokal vor) sowie noch größere Länder folgen in weiteren
-        5er-Batches. Alle acht auf dem iPhone des Nutzers live getestet ("läuft gut").
+        `feedback-batch-commit-every-5-countries`-Notiz). Direkt danach ein dritter Schub, wieder
+        fünf größere Länder - Slowakei (26353 POIs, 1,7 MB), Griechenland (29555 POIs, 1,9 MB),
+        Portugal (34927 POIs, 2,3 MB), Tschechien (62817 POIs, 3,9 MB), Polen (120422 POIs,
+        7,4 MB) - diesmal alle fünf `build_rest_stops.py`-Läufe parallel im Hintergrund gestartet
+        (Nutzer bat direkt um die nächsten fünf, ohne zwischendurch nachzufragen). Alle 13
+        Länder-pbf-Dateien lagen bereits lokal vor (aus der früheren Wege-Graph-Onboarding),
+        `build_rest_stops.py` selbst brauchte keine Änderung (war schon länderunabhängig; die
+        großen pbf brauchten je 5-20 Minuten). Weitere kleine Länder (Malta, Monaco, ...) sowie
+        noch größere Länder folgen in weiteren 5er-Batches. Alle 13 auf dem iPhone des Nutzers live
+        getestet ("läuft gut").
       → [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift),
       [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
       (`RestStopDownloadableRegion`, `Bundesland`/`EuropaLand`-Konformitäten),

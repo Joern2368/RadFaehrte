@@ -38,7 +38,7 @@ let restStopSupportedRegions: [Bundesland] = Bundesland.allCases
 /// ausgeweitet. Bewusst nicht `EuropaLand.allCases` (von dessen 34 Fällen hat noch nicht jedes eine
 /// gebaute POI-Datei) - Erweiterung auf weitere Länder erfolgt hier, analog
 /// `restStopSupportedRegions`.
-let restStopSupportedEuropaLands: [EuropaLand] = [.luxembourg, .liechtenstein, .andorra, .austria, .netherlands, .switzerland, .belgium, .denmark]
+let restStopSupportedEuropaLands: [EuropaLand] = [.luxembourg, .liechtenstein, .andorra, .austria, .netherlands, .switzerland, .belgium, .denmark, .slovakia, .greece, .portugal, .czechia, .poland]
 
 /// Verwaltet heruntergeladene Rastplatz-Datenbanken (s. `RestStopRepository`), jeweils eine
 /// SQLite-Datei pro Region in `Documents/RestStops/` - analog `WayGraphStore<Region>`, generisch
