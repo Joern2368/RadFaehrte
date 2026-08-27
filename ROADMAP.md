@@ -5452,7 +5452,7 @@ für die ursprüngliche Produktidee.
       [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`statDisplay`,
       `progressPercentDisplay`, `sunsetDate`, `compassDirectionText`, `shortTimeFormatter`,
       `navigationStat`), [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
-- [x] **POIs für Länder außerhalb Deutschlands ergänzt (bisher 17 Länder + Frankreich/Spanien/Italien als Ganzes)**
+- [x] **POIs für Länder außerhalb Deutschlands ergänzt (Anfang: 17 Länder + Frankreich/Spanien/Italien als Ganzes)**
       (2026-08-24, Nutzerfrage "geht das auch für die europäischen Länder"): Bisher waren POIs fest
       auf `Bundesland` zugeschnitten (s. `RestStopStore`-Doc-Kommentar, "für einen 2-Länder-Test wäre
       die generische Abstraktion verfrüht") - mit einem zweiten Land war genau dieser Punkt erreicht.
@@ -5528,6 +5528,38 @@ für die ursprüngliche Produktidee.
       [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
       [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
       [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
+- [x] **POIs: Norwegen als Ganzes + fünf weitere Länder + Europa-Liste zusammengeführt (2026-08-27)**:
+      Fortsetzung des vorherigen Eintrags.
+      - **Norwegen als eine Datei** (`NorwayCountry`, analog `FranceCountry`/`SpainCountry`/
+        `ItalyCountry`, Release-Tag `rest-stops-no-v1`): Bei den Wege-Graphen ist Norwegen
+        vorsorglich in 6 `NorwayRegion`-Teilregionen aufgeteilt (reines Vorsichtsmaß wegen
+        möglicher Ausgabegröße, nicht wegen tatsächlicher Speicherprobleme, s. `NorwayRegion`-Doc-
+        Kommentar) - für den leichtgewichtigen POI-Bau unproblematisch, eine Datei genügt (1,3 GB
+        pbf, 22.313 POIs, 1,4 MB, ~32 Min. Build). Enthält wie `NorwayRegion` auch die Exklave
+        Svalbard/Jan Mayen, dadurch eine ungewöhnlich große `boundingBox` bis in die Arktis -
+        unschädlich, da nur ein günstiger Vorfilter.
+      - **Fünf weitere `EuropaLand`-Länder**: Nordmazedonien (1953 POIs/140 KB), Montenegro
+        (5566 POIs/360 KB), Albanien (5611 POIs/368 KB), Bosnien-Herzegowina (4971 POIs/340 KB),
+        Bulgarien (14337 POIs/936 KB) - damit **22 `EuropaLand`-Länder**.
+      - **UI zusammengeführt** (Nutzerwunsch, nach Live-Test-Screenshot: zu viele einzelne
+        "POIs X herunterladen"-Zeilen): Die vier separaten Zeilen für Frankreich/Spanien/Italien/
+        Norwegen sind wieder verschwunden - neue `EuropaRestStopsView` (statt der generischen
+        `RestStopsOfflineView<Region>`, die nur über einen `Region`-Typ gleichzeitig generisch sein
+        kann) hält fünf getrennte `RestStopDownloadManager`-Instanzen (`EuropaLand` +
+        `FranceCountry`/`SpainCountry`/`ItalyCountry`/`NorwayCountry`), mischt deren Zeilen aber
+        über eine kleine typ-unabhängige `EuropaPOIRow`-Struktur (Closures für Download/Abbrechen/
+        Löschen) zu einer einzigen, alphabetisch sortierten Liste. Datenmodell (fünf separate
+        Regionstypen/Stores/Release-Tags) bewusst unverändert - reine UI-Zusammenlegung, keine
+        Änderung an `restStopSupportedEuropaLands` & Co. `RestStopsOfflineView<Region>` bleibt
+        unverändert für "POIs Deutschland" (dort weiterhin nur ein Regionstyp).
+      → [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift) (`NorwayCountry`),
+      [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
+      (`NorwayCountry`-Konformität),
+      [EuropaRestStopsView.swift](FahrradApp/RadFaehrte/Views/EuropaRestStopsView.swift) (neu),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`norwayRestStopStore`),
+      [RootTabView.swift](FahrradApp/RadFaehrte/RootTabView.swift),
+      [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
+      [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift)
 - [x] **"Radrouten in der Nähe"-Vorschau wieder nach Anfahrt statt Streckenlänge sortiert**
       (2026-08-24, Nutzer-Fund am Beispiel Oldenburg: "Radroute der Megalithkultur" (0,3 km Anfahrt)
       erschien hinter der "3-Seen-Route" (6,2 km Anfahrt), weil seit dem 2026-08-14-Wunsch nach

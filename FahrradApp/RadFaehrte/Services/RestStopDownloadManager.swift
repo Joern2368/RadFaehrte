@@ -78,6 +78,11 @@ nonisolated extension EuropaLand: RestStopDownloadableRegion {
         case .monaco: return 28
         case .cyprus: return 280
         case .kosovo: return 136
+        case .macedonia: return 140
+        case .montenegro: return 360
+        case .albania: return 368
+        case .bosniaHerzegovina: return 340
+        case .bulgaria: return 936
         default:
             // Nur die in `restStopSupportedEuropaLands` gelisteten Länder haben bisher eine gebaute
             // POI-Datei - dieser Zweig wird praktisch nie erreicht, ist aber wegen der
@@ -135,6 +140,22 @@ nonisolated extension ItalyCountry: RestStopDownloadableRegion {
     var restStopApproximateSizeKB: Int {
         switch self {
         case .italy: return 13708
+        }
+    }
+
+    var downloadURL: URL { restStopDownloadURL }
+    var approximateSizeMB: Int { restStopApproximateSizeKB / 1024 }
+}
+
+/// Eigener Release-Tag `rest-stops-no-v1`, analog `rest-stops-fr-v1`/`-es-v1`/`-it-v1`.
+nonisolated extension NorwayCountry: RestStopDownloadableRegion {
+    var restStopDownloadURL: URL {
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/rest-stops-no-v1/\(rawValue)_reststops.sqlite")!
+    }
+
+    var restStopApproximateSizeKB: Int {
+        switch self {
+        case .norway: return 1444
         }
     }
 

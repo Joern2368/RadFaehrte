@@ -27,6 +27,7 @@ struct NavigationQuickSettingsView: View {
     let franceRestStopStore: RestStopStore<FranceCountry>
     let spainRestStopStore: RestStopStore<SpainCountry>
     let italyRestStopStore: RestStopStore<ItalyCountry>
+    let norwayRestStopStore: RestStopStore<NorwayCountry>
 
     var body: some View {
         NavigationStack {
@@ -95,24 +96,15 @@ struct NavigationQuickSettingsView: View {
                         Label("POIs Deutschland herunterladen", systemImage: "mappin.and.ellipse")
                     }
                     NavigationLink {
-                        RestStopsOfflineView(store: europaRestStopStore, title: "POIs Europa", regions: restStopSupportedEuropaLands)
+                        EuropaRestStopsView(
+                            europaStore: europaRestStopStore,
+                            franceStore: franceRestStopStore,
+                            spainStore: spainRestStopStore,
+                            italyStore: italyRestStopStore,
+                            norwayStore: norwayRestStopStore
+                        )
                     } label: {
                         Label("POIs Europa herunterladen", systemImage: "mappin.and.ellipse")
-                    }
-                    NavigationLink {
-                        RestStopsOfflineView(store: franceRestStopStore, title: "POIs Frankreich", regions: restStopSupportedFranceCountries)
-                    } label: {
-                        Label("POIs Frankreich herunterladen", systemImage: "mappin.and.ellipse")
-                    }
-                    NavigationLink {
-                        RestStopsOfflineView(store: spainRestStopStore, title: "POIs Spanien", regions: restStopSupportedSpainCountries)
-                    } label: {
-                        Label("POIs Spanien herunterladen", systemImage: "mappin.and.ellipse")
-                    }
-                    NavigationLink {
-                        RestStopsOfflineView(store: italyRestStopStore, title: "POIs Italien", regions: restStopSupportedItalyCountries)
-                    } label: {
-                        Label("POIs Italien herunterladen", systemImage: "mappin.and.ellipse")
                     }
                 } header: {
                     Text("POIs")
@@ -132,5 +124,5 @@ struct NavigationQuickSettingsView: View {
 }
 
 #Preview {
-    NavigationQuickSettingsView(restStopStore: RestStopStore(), europaRestStopStore: RestStopStore(), franceRestStopStore: RestStopStore(), spainRestStopStore: RestStopStore(), italyRestStopStore: RestStopStore())
+    NavigationQuickSettingsView(restStopStore: RestStopStore(), europaRestStopStore: RestStopStore(), franceRestStopStore: RestStopStore(), spainRestStopStore: RestStopStore(), italyRestStopStore: RestStopStore(), norwayRestStopStore: RestStopStore())
 }
