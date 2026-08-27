@@ -135,6 +135,30 @@ nonisolated enum NorwayCountry: String, CaseIterable, Identifiable, Downloadable
 /// `restStopSupportedFranceCountries`/`restStopSupportedSpainCountries`/`restStopSupportedItalyCountries`.
 let restStopSupportedNorwayCountries: [NorwayCountry] = [.norway]
 
+/// Großbritannien als **eine** Region für POIs - analog `FranceCountry`/`SpainCountry`/
+/// `ItalyCountry`/`NorwayCountry`. Bei den Wege-Graphen ist Großbritannien in 49 Teilregionen
+/// aufgeteilt (47 englische Grafschaften + Schottland + Wales, s. `GreatBritainRegion`-Doc-
+/// Kommentar) - das pbf ist mit 2,1 GB in der Größenordnung von Polen/Italien (dort problemlos als
+/// eine POI-Datei gebaut) und damit für den leichtgewichtigen POI-Bau ebenfalls als eine Datei gut
+/// machbar. `rawValue` "great-britain" (mit Bindestrich) analog dem bereits bestehenden
+/// `great-britain_routes.sqlite`-Ressourcennamen, nicht "greatBritain".
+nonisolated enum GreatBritainCountry: String, CaseIterable, Identifiable, DownloadableRegion {
+    case greatBritain = "great-britain"
+
+    var id: String { rawValue }
+    var displayName: String { "Großbritannien" }
+
+    /// Aus dem pbf-Header von `great-britain-latest.osm.pbf`, analog den anderen Ganz-Land-Typen.
+    var boundingBox: RegionBoundingBox {
+        RegionBoundingBox(minLat: 49.5230030, maxLat: 61.9285800, minLon: -15.3367770, maxLon: 2.5136720)
+    }
+}
+
+/// Länder außerhalb Deutschlands, für die eine `rest-stops-gb-v1`-Datei existiert - analog
+/// `restStopSupportedFranceCountries`/`restStopSupportedSpainCountries`/
+/// `restStopSupportedItalyCountries`/`restStopSupportedNorwayCountries`.
+let restStopSupportedGreatBritainCountries: [GreatBritainCountry] = [.greatBritain]
+
 /// Verwaltet heruntergeladene Rastplatz-Datenbanken (s. `RestStopRepository`), jeweils eine
 /// SQLite-Datei pro Region in `Documents/RestStops/` - analog `WayGraphStore<Region>`, generisch
 /// über `Region: DownloadableRegion` seit Luxemburg als zweitem unterstützten Land (2026-08-24;

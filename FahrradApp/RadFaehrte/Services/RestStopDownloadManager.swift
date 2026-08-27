@@ -175,6 +175,22 @@ nonisolated extension NorwayCountry: RestStopDownloadableRegion {
     var approximateSizeMB: Int { restStopApproximateSizeKB / 1024 }
 }
 
+/// Eigener Release-Tag `rest-stops-gb-v1`, analog `rest-stops-fr-v1`/`-es-v1`/`-it-v1`/`-no-v1`.
+nonisolated extension GreatBritainCountry: RestStopDownloadableRegion {
+    var restStopDownloadURL: URL {
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/rest-stops-gb-v1/\(rawValue)_reststops.sqlite")!
+    }
+
+    var restStopApproximateSizeKB: Int {
+        switch self {
+        case .greatBritain: return 9976
+        }
+    }
+
+    var downloadURL: URL { restStopDownloadURL }
+    var approximateSizeMB: Int { restStopApproximateSizeKB / 1024 }
+}
+
 /// Lädt Rastplatz-Datenbanken herunter und meldet den Fortschritt für `RestStopsOfflineView` -
 /// analog `WayGraphDownloadManager<Region>`, generisch über `Region: RestStopDownloadableRegion`
 /// seit Luxemburg als zweitem unterstützten Land (s. `RestStopStore`-Doc-Kommentar). Anders als bei

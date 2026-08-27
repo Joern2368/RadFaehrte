@@ -5599,6 +5599,28 @@ für die ursprüngliche Produktidee.
       (`restStopSupportedEuropaLands`),
       [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
       (`EuropaLand`-Größentabelle, `.sanMarino`/`.vaticanCity`)
+- [x] **POIs: Großbritannien als fünfter Ganz-Land-Typ ergänzt (2026-08-27)**: Auf Nutzerwunsch
+      geprüft, ob Großbritanniens 2,1-GB-pbf (bei den Wege-Graphen wegen Speicherdrucks in 49
+      `GreatBritainRegion`-Teilregionen aufgeteilt - 47 englische Grafschaften + Schottland + Wales)
+      für den leichten POI-Bau ebenfalls als eine Datei reicht - ja, analog Polen/Italien (ähnliche
+      Größenordnung, dort schon problemlos als eine Datei gebaut). Neuer Typ `GreatBritainCountry`
+      nach demselben Muster wie `FranceCountry`/`SpainCountry`/`ItalyCountry`/`NorwayCountry`
+      (Release-Tag `rest-stops-gb-v1`, `rawValue` "great-britain" mit Bindestrich - analog der
+      bereits bestehenden `great-britain_routes.sqlite`-Ressource, nicht "greatBritain"). Ergebnis:
+      155.063 POIs, 9,7 MB. Direkt in `EuropaRestStopsView` integriert statt einer eigenen
+      Top-Level-Zeile (Lehre aus dem vorherigen Eintrag: erst separate Zeilen bauen und später
+      wieder zusammenlegen war unnötiger Umweg). Damit sind jetzt **fünf** Ganz-Land-Typen
+      (Frankreich/Spanien/Italien/Norwegen/Großbritannien) alphabetisch zusammen mit den 34
+      `EuropaLand`-Ländern in einer Liste. Live auf dem iPhone getestet ("läuft gut").
+      → [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift)
+      (`GreatBritainCountry`),
+      [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
+      (`GreatBritainCountry`-Konformität),
+      [EuropaRestStopsView.swift](FahrradApp/RadFaehrte/Views/EuropaRestStopsView.swift),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`greatBritainRestStopStore`),
+      [RootTabView.swift](FahrradApp/RadFaehrte/RootTabView.swift),
+      [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
+      [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift)
 - [x] **"Radrouten in der Nähe"-Vorschau wieder nach Anfahrt statt Streckenlänge sortiert**
       (2026-08-24, Nutzer-Fund am Beispiel Oldenburg: "Radroute der Megalithkultur" (0,3 km Anfahrt)
       erschien hinter der "3-Seen-Route" (6,2 km Anfahrt), weil seit dem 2026-08-14-Wunsch nach

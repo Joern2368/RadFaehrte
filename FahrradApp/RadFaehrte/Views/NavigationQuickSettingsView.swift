@@ -28,6 +28,7 @@ struct NavigationQuickSettingsView: View {
     let spainRestStopStore: RestStopStore<SpainCountry>
     let italyRestStopStore: RestStopStore<ItalyCountry>
     let norwayRestStopStore: RestStopStore<NorwayCountry>
+    let greatBritainRestStopStore: RestStopStore<GreatBritainCountry>
 
     var body: some View {
         NavigationStack {
@@ -101,7 +102,8 @@ struct NavigationQuickSettingsView: View {
                             franceStore: franceRestStopStore,
                             spainStore: spainRestStopStore,
                             italyStore: italyRestStopStore,
-                            norwayStore: norwayRestStopStore
+                            norwayStore: norwayRestStopStore,
+                            greatBritainStore: greatBritainRestStopStore
                         )
                     } label: {
                         Label("POIs Europa herunterladen", systemImage: "mappin.and.ellipse")
@@ -124,5 +126,5 @@ struct NavigationQuickSettingsView: View {
 }
 
 #Preview {
-    NavigationQuickSettingsView(restStopStore: RestStopStore(), europaRestStopStore: RestStopStore(), franceRestStopStore: RestStopStore(), spainRestStopStore: RestStopStore(), italyRestStopStore: RestStopStore(), norwayRestStopStore: RestStopStore())
+    NavigationQuickSettingsView(restStopStore: RestStopStore(), europaRestStopStore: RestStopStore(), franceRestStopStore: RestStopStore(), spainRestStopStore: RestStopStore(), italyRestStopStore: RestStopStore(), norwayRestStopStore: RestStopStore(), greatBritainRestStopStore: RestStopStore())
 }

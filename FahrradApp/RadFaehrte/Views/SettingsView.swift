@@ -26,6 +26,7 @@ struct SettingsView: View {
     let spainRestStopStore: RestStopStore<SpainCountry>
     let italyRestStopStore: RestStopStore<ItalyCountry>
     let norwayRestStopStore: RestStopStore<NorwayCountry>
+    let greatBritainRestStopStore: RestStopStore<GreatBritainCountry>
     private let recentPlaceStore = RecentPlaceStore()
     @State private var showClearRecentsConfirmation = false
 
@@ -42,7 +43,8 @@ struct SettingsView: View {
         franceRestStopStore: RestStopStore<FranceCountry> = RestStopStore(),
         spainRestStopStore: RestStopStore<SpainCountry> = RestStopStore(),
         italyRestStopStore: RestStopStore<ItalyCountry> = RestStopStore(),
-        norwayRestStopStore: RestStopStore<NorwayCountry> = RestStopStore()
+        norwayRestStopStore: RestStopStore<NorwayCountry> = RestStopStore(),
+        greatBritainRestStopStore: RestStopStore<GreatBritainCountry> = RestStopStore()
     ) {
         self.wayGraphStore = wayGraphStore
         self.europaWayGraphStore = europaWayGraphStore
@@ -57,6 +59,7 @@ struct SettingsView: View {
         self.spainRestStopStore = spainRestStopStore
         self.italyRestStopStore = italyRestStopStore
         self.norwayRestStopStore = norwayRestStopStore
+        self.greatBritainRestStopStore = greatBritainRestStopStore
     }
 
     var body: some View {
@@ -198,7 +201,8 @@ struct SettingsView: View {
                             franceStore: franceRestStopStore,
                             spainStore: spainRestStopStore,
                             italyStore: italyRestStopStore,
-                            norwayStore: norwayRestStopStore
+                            norwayStore: norwayRestStopStore,
+                            greatBritainStore: greatBritainRestStopStore
                         )
                     } label: {
                         Label("POIs Europa herunterladen", systemImage: "mappin.and.ellipse")

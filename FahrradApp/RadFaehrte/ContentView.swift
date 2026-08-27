@@ -86,6 +86,8 @@ struct ContentView: View {
     var italyRestStopStore = RestStopStore<ItalyCountry>()
     /// Analog `italyRestStopStore`, aber für Norwegen als Ganzes (s. `NorwayCountry`).
     var norwayRestStopStore = RestStopStore<NorwayCountry>()
+    /// Analog `norwayRestStopStore`, aber für Großbritannien als Ganzes (s. `GreatBritainCountry`).
+    var greatBritainRestStopStore = RestStopStore<GreatBritainCountry>()
     /// Von `RootTabView` übergeben, um nach dem Speichern einer Fahrt den Verlauf-Tab zum
     /// Neuladen zu bewegen (siehe `HistoryView.refreshTrigger`).
     var onTourSaved: () -> Void = {}
@@ -802,7 +804,7 @@ struct ContentView: View {
             curatedRouteStepsDetailSheet(match)
         }
         .sheet(isPresented: $showQuickSettings) {
-            NavigationQuickSettingsView(restStopStore: restStopStore, europaRestStopStore: europaRestStopStore, franceRestStopStore: franceRestStopStore, spainRestStopStore: spainRestStopStore, italyRestStopStore: italyRestStopStore, norwayRestStopStore: norwayRestStopStore)
+            NavigationQuickSettingsView(restStopStore: restStopStore, europaRestStopStore: europaRestStopStore, franceRestStopStore: franceRestStopStore, spainRestStopStore: spainRestStopStore, italyRestStopStore: italyRestStopStore, norwayRestStopStore: norwayRestStopStore, greatBritainRestStopStore: greatBritainRestStopStore)
         }
         .sheet(item: $exportFile) { file in
             ActivityView(activityItems: [file.url])
@@ -1822,7 +1824,10 @@ struct ContentView: View {
         let norwegen = restStopSupportedNorwayCountries
             .filter { land in corners.contains { land.boundingBox.contains($0) } }
             .compactMap { norwayRestStopStore.path(for: $0) }
-        return bundeslaender + laender + frankreich + spanien + italien + norwegen
+        let grossbritannien = restStopSupportedGreatBritainCountries
+            .filter { land in corners.contains { land.boundingBox.contains($0) } }
+            .compactMap { greatBritainRestStopStore.path(for: $0) }
+        return bundeslaender + laender + frankreich + spanien + italien + norwegen + grossbritannien
     }
 
     /// Lädt Rastplätze im sichtbaren Kartenausschnitt neu - aufgerufen bei jeder Kamerabewegung

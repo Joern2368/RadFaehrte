@@ -7,10 +7,11 @@ import SwiftUI
 
 /// Eine Zeile in der vereinten "POIs Europa"-Liste - unabhängig vom konkreten `Region`-Typ
 /// (`EuropaLand` oder einem der Ganz-Land-Typen `FranceCountry`/`SpainCountry`/`ItalyCountry`/
-/// `NorwayCountry`). Nötig, weil `RestStopsOfflineView<Region>` (s. dort) über genau einen
-/// `Region`-Typ generisch ist - für eine gemeinsame, alphabetisch sortierte Liste über mehrere
-/// Typen hinweg (Nutzerwunsch 2026-08-27: "Frankreich/Spanien/Italien/Norwegen zu Europa packen")
-/// braucht SwiftUI eine gemeinsame, typ-unabhängige Zeilen-Art statt fünf getrennter Listen.
+/// `NorwayCountry`/`GreatBritainCountry`). Nötig, weil `RestStopsOfflineView<Region>` (s. dort)
+/// über genau einen `Region`-Typ generisch ist - für eine gemeinsame, alphabetisch sortierte Liste
+/// über mehrere Typen hinweg (Nutzerwunsch 2026-08-27: "Frankreich/Spanien/Italien/Norwegen zu
+/// Europa packen", Großbritannien direkt nach demselben Muster ergänzt statt eigener Zeile)
+/// braucht SwiftUI eine gemeinsame, typ-unabhängige Zeilen-Art statt getrennter Listen.
 private struct EuropaPOIRow: Identifiable {
     let id: String
     let displayName: String
@@ -34,31 +35,34 @@ struct EuropaRestStopsView: View {
     @State private var spainManager: RestStopDownloadManager<SpainCountry>
     @State private var italyManager: RestStopDownloadManager<ItalyCountry>
     @State private var norwayManager: RestStopDownloadManager<NorwayCountry>
+    @State private var greatBritainManager: RestStopDownloadManager<GreatBritainCountry>
 
     init(
         europaStore: RestStopStore<EuropaLand>,
         franceStore: RestStopStore<FranceCountry>,
         spainStore: RestStopStore<SpainCountry>,
         italyStore: RestStopStore<ItalyCountry>,
-        norwayStore: RestStopStore<NorwayCountry>
+        norwayStore: RestStopStore<NorwayCountry>,
+        greatBritainStore: RestStopStore<GreatBritainCountry>
     ) {
         _europaManager = State(initialValue: RestStopDownloadManager(store: europaStore, supportedRegions: restStopSupportedEuropaLands))
         _franceManager = State(initialValue: RestStopDownloadManager(store: franceStore, supportedRegions: restStopSupportedFranceCountries))
         _spainManager = State(initialValue: RestStopDownloadManager(store: spainStore, supportedRegions: restStopSupportedSpainCountries))
         _italyManager = State(initialValue: RestStopDownloadManager(store: italyStore, supportedRegions: restStopSupportedItalyCountries))
         _norwayManager = State(initialValue: RestStopDownloadManager(store: norwayStore, supportedRegions: restStopSupportedNorwayCountries))
+        _greatBritainManager = State(initialValue: RestStopDownloadManager(store: greatBritainStore, supportedRegions: restStopSupportedGreatBritainCountries))
     }
 
     private var rows: [EuropaPOIRow] {
-        let all = europaRows() + franceRows() + spainRows() + italyRows() + norwayRows()
+        let all = europaRows() + franceRows() + spainRows() + italyRows() + norwayRows() + greatBritainRows()
         return all.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
 
-    /// Erste nicht-`nil` Fehlermeldung über alle fünf Manager hinweg - im Alltag praktisch immer
+    /// Erste nicht-`nil` Fehlermeldung über alle Manager hinweg - im Alltag praktisch immer
     /// höchstens eine gleichzeitig gesetzt (ein Download-Fehler pro Nutzeraktion).
     private var errorMessage: String? {
         europaManager.errorMessage ?? franceManager.errorMessage ?? spainManager.errorMessage
-            ?? italyManager.errorMessage ?? norwayManager.errorMessage
+            ?? italyManager.errorMessage ?? norwayManager.errorMessage ?? greatBritainManager.errorMessage
     }
 
     private func clearErrorMessages() {
@@ -67,6 +71,7 @@ struct EuropaRestStopsView: View {
         spainManager.errorMessage = nil
         italyManager.errorMessage = nil
         norwayManager.errorMessage = nil
+        greatBritainManager.errorMessage = nil
     }
 
     var body: some View {
@@ -205,6 +210,22 @@ struct EuropaRestStopsView: View {
             )
         }
     }
+
+    private func greatBritainRows() -> [EuropaPOIRow] {
+        restStopSupportedGreatBritainCountries.map { region in
+            EuropaPOIRow(
+                id: region.rawValue,
+                displayName: region.displayName,
+                isDownloaded: greatBritainManager.isDownloaded(region),
+                isDeleting: greatBritainManager.deletingRegions.contains(region),
+                progress: greatBritainManager.progress[region],
+                sizeDisplay: greatBritainManager.approximateSizeDisplay(region),
+                download: { greatBritainManager.download(region) },
+                cancel: { greatBritainManager.cancel(region) },
+                delete: { greatBritainManager.delete(region) }
+            )
+        }
+    }
 }
 
 #Preview {
@@ -214,7 +235,8 @@ struct EuropaRestStopsView: View {
             franceStore: RestStopStore(),
             spainStore: RestStopStore(),
             italyStore: RestStopStore(),
-            norwayStore: RestStopStore()
+            norwayStore: RestStopStore(),
+            greatBritainStore: RestStopStore()
         )
     }
 }

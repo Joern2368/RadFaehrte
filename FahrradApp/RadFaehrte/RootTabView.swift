@@ -68,6 +68,8 @@ struct RootTabView: View {
     private let italyRestStopStore = RestStopStore<ItalyCountry>()
     /// Analog `italyRestStopStore`, aber für Norwegen als Ganzes (s. `NorwayCountry`).
     private let norwayRestStopStore = RestStopStore<NorwayCountry>()
+    /// Analog `norwayRestStopStore`, aber für Großbritannien als Ganzes (s. `GreatBritainCountry`).
+    private let greatBritainRestStopStore = RestStopStore<GreatBritainCountry>()
 
     var body: some View {
         ZStack {
@@ -89,6 +91,7 @@ struct RootTabView: View {
                         spainRestStopStore: spainRestStopStore,
                         italyRestStopStore: italyRestStopStore,
                         norwayRestStopStore: norwayRestStopStore,
+                        greatBritainRestStopStore: greatBritainRestStopStore,
                         onTourSaved: { drivenToursVersion += 1 }
                     )
                 }
@@ -126,7 +129,8 @@ struct RootTabView: View {
                         franceRestStopStore: franceRestStopStore,
                         spainRestStopStore: spainRestStopStore,
                         italyRestStopStore: italyRestStopStore,
-                        norwayRestStopStore: norwayRestStopStore
+                        norwayRestStopStore: norwayRestStopStore,
+                        greatBritainRestStopStore: greatBritainRestStopStore
                     )
                 }
             }
