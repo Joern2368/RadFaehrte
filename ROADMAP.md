@@ -5452,7 +5452,7 @@ für die ursprüngliche Produktidee.
       [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`statDisplay`,
       `progressPercentDisplay`, `sunsetDate`, `compassDirectionText`, `shortTimeFormatter`,
       `navigationStat`), [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
-- [x] **POIs für Länder außerhalb Deutschlands ergänzt (bisher 13 Länder)**
+- [x] **POIs für Länder außerhalb Deutschlands ergänzt (bisher 17 Länder + Frankreich/Spanien/Italien als Ganzes)**
       (2026-08-24, Nutzerfrage "geht das auch für die europäischen Länder"): Bisher waren POIs fest
       auf `Bundesland` zugeschnitten (s. `RestStopStore`-Doc-Kommentar, "für einen 2-Länder-Test wäre
       die generische Abstraktion verfrüht") - mit einem zweiten Land war genau dieser Punkt erreicht.
@@ -5493,15 +5493,38 @@ für die ursprüngliche Produktidee.
         (Nutzer bat direkt um die nächsten fünf, ohne zwischendurch nachzufragen). Alle 13
         Länder-pbf-Dateien lagen bereits lokal vor (aus der früheren Wege-Graph-Onboarding),
         `build_rest_stops.py` selbst brauchte keine Änderung (war schon länderunabhängig; die
-        großen pbf brauchten je 5-20 Minuten). Weitere kleine Länder (Malta, Monaco, ...) sowie
-        noch größere Länder folgen in weiteren 5er-Batches. Alle 13 auf dem iPhone des Nutzers live
-        getestet ("läuft gut").
-      → [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift),
+        großen pbf brauchten je 5-20 Minuten). Danach vier kleine Länder (Malta 1265 POIs/96 KB,
+        Monaco 239 POIs/28 KB, Zypern 4120 POIs/280 KB, Kosovo 1814 POIs/136 KB) - damit **17
+        `EuropaLand`-Länder**.
+      - **Frankreich/Spanien/Italien als je eine Datei statt Regionen-Split (2026-08-27,
+        Nutzerwunsch)**: Bei den Wege-Graphen sind diese drei Länder wegen Speicherdrucks beim
+        vollen Länder-Bau in Teilregionen aufgeteilt (`FranceRegion`/`SpainRegion`/`ItalyRegion`,
+        21/18/5 Regionen). `build_rest_stops.py` liest dagegen nur einzelne Knoten ohne vollen
+        Orts-Index (`.with_locations()`) und ist damit viel leichtgewichtiger - der Nutzer
+        entschied sich bewusst für je **eine** Datei/Zeile in den Einstellungen statt 21+18+5
+        einzelner Regionen. Drei neue, eigenständige Ein-Fall-Typen `FranceCountry`/`SpainCountry`/
+        `ItalyCountry` (`DownloadableRegion`-konform, `boundingBox` aus dem jeweiligen pbf-Header
+        via `osmium.io.Reader(...).header().box()`), je eigener Release-Tag (`rest-stops-fr-v1`/
+        `-es-v1`/`-it-v1`) und eigene `RestStopStore`/`RestStopsOfflineView`-Instanz ("POIs
+        Frankreich"/"POIs Spanien"/"POIs Italien" als dritte/vierte/fünfte POI-Zeile in
+        `SettingsView`/`NavigationQuickSettingsView`, dritte/vierte/fünfte Quelle in
+        `ContentView.restStopCandidatePaths`). Die geerbten `DownloadableRegion`-Requirements
+        `downloadURL`/`approximateSizeMB` (eigentlich für Wege-Graphen gedacht) werden für diese
+        POI-only-Typen nie aufgerufen und zeigen der Einfachheit halber auf dieselben Werte wie
+        `restStopDownloadURL`/`restStopApproximateSizeKB`. Frankreich (4,8 GB pbf) brauchte mit
+        ~92 Minuten mit Abstand am längsten (288.532 POIs, 18,6 MB) - Spanien (1,4 GB, 146.863
+        POIs, 9,2 MB, ~25 Min) und Italien (2,1 GB, 215.974 POIs, 13,4 MB, ~45 Min) liefen jeweils
+        parallel zu anderen Länder-Builds im Hintergrund. Frankreich-Build überstand nebenbei ein
+        Zuklappen/Wiederaufklappen des Baurechners unbeschadet (macOS pausiert den Prozess beim
+        Schlaf, setzt ihn beim Aufwachen fort - kein Neustart nötig).
+      → [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift)
+      (`FranceCountry`, `SpainCountry`, `ItalyCountry`),
       [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
-      (`RestStopDownloadableRegion`, `Bundesland`/`EuropaLand`-Konformitäten),
+      (`RestStopDownloadableRegion`, alle Regionstyp-Konformitäten),
       [RestStopsOfflineView.swift](FahrradApp/RadFaehrte/Views/RestStopsOfflineView.swift),
       [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`restStopCandidatePaths`,
-      `europaRestStopStore`), [RootTabView.swift](FahrradApp/RadFaehrte/RootTabView.swift),
+      `europaRestStopStore`, `franceRestStopStore`, `spainRestStopStore`, `italyRestStopStore`),
+      [RootTabView.swift](FahrradApp/RadFaehrte/RootTabView.swift),
       [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
       [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift),
       [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)

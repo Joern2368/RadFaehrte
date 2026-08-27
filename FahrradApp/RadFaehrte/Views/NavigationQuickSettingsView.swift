@@ -24,6 +24,9 @@ struct NavigationQuickSettingsView: View {
     @AppStorage(AppSettingsKey.showRestStops) private var showRestStops = AppSettingsDefaults.showRestStops
     let restStopStore: RestStopStore<Bundesland>
     let europaRestStopStore: RestStopStore<EuropaLand>
+    let franceRestStopStore: RestStopStore<FranceCountry>
+    let spainRestStopStore: RestStopStore<SpainCountry>
+    let italyRestStopStore: RestStopStore<ItalyCountry>
 
     var body: some View {
         NavigationStack {
@@ -96,6 +99,21 @@ struct NavigationQuickSettingsView: View {
                     } label: {
                         Label("POIs Europa herunterladen", systemImage: "mappin.and.ellipse")
                     }
+                    NavigationLink {
+                        RestStopsOfflineView(store: franceRestStopStore, title: "POIs Frankreich", regions: restStopSupportedFranceCountries)
+                    } label: {
+                        Label("POIs Frankreich herunterladen", systemImage: "mappin.and.ellipse")
+                    }
+                    NavigationLink {
+                        RestStopsOfflineView(store: spainRestStopStore, title: "POIs Spanien", regions: restStopSupportedSpainCountries)
+                    } label: {
+                        Label("POIs Spanien herunterladen", systemImage: "mappin.and.ellipse")
+                    }
+                    NavigationLink {
+                        RestStopsOfflineView(store: italyRestStopStore, title: "POIs Italien", regions: restStopSupportedItalyCountries)
+                    } label: {
+                        Label("POIs Italien herunterladen", systemImage: "mappin.and.ellipse")
+                    }
                 } header: {
                     Text("POIs")
                 } footer: {
@@ -114,5 +132,5 @@ struct NavigationQuickSettingsView: View {
 }
 
 #Preview {
-    NavigationQuickSettingsView(restStopStore: RestStopStore(), europaRestStopStore: RestStopStore())
+    NavigationQuickSettingsView(restStopStore: RestStopStore(), europaRestStopStore: RestStopStore(), franceRestStopStore: RestStopStore(), spainRestStopStore: RestStopStore(), italyRestStopStore: RestStopStore())
 }

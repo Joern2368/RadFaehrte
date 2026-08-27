@@ -74,6 +74,10 @@ nonisolated extension EuropaLand: RestStopDownloadableRegion {
         case .portugal: return 2352
         case .czechia: return 4008
         case .poland: return 7572
+        case .malta: return 96
+        case .monaco: return 28
+        case .cyprus: return 280
+        case .kosovo: return 136
         default:
             // Nur die in `restStopSupportedEuropaLands` gelisteten Länder haben bisher eine gebaute
             // POI-Datei - dieser Zweig wird praktisch nie erreicht, ist aber wegen der
@@ -81,6 +85,61 @@ nonisolated extension EuropaLand: RestStopDownloadableRegion {
             return 0
         }
     }
+}
+
+/// Eigener Release-Tag `rest-stops-fr-v1`, unabhängig von `rest-stops-eu-v1` - Frankreich ist bei
+/// `EuropaLand` bewusst kein Fall (dort steht `FranceRegion` für die 21-Regionen-Aufteilung, s.
+/// `WayGraphStore.swift`), s. `FranceCountry`-Doc-Kommentar in `RestStopStore.swift`.
+nonisolated extension FranceCountry: RestStopDownloadableRegion {
+    var restStopDownloadURL: URL {
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/rest-stops-fr-v1/\(rawValue)_reststops.sqlite")!
+    }
+
+    var restStopApproximateSizeKB: Int {
+        switch self {
+        case .france: return 18608
+        }
+    }
+
+    /// `downloadURL`/`approximateSizeMB` aus dem geerbten `DownloadableRegion` werden für diesen
+    /// POI-only-Typ nie aufgerufen (kein Wege-Graph-Code iteriert über `FranceCountry` - für
+    /// Wege-Graphen gilt weiterhin `FranceRegion`). Zeigen der Einfachheit halber auf dieselben
+    /// Werte wie `restStopDownloadURL`/`restStopApproximateSizeKB` statt erfundene Platzhalter zu
+    /// liefern.
+    var downloadURL: URL { restStopDownloadURL }
+    var approximateSizeMB: Int { restStopApproximateSizeKB / 1024 }
+}
+
+/// Eigener Release-Tag `rest-stops-es-v1`, analog `rest-stops-fr-v1` bei `FranceCountry`.
+nonisolated extension SpainCountry: RestStopDownloadableRegion {
+    var restStopDownloadURL: URL {
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/rest-stops-es-v1/\(rawValue)_reststops.sqlite")!
+    }
+
+    var restStopApproximateSizeKB: Int {
+        switch self {
+        case .spain: return 9408
+        }
+    }
+
+    var downloadURL: URL { restStopDownloadURL }
+    var approximateSizeMB: Int { restStopApproximateSizeKB / 1024 }
+}
+
+/// Eigener Release-Tag `rest-stops-it-v1`, analog `rest-stops-fr-v1`/`rest-stops-es-v1`.
+nonisolated extension ItalyCountry: RestStopDownloadableRegion {
+    var restStopDownloadURL: URL {
+        URL(string: "https://github.com/Joern2368/RadFaehrte/releases/download/rest-stops-it-v1/\(rawValue)_reststops.sqlite")!
+    }
+
+    var restStopApproximateSizeKB: Int {
+        switch self {
+        case .italy: return 13708
+        }
+    }
+
+    var downloadURL: URL { restStopDownloadURL }
+    var approximateSizeMB: Int { restStopApproximateSizeKB / 1024 }
 }
 
 /// Lädt Rastplatz-Datenbanken herunter und meldet den Fortschritt für `RestStopsOfflineView` -

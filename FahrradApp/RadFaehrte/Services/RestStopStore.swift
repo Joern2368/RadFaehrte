@@ -38,7 +38,72 @@ let restStopSupportedRegions: [Bundesland] = Bundesland.allCases
 /// ausgeweitet. Bewusst nicht `EuropaLand.allCases` (von dessen 34 Fällen hat noch nicht jedes eine
 /// gebaute POI-Datei) - Erweiterung auf weitere Länder erfolgt hier, analog
 /// `restStopSupportedRegions`.
-let restStopSupportedEuropaLands: [EuropaLand] = [.luxembourg, .liechtenstein, .andorra, .austria, .netherlands, .switzerland, .belgium, .denmark, .slovakia, .greece, .portugal, .czechia, .poland]
+let restStopSupportedEuropaLands: [EuropaLand] = [.luxembourg, .liechtenstein, .andorra, .austria, .netherlands, .switzerland, .belgium, .denmark, .slovakia, .greece, .portugal, .czechia, .poland, .malta, .monaco, .cyprus, .kosovo]
+
+/// Frankreich als **eine** Region für POIs - anders als `FranceRegion` (21 Teilregionen, s. dessen
+/// Doc-Kommentar), das für den Wege-Graph-Bau wegen Speicherdrucks bei der vollen 4,8-GB-Datei
+/// nötig war. `build_rest_stops.py` liest dagegen nur einzelne Knoten ohne vollen Orts-Index
+/// (`.with_locations()`) und ist damit deutlich leichtgewichtiger - eine einzelne Datei für ganz
+/// Frankreich ist hier möglich (Nutzer-Entscheidung 2026-08-27: eine "Frankreich"-Zeile in den
+/// Einstellungen statt 21 einzelner Regionen).
+nonisolated enum FranceCountry: String, CaseIterable, Identifiable, DownloadableRegion {
+    case france
+
+    var id: String { rawValue }
+    var displayName: String { "Frankreich" }
+
+    /// Aus dem pbf-Header von `france-latest.osm.pbf` (`osmium.io.Reader(...).header().box()`),
+    /// analog dem Vorgehen bei `FranceRegion`/`ItalyRegion`/`SpainRegion`.
+    var boundingBox: RegionBoundingBox {
+        RegionBoundingBox(minLat: 41.2386640, maxLat: 51.4288010, minLon: -6.9372070, maxLon: 10.0167910)
+    }
+}
+
+/// Länder außerhalb Deutschlands, für die eine `rest-stops-fr-v1`-Datei existiert - bewusst analog
+/// zu `restStopSupportedRegions`/`restStopSupportedEuropaLands` als eigene Konstante statt
+/// `FranceCountry.allCases` direkt zu verwenden, auch wenn `FranceCountry` bisher nur einen Fall hat.
+let restStopSupportedFranceCountries: [FranceCountry] = [.france]
+
+/// Spanien als **eine** Region für POIs - analog `FranceCountry`. Bei den Wege-Graphen ist Spanien
+/// wegen der Speicherprobleme beim vollen Länder-Bau in 18 `SpainRegion`-Teilregionen aufgeteilt;
+/// das pbf ist mit 1,4 GB aber deutlich kleiner als Frankreichs 4,8 GB und damit für den
+/// leichtgewichtigen POI-Bau (keine `.with_locations()`) auch als eine Datei gut machbar.
+nonisolated enum SpainCountry: String, CaseIterable, Identifiable, DownloadableRegion {
+    case spain
+
+    var id: String { rawValue }
+    var displayName: String { "Spanien" }
+
+    /// Aus dem pbf-Header von `spain-latest.osm.pbf`, analog `FranceCountry.boundingBox`.
+    var boundingBox: RegionBoundingBox {
+        RegionBoundingBox(minLat: 35.1541530, maxLat: 44.1485500, minLon: -9.7790140, maxLon: 5.0985250)
+    }
+}
+
+/// Länder außerhalb Deutschlands, für die eine `rest-stops-es-v1`-Datei existiert - analog
+/// `restStopSupportedFranceCountries`.
+let restStopSupportedSpainCountries: [SpainCountry] = [.spain]
+
+/// Italien als **eine** Region für POIs - analog `FranceCountry`/`SpainCountry`. Bei den
+/// Wege-Graphen ist Italien wegen der Speicherprobleme beim vollen Länder-Bau in 5
+/// `ItalyRegion`-Makroregionen aufgeteilt; das pbf ist mit 2,1 GB ähnlich groß wie Polen (2 GB,
+/// dort ohne Probleme als eine POI-Datei gebaut) und damit für den leichtgewichtigen POI-Bau
+/// (keine `.with_locations()`) ebenfalls als eine Datei gut machbar.
+nonisolated enum ItalyCountry: String, CaseIterable, Identifiable, DownloadableRegion {
+    case italy
+
+    var id: String { rawValue }
+    var displayName: String { "Italien" }
+
+    /// Aus dem pbf-Header von `italy-latest.osm.pbf`, analog `FranceCountry`/`SpainCountry`.
+    var boundingBox: RegionBoundingBox {
+        RegionBoundingBox(minLat: 35.0763800, maxLat: 47.1000450, minLon: 6.6026960, maxLon: 19.1249900)
+    }
+}
+
+/// Länder außerhalb Deutschlands, für die eine `rest-stops-it-v1`-Datei existiert - analog
+/// `restStopSupportedFranceCountries`/`restStopSupportedSpainCountries`.
+let restStopSupportedItalyCountries: [ItalyCountry] = [.italy]
 
 /// Verwaltet heruntergeladene Rastplatz-Datenbanken (s. `RestStopRepository`), jeweils eine
 /// SQLite-Datei pro Region in `Documents/RestStops/` - analog `WayGraphStore<Region>`, generisch

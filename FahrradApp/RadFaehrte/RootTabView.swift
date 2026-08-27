@@ -56,9 +56,16 @@ struct RootTabView: View {
     /// Rastplätze-Bundesland sofort auf der Karte in `ContentView` sichtbar wird - analog
     /// `wayGraphStore`.
     private let restStopStore = RestStopStore<Bundesland>()
-    /// Analog `restStopStore`, aber für Länder außerhalb Deutschlands (aktuell nur Luxemburg, s.
+    /// Analog `restStopStore`, aber für Länder außerhalb Deutschlands (s.
     /// `restStopSupportedEuropaLands`).
     private let europaRestStopStore = RestStopStore<EuropaLand>()
+    /// Analog `europaRestStopStore`, aber für Frankreich als Ganzes (eine Datei statt der 21
+    /// `FranceRegion`-Teilregionen, s. `FranceCountry`-Doc-Kommentar).
+    private let franceRestStopStore = RestStopStore<FranceCountry>()
+    /// Analog `franceRestStopStore`, aber für Spanien als Ganzes (s. `SpainCountry`).
+    private let spainRestStopStore = RestStopStore<SpainCountry>()
+    /// Analog `spainRestStopStore`, aber für Italien als Ganzes (s. `ItalyCountry`).
+    private let italyRestStopStore = RestStopStore<ItalyCountry>()
 
     var body: some View {
         ZStack {
@@ -76,6 +83,9 @@ struct RootTabView: View {
                         greatBritainWayGraphStore: greatBritainWayGraphStore,
                         restStopStore: restStopStore,
                         europaRestStopStore: europaRestStopStore,
+                        franceRestStopStore: franceRestStopStore,
+                        spainRestStopStore: spainRestStopStore,
+                        italyRestStopStore: italyRestStopStore,
                         onTourSaved: { drivenToursVersion += 1 }
                     )
                 }
@@ -109,7 +119,10 @@ struct RootTabView: View {
                         norwayWayGraphStore: norwayWayGraphStore,
                         greatBritainWayGraphStore: greatBritainWayGraphStore,
                         restStopStore: restStopStore,
-                        europaRestStopStore: europaRestStopStore
+                        europaRestStopStore: europaRestStopStore,
+                        franceRestStopStore: franceRestStopStore,
+                        spainRestStopStore: spainRestStopStore,
+                        italyRestStopStore: italyRestStopStore
                     )
                 }
             }

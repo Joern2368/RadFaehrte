@@ -75,9 +75,15 @@ struct ContentView: View {
     /// `reloadNearbyRestStops`) - unabhängig von den Wege-Graph-Stores oben (s.
     /// `RestStopStore`-Doc-Kommentar).
     var restStopStore = RestStopStore<Bundesland>()
-    /// Analog `restStopStore`, aber für Länder außerhalb Deutschlands (aktuell nur Luxemburg, s.
+    /// Analog `restStopStore`, aber für Länder außerhalb Deutschlands (s.
     /// `restStopSupportedEuropaLands`).
     var europaRestStopStore = RestStopStore<EuropaLand>()
+    /// Analog `europaRestStopStore`, aber für Frankreich als Ganzes (s. `FranceCountry`).
+    var franceRestStopStore = RestStopStore<FranceCountry>()
+    /// Analog `franceRestStopStore`, aber für Spanien als Ganzes (s. `SpainCountry`).
+    var spainRestStopStore = RestStopStore<SpainCountry>()
+    /// Analog `spainRestStopStore`, aber für Italien als Ganzes (s. `ItalyCountry`).
+    var italyRestStopStore = RestStopStore<ItalyCountry>()
     /// Von `RootTabView` übergeben, um nach dem Speichern einer Fahrt den Verlauf-Tab zum
     /// Neuladen zu bewegen (siehe `HistoryView.refreshTrigger`).
     var onTourSaved: () -> Void = {}
@@ -794,7 +800,7 @@ struct ContentView: View {
             curatedRouteStepsDetailSheet(match)
         }
         .sheet(isPresented: $showQuickSettings) {
-            NavigationQuickSettingsView(restStopStore: restStopStore, europaRestStopStore: europaRestStopStore)
+            NavigationQuickSettingsView(restStopStore: restStopStore, europaRestStopStore: europaRestStopStore, franceRestStopStore: franceRestStopStore, spainRestStopStore: spainRestStopStore, italyRestStopStore: italyRestStopStore)
         }
         .sheet(item: $exportFile) { file in
             ActivityView(activityItems: [file.url])
@@ -1802,7 +1808,16 @@ struct ContentView: View {
         let laender = restStopSupportedEuropaLands
             .filter { land in corners.contains { land.boundingBox.contains($0) } }
             .compactMap { europaRestStopStore.path(for: $0) }
-        return bundeslaender + laender
+        let frankreich = restStopSupportedFranceCountries
+            .filter { land in corners.contains { land.boundingBox.contains($0) } }
+            .compactMap { franceRestStopStore.path(for: $0) }
+        let spanien = restStopSupportedSpainCountries
+            .filter { land in corners.contains { land.boundingBox.contains($0) } }
+            .compactMap { spainRestStopStore.path(for: $0) }
+        let italien = restStopSupportedItalyCountries
+            .filter { land in corners.contains { land.boundingBox.contains($0) } }
+            .compactMap { italyRestStopStore.path(for: $0) }
+        return bundeslaender + laender + frankreich + spanien + italien
     }
 
     /// Lädt Rastplätze im sichtbaren Kartenausschnitt neu - aufgerufen bei jeder Kamerabewegung
