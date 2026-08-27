@@ -83,6 +83,11 @@ nonisolated extension EuropaLand: RestStopDownloadableRegion {
         case .albania: return 368
         case .bosniaHerzegovina: return 340
         case .bulgaria: return 936
+        case .romania: return 732
+        case .hungary: return 2544
+        case .croatia: return 1208
+        case .slovenia: return 680
+        case .serbia: return 632
         default:
             // Nur die in `restStopSupportedEuropaLands` gelisteten Länder haben bisher eine gebaute
             // POI-Datei - dieser Zweig wird praktisch nie erreicht, ist aber wegen der

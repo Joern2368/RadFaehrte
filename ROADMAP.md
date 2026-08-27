@@ -5560,6 +5560,19 @@ für die ursprüngliche Produktidee.
       [RootTabView.swift](FahrradApp/RadFaehrte/RootTabView.swift),
       [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift),
       [NavigationQuickSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationQuickSettingsView.swift)
+- [x] **POIs: fünf weitere Länder ergänzt (Rumänien, Ungarn, Kroatien, Slowenien, Serbien)**
+      (2026-08-27): Fortsetzung der beiden vorherigen Einträge, gleiches Vorgehen (`build_rest_stops.py`
+      pro Land, `gh release upload rest-stops-eu-v1 <datei> --clobber`, Größentabelle in
+      `RestStopDownloadManager.swift` ergänzen). Rumänien (10730 POIs, 732 KB), Ungarn (40062 POIs,
+      2,5 MB), Kroatien (18417 POIs, 1,2 MB), Slowenien (10415 POIs, 680 KB), Serbien (8963 POIs,
+      632 KB) - alle pbf-Dateien lagen bereits lokal vor. Damit **28 `EuropaLand`-Länder** (von 34)
+      + Frankreich/Spanien/Italien/Norwegen als Ganzes. Noch offen: Estland, Finnland, Island,
+      Irland, Lettland, Litauen, Schweden (kein lokales pbf, müssten von Geofabrik geladen werden),
+      sowie Großbritannien als möglicher fünfter Ganz-Land-Kandidat (noch ungeprüft).
+      → [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift)
+      (`restStopSupportedEuropaLands`),
+      [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
+      (`Bundesland`/`EuropaLand`-Größentabelle)
 - [x] **"Radrouten in der Nähe"-Vorschau wieder nach Anfahrt statt Streckenlänge sortiert**
       (2026-08-24, Nutzer-Fund am Beispiel Oldenburg: "Radroute der Megalithkultur" (0,3 km Anfahrt)
       erschien hinter der "3-Seen-Route" (6,2 km Anfahrt), weil seit dem 2026-08-14-Wunsch nach
