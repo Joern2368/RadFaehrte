@@ -38,7 +38,12 @@ let restStopSupportedRegions: [Bundesland] = Bundesland.allCases
 /// ausgeweitet. Bewusst nicht `EuropaLand.allCases` (von dessen 34 Fällen hat noch nicht jedes eine
 /// gebaute POI-Datei) - Erweiterung auf weitere Länder erfolgt hier, analog
 /// `restStopSupportedRegions`.
-let restStopSupportedEuropaLands: [EuropaLand] = [.luxembourg, .liechtenstein, .andorra, .austria, .netherlands, .switzerland, .belgium, .denmark, .slovakia, .greece, .portugal, .czechia, .poland, .malta, .monaco, .cyprus, .kosovo, .macedonia, .montenegro, .albania, .bosniaHerzegovina, .bulgaria, .romania, .hungary, .croatia, .slovenia, .serbia]
+/// 34 von 36 `EuropaLand`-Fällen abgedeckt (2026-08-27) - San Marino und Vatikanstadt bewusst
+/// ausgenommen (0 Treffer bei beiden, analog der verworfenen Fahrrad-Luftpumpen-Kategorie, s.
+/// ROADMAP.md). Konstante bewusst weiterhin gepflegt statt auf `EuropaLand.allCases` umgestellt,
+/// für den Fall, dass künftig ein neuer `EuropaLand`-Fall ergänzt wird, der noch keine gebaute
+/// POI-Datei hat (s. Doc-Kommentar oben).
+let restStopSupportedEuropaLands: [EuropaLand] = [.luxembourg, .liechtenstein, .andorra, .austria, .netherlands, .switzerland, .belgium, .denmark, .slovakia, .greece, .portugal, .czechia, .poland, .malta, .monaco, .cyprus, .kosovo, .macedonia, .montenegro, .albania, .bosniaHerzegovina, .bulgaria, .romania, .hungary, .croatia, .slovenia, .serbia, .sweden, .iceland, .estonia, .latvia, .lithuania, .ireland, .finland]
 
 /// Frankreich als **eine** Region für POIs - anders als `FranceRegion` (21 Teilregionen, s. dessen
 /// Doc-Kommentar), das für den Wege-Graph-Bau wegen Speicherdrucks bei der vollen 4,8-GB-Datei

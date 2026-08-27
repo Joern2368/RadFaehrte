@@ -5573,6 +5573,32 @@ für die ursprüngliche Produktidee.
       (`restStopSupportedEuropaLands`),
       [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
       (`Bundesland`/`EuropaLand`-Größentabelle)
+- [x] **POIs: Schweden + die letzten 6 Länder ohne lokales pbf ergänzt - alle sinnvollen
+      `EuropaLand`-Fälle abgedeckt (2026-08-27)**: Schweden (35793 POIs, 2,2 MB) zuerst aus bereits
+      lokal vorhandenem pbf. Für die restlichen sechs Länder gab es noch **kein lokales pbf** -
+      erstmals in diesem Rollout direkt von Geofabrik nachgeladen (`curl` auf
+      `download.geofabrik.de/europe/<slug>-latest.osm.pbf`, alle parallel im Hintergrund gebaut):
+      Estland (10228 POIs, 652 KB, 117 MB pbf), Lettland (11425/728 KB, 133 MB), Litauen (7508/
+      496 KB, 212 MB), Island (2998/204 KB, 62 MB), Finnland (20241/1,3 MB, 706 MB) und Irland
+      (14319/940 KB, 392 MB pbf - Geofabrik-Slug `ireland-and-northern-ireland`, abweichend vom
+      `EuropaLand.ireland`-`rawValue` "ireland", der für den Release-Asset-Dateinamen zählt - Ausgabe
+      deshalb explizit als `ireland_reststops.sqlite` benannt, nicht nach dem Download-Slug).
+      Damit **34 von 36 `EuropaLand`-Fällen** abgedeckt.
+      - **Zwei Fälle bewusst ausgenommen**: `EuropaLand` hat inzwischen 36 statt 34 Fälle (San
+        Marino/Vatikanstadt kamen zwischenzeitlich in einer anderen Sitzung dazu, s.
+        Commit-Historie) - beim Kompilieren fiel das erst als "switch must be exhaustive"-Fehler
+        auf. Für beide POI-Daten gebaut, aber **0 Treffer** (beide winzig) - analog der früher
+        verworfenen Fahrrad-Luftpumpen-Kategorie deshalb nicht in
+        `restStopSupportedEuropaLands` aufgenommen, aber trotzdem mit `return 0` im `switch`
+        ergänzt (nötig für Exhaustiveness, unabhängig von der Aufnahme in die POI-Liste).
+      - Ab jetzt sind für POIs **alle** `EuropaLand`-Fälle mit sinnvollen Treffern abgedeckt - für
+        weitere Ausweitung bliebe nur noch Großbritannien als möglicher fünfter Ganz-Land-Kandidat
+        (`GreatBritainRegion`, 49 Teilregionen bei den Wege-Graphen, noch ungeprüft, ob als eine
+        POI-Datei baubar).
+      → [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift)
+      (`restStopSupportedEuropaLands`),
+      [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
+      (`EuropaLand`-Größentabelle, `.sanMarino`/`.vaticanCity`)
 - [x] **"Radrouten in der Nähe"-Vorschau wieder nach Anfahrt statt Streckenlänge sortiert**
       (2026-08-24, Nutzer-Fund am Beispiel Oldenburg: "Radroute der Megalithkultur" (0,3 km Anfahrt)
       erschien hinter der "3-Seen-Route" (6,2 km Anfahrt), weil seit dem 2026-08-14-Wunsch nach

@@ -88,11 +88,18 @@ nonisolated extension EuropaLand: RestStopDownloadableRegion {
         case .croatia: return 1208
         case .slovenia: return 680
         case .serbia: return 632
-        default:
-            // Nur die in `restStopSupportedEuropaLands` gelisteten Länder haben bisher eine gebaute
-            // POI-Datei - dieser Zweig wird praktisch nie erreicht, ist aber wegen der
-            // Exhaustiveness-Prüfung über alle 34 `EuropaLand`-Fälle nötig.
-            return 0
+        case .sweden: return 2296
+        case .iceland: return 204
+        case .estonia: return 652
+        case .latvia: return 728
+        case .lithuania: return 496
+        case .ireland: return 940
+        case .finland: return 1328
+        // San Marino/Vatikanstadt: 0 Treffer (beide winzig, s. ROADMAP.md) - deshalb nicht in
+        // `restStopSupportedEuropaLands` gelistet, hier aber trotzdem nötig für die
+        // Exhaustiveness-Prüfung über alle `EuropaLand`-Fälle.
+        case .sanMarino: return 0
+        case .vaticanCity: return 0
         }
     }
 }
