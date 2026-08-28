@@ -2798,9 +2798,8 @@ struct ContentView: View {
                 .fill(.white)
                 .frame(width: 26, height: 26)
                 .shadow(radius: 1)
-            Image(systemName: kind.icon)
+            RestStopKindIcon(kind: kind)
                 .font(.system(size: 13))
-                .foregroundStyle(.blue)
         }
     }
 
@@ -2809,7 +2808,7 @@ struct ContentView: View {
     private func restStopDetailSheet(_ stop: RestStop) -> some View {
         NavigationStack {
             List {
-                Label(stop.kind.label, systemImage: stop.kind.icon)
+                Label { Text(stop.kind.label) } icon: { RestStopKindIcon(kind: stop.kind) }
                 if let title = stop.title {
                     Text(title)
                 }

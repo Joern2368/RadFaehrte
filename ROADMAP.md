@@ -5643,6 +5643,23 @@ für die ursprüngliche Produktidee.
       auf dem iPhone getestet und vom Nutzer bestätigt ("sortiert richtig").
       → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`loadNearbyMatches`,
       `minimumNearbyRouteLengthKm`)
+- [x] **POIs: Kategorie-Icons eingefärbt, Bäckerei bekommt Brezel-Emoji (2026-08-28)**:
+      Nutzer-Feedback, dass alle Pin-Symbole einheitlich blau kaum auf den ersten Blick zu
+      unterscheiden waren, und dass das bisherige Bäckerei-Symbol
+      (`takeoutbag.and.cup.and.straw.fill`, wirkt eher wie Kaffee-to-go) nicht passt. Neue
+      `RestStop.Kind.color`-Property färbt die SF-Symbol-Icons jetzt je Kategorie ein (Trinkwasser
+      blau, Café braun, Aussichtspunkt grün, Reparaturstation orange, Bank rot, Biergarten gelb,
+      Toilette cyan, E-Bike-Ladestation mint). Für Bäckerei gegen `SFSymbols.framework`s
+      `name_availability.plist` geprüft: **kein** SF Symbol für Brezel/Brot/Bäckerei vorhanden
+      (weder "pretzel" noch "bread" noch "bakery") - deshalb neue `Kind.emoji`-Property als
+      Override (🥨), gerendert über eine gemeinsame `RestStopKindIcon`-View statt separatem
+      Emoji-Sonderfall an jeder der drei Stellen (Karten-Pin, Detail-Sheet, Kategorie-Liste).
+      Erste Bank-Farbe war Grau, auf Nutzerwunsch zu Rot geändert. Live auf dem iPhone getestet und
+      vom Nutzer bestätigt ("passt so").
+      → [RestStop.swift](FahrradApp/RadFaehrte/Models/RestStop.swift) (`Kind.color`, `Kind.emoji`,
+      `RestStopKindIcon`), [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
+      (`restStopPinView`, Detail-Sheet), [RestStopKindSettingsView.swift]
+      (FahrradApp/RadFaehrte/Views/RestStopKindSettingsView.swift)
 
 ## Bekannte Probleme
 

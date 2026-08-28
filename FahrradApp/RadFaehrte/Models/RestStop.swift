@@ -5,6 +5,7 @@
 
 import CoreLocation
 import Foundation
+import SwiftUI
 
 /// Ein Rastplatz-POI aus OpenStreetMap (Trinkwasser, Café, Aussichtspunkt,
 /// Fahrrad-Reparaturstation, Bank) - s. `Scripts/build_rest_stops.py`. Bänke waren zeitweise
@@ -87,7 +88,38 @@ struct RestStop: Identifiable, Codable, Equatable {
             case .beerGarden: return "mug.fill"
             case .toilets: return "toilet.fill"
             case .ebikeCharging: return "bolt.fill"
-            case .bakery: return "takeoutbag.and.cup.and.straw.fill"
+            /// Fallback für Kontexte, die zwingend einen SF-Symbol-Namen brauchen - fürs visuelle
+            /// Rendering überschreibt `emoji` das hier (SF Symbols hat kein Brezel-/Bäckerei-Symbol,
+            /// geprüft gegen `SFSymbols.framework`s `name_availability.plist`: weder "pretzel" noch
+            /// "bread" noch "bakery" vorhanden).
+            case .bakery: return "birthday.cake.fill"
+            }
+        }
+
+        /// Emoji-Override fürs visuelle Rendering (Pin auf der Karte, Listen-Icons) anstelle von
+        /// `icon` - s. Kommentar dort. `nil` für alle Kategorien mit passendem SF Symbol.
+        var emoji: String? {
+            switch self {
+            case .bakery: return "🥨"
+            default: return nil
+            }
+        }
+
+        /// Einfärbung des Pin-/Listen-Icons zur visuellen Unterscheidung der Kategorien auf der
+        /// Karte (Nutzer-Feedback: Symbole waren alle einheitlich blau, schwer auf den ersten Blick
+        /// zu unterscheiden). Bei `emoji`-Kategorien ungenutzt, da das Emoji seine eigene Farbe
+        /// mitbringt.
+        var color: Color {
+            switch self {
+            case .drinkingWater: return .blue
+            case .cafe: return .brown
+            case .viewpoint: return .green
+            case .bicycleRepairStation: return .orange
+            case .bench: return .red
+            case .beerGarden: return .yellow
+            case .toilets: return .cyan
+            case .ebikeCharging: return .mint
+            case .bakery: return .pink
             }
         }
 
@@ -114,5 +146,22 @@ struct RestStop: Identifiable, Codable, Equatable {
 
     var clCoordinate: CLLocationCoordinate2D {
         coordinate.clLocationCoordinate
+    }
+}
+
+/// Icon einer `RestStop.Kind` - Emoji (`kind.emoji`) wenn gesetzt, sonst farbiges SF Symbol
+/// (`kind.icon`/`kind.color`). Gemeinsam genutzt vom Karten-Pin (`ContentView`), dem Detail-Sheet
+/// und der Kategorie-Liste (`RestStopKindSettingsView`), damit alle drei Stellen bei einer neuen
+/// Kategorie automatisch konsistent bleiben.
+struct RestStopKindIcon: View {
+    let kind: RestStop.Kind
+
+    var body: some View {
+        if let emoji = kind.emoji {
+            Text(emoji)
+        } else {
+            Image(systemName: kind.icon)
+                .foregroundStyle(kind.color)
+        }
     }
 }

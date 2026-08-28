@@ -35,7 +35,7 @@ struct RestStopKindSettingsView: View {
             Section {
                 ForEach(RestStop.Kind.allCases) { kind in
                     Toggle(isOn: binding(for: kind)) {
-                        Label(kind.label, systemImage: kind.icon)
+                        Label { Text(kind.label) } icon: { RestStopKindIcon(kind: kind) }
                     }
                 }
             } footer: {
