@@ -5413,6 +5413,33 @@ für die ursprüngliche Produktidee.
       Grenzen. Auf dem iPhone des Nutzers gebaut und installiert.
       → [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift)
       (`navigationLookaheadRange`)
+- [x] **Sichtweite-Obergrenze wieder auf 250 m gesenkt, Watch-Haptik-Vorlauf von 100 m auf 80 m
+      reduziert** (2026-08-28, nach Testfahrt): Bei einer Testfahrt mit Sichtweite=300 m kam die
+      "Jetzt ..."-Sprachansage am iPhone, aber keine Vibration an der (parallel gestarteten)
+      Apple Watch; bei Sichtweite=120 m funktionierte danach beides. Code-Recherche ergab: Die
+      Sichtweite-Einstellung (`navigationLookaheadMeters`) beeinflusst ausschließlich den
+      Kartenzoom (`ContentView.navigationCameraDistance`) und hat keinerlei Verbindung zu den
+      Abbiege-/Haptik-Schwellen - da Sprachansage (40 m) und Haptik-Trigger (bisher 100 m)
+      dieselbe Distanzreferenz/Prüfung teilen und der Haptik-Check zuerst (bei größerer Distanz)
+      läuft, muss der `watchHapticTriggerCounter` bereits erhöht und per
+      `WCSession.updateApplicationContext` gesendet worden sein - der Ausfall lag also
+      wahrscheinlich an der Zustellung/Watch-Seite (z. B. `updateApplicationContext` kommt "wenn
+      es passt", nicht sofort, oder Baseline-Reset bei Watch-Session-Reaktivierung setzt
+      `lastHapticTrigger` still ohne Haptik). Ursache nicht abschließend geklärt (keine
+      Debug-Logs ausgewertet); auf Nutzerwunsch stattdessen zwei Werte vorsorglich angepasst,
+      ohne Code-Logik zu ändern: Sichtweite-Obergrenze zurück auf 250 m, Watch-Haptik-Vorlauf auf
+      80 m (mehr Vorlauf zur Watch-Zustellung, kürzer als die vorherigen 100 m). Da SwiftUIs
+      `Stepper(value:in:)` einen außerhalb der Range liegenden, bereits gespeicherten
+      Bindings-Wert nicht rückwirkend klemmt (der Nutzer hatte hier tatsächlich noch 300 m
+      gespeichert), zusätzlich eine einmalige Klemmung beim App-Start ergänzt: liest den rohen
+      `UserDefaults`-Wert und schreibt ihn, falls außerhalb der aktuellen
+      `navigationLookaheadRange`, geklemmt zurück - ohne den Key anzufassen, falls er noch nie
+      gesetzt wurde (Default bleibt sonst unverändert 80).
+      → [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift)
+      (`navigationLookaheadRange`),
+      [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
+      (`watchHapticLeadDistanceMeters`),
+      [RadFaehrteApp.swift](FahrradApp/RadFaehrte/RadFaehrteApp.swift) (`init`)
 - [x] **Statistik-Leiste um sechs weitere Werte ergänzt** (2026-08-24, Nutzer-Brainstorm "was
       könnte man noch hinzufügen" - sechs der vorgeschlagenen Ideen ausgewählt; anders als beim
       Drei-Werte-Batch vom 2026-08-07 brauchte einer davon (Sonnenuntergang) eine neue, komplett

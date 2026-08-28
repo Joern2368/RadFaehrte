@@ -1568,9 +1568,10 @@ struct ContentView: View {
     }
 
     /// Vorlauf-Distanz fürs Haptik-Signal auf der Apple Watch - ursprünglich 50 m, nach
-    /// Nutzer-Feedback ("kommt zu spät") auf 100 m erhöht (bei 20 km/h ca. 18 statt nur 9
-    /// Sekunden Vorlauf).
-    private static let watchHapticLeadDistanceMeters: Double = 100
+    /// Nutzer-Feedback ("kommt zu spät") auf 100 m erhöht, dann nach ausbleibender Haptik bei
+    /// einer 300-m-Testfahrt (Watch-Session evtl. zu diesem Zeitpunkt nicht erreichbar) auf 80 m
+    /// gesenkt.
+    private static let watchHapticLeadDistanceMeters: Double = 80
 
     /// Löst ein kurzes Haptik-Signal auf der Apple Watch aus, kurz bevor eine Abbiegung der
     /// "Direkten Fahrrad-Route" ansteht (< `watchHapticLeadDistanceMeters`, deutlich großzügiger
