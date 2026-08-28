@@ -5658,8 +5658,8 @@ für die ursprüngliche Produktidee.
       vom Nutzer bestätigt ("passt so").
       → [RestStop.swift](FahrradApp/RadFaehrte/Models/RestStop.swift) (`Kind.color`, `Kind.emoji`,
       `RestStopKindIcon`), [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
-      (`restStopPinView`, Detail-Sheet), [RestStopKindSettingsView.swift]
-      (FahrradApp/RadFaehrte/Views/RestStopKindSettingsView.swift)
+      (`restStopPinView`, Detail-Sheet),
+      [RestStopKindSettingsView.swift](FahrradApp/RadFaehrte/Views/RestStopKindSettingsView.swift)
 
 ## Bekannte Probleme
 
