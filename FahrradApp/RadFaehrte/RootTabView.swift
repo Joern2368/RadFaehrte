@@ -70,6 +70,15 @@ struct RootTabView: View {
     private let norwayRestStopStore = RestStopStore<NorwayCountry>()
     /// Analog `norwayRestStopStore`, aber für Großbritannien als Ganzes (s. `GreatBritainCountry`).
     private let greatBritainRestStopStore = RestStopStore<GreatBritainCountry>()
+    /// Zahnrad-Button in `ContentView.navigationControlsOverlay` setzt das (Weiterreichung als
+    /// `Binding`); das `.sheet` selbst hängt bewusst hier statt in `ContentView` (s. Kommentar dort,
+    /// `showQuickSettings`) - `ContentView`s eigener State ändert sich während der Navigation
+    /// mehrmals pro Sekunde, was `ContentView.body` entsprechend oft neu auswertete und laut
+    /// Nutzer-Test die Statistik-Leiste-Auswahlliste im Sheet ständig auf die aktuelle Auswahl
+    /// zurückspringen ließ (unter 1 Sekunde Zeitfenster für einen Tap). `RootTabView`s eigener State
+    /// bleibt davon unberührt (ein Kind-View re-rendert seinen Parent nicht durch internen State),
+    /// das Sheet bleibt dadurch stabil.
+    @State private var showQuickSettings = false
 
     var body: some View {
         ZStack {
@@ -77,6 +86,7 @@ struct RootTabView: View {
                 Tab("Route", systemImage: "bicycle", value: AppTab.route) {
                     ContentView(
                         routeToStart: $routeToStart,
+                        showQuickSettings: $showQuickSettings,
                         drivenTourStore: drivenTourStore,
                         wayGraphStore: wayGraphStore,
                         europaWayGraphStore: europaWayGraphStore,
@@ -160,6 +170,17 @@ struct RootTabView: View {
             WorkoutRecorder.shared.requestAuthorizationIfNeeded()
         }
         .onOpenURL(perform: importSharedGPX)
+        .sheet(isPresented: $showQuickSettings) {
+            NavigationQuickSettingsView(
+                restStopStore: restStopStore,
+                europaRestStopStore: europaRestStopStore,
+                franceRestStopStore: franceRestStopStore,
+                spainRestStopStore: spainRestStopStore,
+                italyRestStopStore: italyRestStopStore,
+                norwayRestStopStore: norwayRestStopStore,
+                greatBritainRestStopStore: greatBritainRestStopStore
+            )
+        }
     }
 
     /// Lädt bereits heruntergeladene Wege-Graphen (Bundesländer + Länder) direkt beim App-Start

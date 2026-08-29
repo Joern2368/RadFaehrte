@@ -47,6 +47,17 @@ struct ContentView: View {
     /// Aus dem Eigene-Routen-Tab per "Starten" gesetzt (siehe `RootTabView`). Wird über `onChange`
     /// konsumiert (`startImportedRoute`) und danach wieder auf `nil` gesetzt.
     @Binding var routeToStart: ImportedRoute?
+    /// Nutzer-Feedback: Während der Navigation ist die Tab-Leiste ausgeblendet, daher war der
+    /// Einstellungen-Tab (z. B. für eine Tempo-Änderung mitten in der Fahrt) unerreichbar. Zahnrad-
+    /// Button in `navigationControlsOverlay` setzt das hier nur noch, das eigentliche `.sheet` hängt
+    /// bewusst in `RootTabView` statt hier: `ContentView`s eigener State ändert sich während der
+    /// Navigation bis zu mehrmals pro Sekunde (Standort-/Kamera-Updates), was `ContentView.body`
+    /// entsprechend oft neu auswertet - hing das Sheet hier, riss das laut Nutzer-Test die
+    /// Scroll-Position der Statistik-Leiste-Auswahlliste im Sheet ständig zurück auf die aktuelle
+    /// Auswahl (unter 1 Sekunde Zeitfenster für einen Tap). `RootTabView`s eigener State ändert sich
+    /// während der Navigation nicht mit, ein Kind-View wie `ContentView` re-rendert seinen Parent
+    /// nicht durch seinen eigenen internen State - das Sheet bleibt dadurch stabil.
+    @Binding var showQuickSettings: Bool
     /// Für die App gemeinsame Instanz aus `RootTabView`, damit eine hier beendete Fahrt im
     /// Verlauf-Tab (`HistoryView`) auftaucht.
     var drivenTourStore = DrivenTourStore()
@@ -270,11 +281,6 @@ struct ContentView: View {
     /// Kartenbedienung. Wird beim Start einer Navigation zurückgesetzt (s. `startNavigating`), damit
     /// nach deren Ende wieder die volle Ansicht erscheint.
     @State private var isRouteFormCollapsed = false
-    /// Nutzer-Feedback: Während der Navigation ist die Tab-Leiste ausgeblendet, daher war der
-    /// Einstellungen-Tab (z. B. für eine Tempo-Änderung mitten in der Fahrt) unerreichbar. Zahnrad-
-    /// Button in `navigationControlsOverlay` öffnet stattdessen dieses Sheet, Navigation läuft
-    /// währenddessen unverändert im Hintergrund weiter.
-    @State private var showQuickSettings = false
     @AppStorage(AppSettingsKey.navigationLookaheadMeters) private var navigationLookaheadMeters = AppSettingsDefaults.navigationLookaheadMeters
     @AppStorage(AppSettingsKey.mapStyle) private var mapStyleRaw = AppSettingsDefaults.mapStyle
     @AppStorage(AppSettingsKey.navigationDefaultHeadingUp) private var navigationDefaultHeadingUp = AppSettingsDefaults.navigationDefaultHeadingUp
@@ -750,8 +756,24 @@ struct ContentView: View {
                 routeToStart = nil
             }
         }
-        .onChange(of: locationManager.locationUpdateCount) { handleLocationUpdate() }
-        .onChange(of: locationManager.headingUpdateCount) { updateNavigationCamera() }
+        // Nicht mehr direkt `.onChange(of: locationManager.locationUpdateCount/.headingUpdateCount)`
+        // hier in `body` - jeder solche Lesezugriff während der `body`-Auswertung zählt für
+        // `@Observable`s Abhängigkeitsverfolgung als Abhängigkeit von `ContentView.body` selbst.
+        // `headingUpdateCount` steigt während der Navigation bis zu 20x/s (Device-Motion-Rate,
+        // s. `LocationManager`), wodurch der komplette Modifier-Baum bis zu 20x/s neu aufgebaut
+        // wurde - reichte in Kombination mit weiterem, durch dieselben Updates ausgelöstem State
+        // (`cameraPosition` u. a.) aus, um selbst das per `showQuickSettings` geöffnete Sheet in
+        // `RootTabView` zu stören (s. Kommentar dort). Ausgelagert in eine eigene, unsichtbare
+        // `NavigationUpdatePulse`-View, deren eigener `body` die Zähler liest - die Abhängigkeit
+        // bleibt dadurch auf diese winzige View beschränkt, `ContentView.body` wird von den
+        // häufigen Updates nicht mehr angefasst.
+        .background(
+            NavigationUpdatePulse(
+                locationManager: locationManager,
+                onLocationUpdate: handleLocationUpdate,
+                onHeadingUpdate: { updateNavigationCamera() }
+            )
+        )
         // Watch-App wird erst geöffnet, nachdem die Navigation am iPhone schon läuft: Status kommt
         // dann zwar sofort korrekt an (s. `WatchSessionManager.send`-Dokumentation), die Routen-
         // Geometrie aber ggf. erst deutlich verzögert (s. `reachabilityChangeCount`-Dokumentation) -
@@ -802,9 +824,6 @@ struct ContentView: View {
         }
         .sheet(item: $curatedRouteStepsDetail) { match in
             curatedRouteStepsDetailSheet(match)
-        }
-        .sheet(isPresented: $showQuickSettings) {
-            NavigationQuickSettingsView(restStopStore: restStopStore, europaRestStopStore: europaRestStopStore, franceRestStopStore: franceRestStopStore, spainRestStopStore: spainRestStopStore, italyRestStopStore: italyRestStopStore, norwayRestStopStore: norwayRestStopStore, greatBritainRestStopStore: greatBritainRestStopStore)
         }
         .sheet(item: $exportFile) { file in
             ActivityView(activityItems: [file.url])
@@ -4679,6 +4698,33 @@ private extension MKPolyline {
     }
 }
 
+/// Isoliert die hochfrequenten Standort-/Heading-Updates aus `LocationManager` (`headingUpdateCount`
+/// bis zu 20x/s während der Navigation, s. Device-Motion-Rate dort) in einer eigenen, unsichtbaren
+/// View statt sie direkt per `.onChange` in `ContentView.body` zu lesen. Jeder Lesezugriff auf eine
+/// `@Observable`-Property während der `body`-Auswertung zählt für die Abhängigkeitsverfolgung als
+/// Abhängigkeit von `ContentView.body` selbst - damit wurde bislang die komplette, sehr lange
+/// Modifier-Kette bis zu 20x/s neu aufgebaut. Nutzer-Feedback: Während laufender Navigation
+/// funktionierten Taps und Scrollen im per Zahnrad geöffneten Statistik-Leiste-Auswahl-Sheet nicht
+/// zuverlässig (erste Auswahl ging noch durch, danach nicht mehr) - außerhalb der Navigation (kein
+/// `headingUpdateCount`-Takt) trat das nie auf. Mit den Zählern nur noch hier gelesen bleibt die
+/// Abhängigkeit auf diese winzige `Color.clear`-View beschränkt. Reichte für sich allein aber noch
+/// nicht: `ContentView.body` re-rendert während der Navigation weiterhin (langsamer, aber immer noch
+/// mehrmals pro Sekunde) durch anderen `@State`, den `handleLocationUpdate`/`updateNavigationCamera`
+/// selbst setzen (z. B. `cameraPosition`) - deshalb liegt das Sheet inzwischen zusätzlich nicht mehr
+/// in `ContentView`, sondern eine Ebene höher in `RootTabView` (s. Kommentar bei
+/// `showQuickSettings` dort), wo `ContentView`s interner State es gar nicht mehr erreicht.
+private struct NavigationUpdatePulse: View {
+    var locationManager: LocationManager
+    let onLocationUpdate: () -> Void
+    let onHeadingUpdate: () -> Void
+
+    var body: some View {
+        Color.clear
+            .onChange(of: locationManager.locationUpdateCount) { onLocationUpdate() }
+            .onChange(of: locationManager.headingUpdateCount) { onHeadingUpdate() }
+    }
+}
+
 /// Ausgelagert aus `ContentView.body` (statt zwei weitere inline `.confirmationDialog`/`.alert`-
 /// Modifier anzuhängen), weil die ohnehin schon sehr lange Modifier-Kette dort sonst den
 /// Type-Checker mit "unable to type-check this expression in reasonable time" scheitern ließ -
@@ -4735,5 +4781,5 @@ private func hideKeyboard() {
 }
 
 #Preview {
-    ContentView(routeToStart: .constant(nil))
+    ContentView(routeToStart: .constant(nil), showQuickSettings: .constant(false))
 }

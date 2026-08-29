@@ -5715,6 +5715,41 @@ für die ursprüngliche Produktidee.
       [RadFaehrteApp.swift](FahrradApp/RadFaehrte/RadFaehrteApp.swift),
       [WayGraphDownloadManager.swift](FahrradApp/RadFaehrte/Services/WayGraphDownloadManager.swift),
       [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
+- [x] **Statistik-Leiste-Feldauswahl ließ sich während der Navigation nicht zuverlässig ändern
+      (2026-08-29)**: Nutzer-Meldung: Zahnrad → "Statistik-Leiste" → Feld antippen öffnete die
+      Auswahlliste (23 `NavigationStatKind`-Werte) zuverlässig, aber Taps auf einen Eintrag griffen
+      nicht - nur während einer laufenden Navigation, außerhalb davon funktionierte derselbe Weg.
+      Drei Anläufe bis zur eigentlichen Ursache:
+      1. `.transaction { $0.animation = nil }` auf das Sheet (gegen ein durchsickerndes
+         `withAnimation(...)` aus der 0,3s-Kamera-Aktualisierung, analog zum dokumentierten Fix
+         fürs Feld-Anzahl-Umschalten) - half nur teilweise: Auswahl ging laut Nutzer-Test einmal,
+         danach nicht mehr, und selbst Scrollen in der Liste funktionierte nicht mehr. Zeigte: keine
+         reine Animations-Interferenz, sondern etwas Strukturelleres.
+      2. `.onChange(of: locationManager.locationUpdateCount/.headingUpdateCount)` standen direkt in
+         `ContentView.body` - jeder Lesezugriff auf eine `@Observable`-Property während der
+         `body`-Auswertung zählt als Abhängigkeit von `ContentView.body` selbst, `headingUpdateCount`
+         steigt während der Navigation bis zu 20x/s (Device-Motion-Rate), wodurch die komplette, sehr
+         lange Modifier-Kette entsprechend oft neu aufgebaut wurde. In eine eigene, unsichtbare
+         `NavigationUpdatePulse`-View isoliert (kapselt beide `.onChange`-Handler in ihrem eigenen
+         `body`). Besserung laut Nutzer-Test, aber immer noch nicht zuverlässig: Scrollen sprang
+         wiederholt ans Ende der Liste zurück, unter 1 Sekunde Zeitfenster für eine Auswahl.
+      3. Restursache: `handleLocationUpdate()`/`updateNavigationCamera()` selbst mutieren weiterhin
+         mehrmals pro Sekunde `ContentView`s eigenen `@State` (u. a. `cameraPosition`) - jede
+         `@State`-Änderung auf `ContentView` lässt `ContentView.body` neu auswerten, unabhängig von
+         der `@Observable`-Isolation aus Schritt 2. Die dabei wiederholt neu aufgebaute, tief
+         verschachtelte Sheet-Hierarchie (Sheet → `NavigationStack` → `Form` → `NavigationLink` →
+         `Form` → Picker-Liste) ließ die Liste ihre Scroll-Position offenbar bei jedem Durchlauf auf
+         die aktuelle Auswahl zurückspringen. Endgültiger Fix: `showQuickSettings` und das
+         `.sheet(isPresented:)` selbst komplett aus `ContentView` heraus- und eine Ebene höher nach
+         `RootTabView` verlegt (`ContentView` bekommt es nur noch als `@Binding` durchgereicht) -
+         `ContentView`s interner State ändert sich weiterhin während der Navigation, aber ein
+         Kind-View re-rendert seinen Parent nicht durch eigenen internen State, `RootTabView.body`
+         bleibt davon komplett unberührt. Alle drei Fixes (Transaction, `NavigationUpdatePulse`,
+         Sheet-Verlegung) bleiben bestehen, keiner allein hätte gereicht. Live auf dem iPhone
+         verifiziert und vom Nutzer bestätigt ("es geht jetzt").
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`showQuickSettings`-Binding,
+      `NavigationUpdatePulse`), [RootTabView.swift](FahrradApp/RadFaehrte/RootTabView.swift)
+      (`showQuickSettings`, `.sheet(isPresented:)`)
 
 ## Bekannte Probleme
 
