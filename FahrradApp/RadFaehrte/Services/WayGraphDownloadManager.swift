@@ -289,17 +289,20 @@ final class WayGraphDownloadManager<Region: DownloadableRegion> {
     private(set) var deletingRegions: Set<Region> = []
     var errorMessage: String?
 
-    /// Hält die KVO-Beobachtung des Downloadfortschritts am Leben, solange ein Download läuft -
-    /// würde sie nicht referenziert, würde sie sofort wieder freigegeben.
-    private var observations: [Region: NSKeyValueObservation] = [:]
-    /// Referenz auf den laufenden Download-Task, damit `cancel(_:)` ihn abbrechen kann - ohne
-    /// UI-Möglichkeit zum Abbrechen bliebe ein hängender Download (z. B. bei eingeschlafener
-    /// WLAN-Verbindung) nur per Kill der ganzen App lösbar.
-    private var tasks: [Region: URLSessionDownloadTask] = [:]
-
     init(store: WayGraphStore<Region>) {
         self.store = store
         downloaded = Set(Region.allCases.filter { store.isDownloaded($0) })
+        // Läuft ein Download bereits im Hintergrund weiter (z. B. View verlassen und wieder
+        // geöffnet, oder App nach einem Hintergrund-Download-Fortschritt neu gestartet) - sofort
+        // mit dem aktuellen Fortschritt weiter anzeigen statt bei 0 % neu zu wirken (s.
+        // `BackgroundDownloadCoordinator`).
+        for region in Region.allCases {
+            guard let fraction = BackgroundDownloadCoordinator.shared.currentProgress(
+                kind: .wayGraph, regionRawValue: region.rawValue
+            ) else { continue }
+            progress[region] = fraction
+            observeDownload(region)
+        }
     }
 
     func isDownloaded(_ region: Region) -> Bool {
@@ -331,70 +334,40 @@ final class WayGraphDownloadManager<Region: DownloadableRegion> {
         }
     }
 
-    /// Bricht einen laufenden Download ab (z. B. wenn er hängen geblieben ist). Der
-    /// Completion-Handler in `download(_:)` feuert danach trotzdem noch (mit einem
-    /// "abgebrochen"-Fehler von URLSession) - dort wird dieser Fall gezielt ignoriert, damit kein
-    /// Fehler-Alert für eine vom Nutzer selbst gewollte Aktion erscheint.
+    /// Bricht einen laufenden Download ab (z. B. wenn er hängen geblieben ist).
     func cancel(_ region: Region) {
-        tasks[region]?.cancel()
+        BackgroundDownloadCoordinator.shared.cancelDownload(kind: .wayGraph, regionRawValue: region.rawValue)
+    }
+
+    /// Registriert die Fortschritts-/Abschluss-Callbacks beim `BackgroundDownloadCoordinator` -
+    /// gemeinsam genutzt von `download(_:)` (neuer Download) und `init` (bereits laufender
+    /// Hintergrund-Download, s. dortiger Kommentar).
+    private func observeDownload(_ region: Region) {
+        BackgroundDownloadCoordinator.shared.observe(
+            kind: .wayGraph,
+            regionRawValue: region.rawValue,
+            onProgress: { [weak self] fraction in
+                self?.progress[region] = fraction
+            },
+            onCompletion: { [weak self] result in
+                guard let self else { return }
+                self.progress[region] = nil
+                switch result {
+                case .success:
+                    self.downloaded.insert(region)
+                case .failure(let error):
+                    self.errorMessage = "Download fehlgeschlagen: \(error.localizedDescription)"
+                }
+            }
+        )
     }
 
     func download(_ region: Region) {
         guard progress[region] == nil else { return }
         progress[region] = 0
-
-        let task = URLSession.shared.downloadTask(with: region.downloadURL) { [store] tempURL, _, error in
-            // Die Datei muss synchron in diesem Completion-Handler übernommen werden, nicht erst
-            // in einem nachgelagerten `Task { @MainActor in ... }` - URLSession löscht die
-            // temporäre Datei sofort, sobald der Handler zurückkehrt, und der Hop auf den
-            // MainActor kam manchmal zu spät ("... couldn't be moved ... because ... doesn't
-            // exist"). `store` ist deshalb `nonisolated` und lässt sich hier direkt aufrufen.
-            let wasCancelled = (error as? URLError)?.code == .cancelled
-            var errorMessage: String?
-            if wasCancelled {
-                // Kein Fehler-Alert - der Nutzer hat selbst über `cancel(_:)` abgebrochen.
-            } else if let error {
-                errorMessage = "Download fehlgeschlagen: \(error.localizedDescription)"
-            } else if let tempURL {
-                do {
-                    try store.save(downloadedFile: tempURL, for: region)
-                    // Direkt nach dem Download im Hintergrund vorladen (s. `WayGraphCache`) -
-                    // sonst würde die erste tatsächliche Routenberechnung mit dieser Region den
-                    // vollen Ladepreis zahlen, obwohl der Download gerade erst fertig wurde und
-                    // der Nutzer ohnehin meist noch in den Einstellungen verweilt.
-                    if let path = store.path(for: region) {
-                        Task.detached(priority: .background) {
-                            _ = WayGraphCache.shared.repository(for: path)
-                        }
-                    }
-                } catch {
-                    errorMessage = "Speichern fehlgeschlagen: \(error.localizedDescription)"
-                }
-            } else {
-                errorMessage = "Download fehlgeschlagen: keine Datei erhalten."
-            }
-
-            let resolvedErrorMessage = errorMessage
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.observations[region] = nil
-                self.tasks[region] = nil
-                self.progress[region] = nil
-                if let resolvedErrorMessage {
-                    self.errorMessage = resolvedErrorMessage
-                } else if !wasCancelled {
-                    self.downloaded.insert(region)
-                }
-            }
-        }
-        tasks[region] = task
-
-        observations[region] = task.progress.observe(\.fractionCompleted) { [weak self] taskProgress, _ in
-            let fraction = taskProgress.fractionCompleted
-            Task { @MainActor [weak self] in
-                self?.progress[region] = fraction
-            }
-        }
-        task.resume()
+        observeDownload(region)
+        BackgroundDownloadCoordinator.shared.startDownload(
+            kind: .wayGraph, regionRawValue: region.rawValue, url: region.downloadURL
+        )
     }
 }

@@ -5687,6 +5687,34 @@ für die ursprüngliche Produktidee.
       `RestStopKindIcon`), [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
       (`restStopPinView`, Detail-Sheet),
       [RestStopKindSettingsView.swift](FahrradApp/RadFaehrte/Views/RestStopKindSettingsView.swift)
+- [x] **Bundesland-/Länder-Downloads liefen bei Display-Sperre oder App-Ende ins Leere
+      (2026-08-28)**: Nutzer-Meldung, dass ein laufender Download abbricht, sobald das iPhone
+      gesperrt wird oder die App geschlossen wird - danach nur per manuellem Neustart des
+      Downloads möglich. Ursache: `WayGraphDownloadManager`/`RestStopDownloadManager` nutzten
+      `URLSession.shared`, eine reine Vordergrund-Session - verlässt die App den Vordergrund
+      länger als die vom System gewährte kurze Nachlaufzeit, killt iOS den Task ersatzlos. Fix:
+      neuer `BackgroundDownloadCoordinator` (Singleton) betreibt stattdessen eine einzige
+      `.background(withIdentifier:)`-`URLSession` für **alle** Wege-Graph-/POI-Downloads - läuft
+      als eigener System-Task unabhängig vom App-Prozess weiter, auch bei gesperrtem Display oder
+      vollständig beendeter App. Region-Typ (`BackgroundDownloadKind.wayGraph`/`.restStop`) und
+      `rawValue` werden dafür statt über Swift-Generics (verträgt sich nicht mit
+      `URLSessionDelegate`, muss `NSObject`-Subklasse sein) als String im `taskDescription` jedes
+      `URLSessionDownloadTask` kodiert - dadurch kann der Koordinator die fertige Datei auch dann
+      korrekt ablegen, wenn das System die App nur kurz reaktiviert, um Hintergrund-Download-
+      Events zuzustellen (`AppDelegate.application(_:handleEventsForBackgroundURLSession:
+      completionHandler:)`, neu per `@UIApplicationDelegateAdaptor` in `RadFaehrteApp`
+      eingebunden), ohne dass die auslösende SwiftUI-View (und damit der ursprüngliche
+      Download-Manager) noch existiert. Beide Download-Manager fragen beim `init` zusätzlich
+      `BackgroundDownloadCoordinator.currentProgress(...)` ab, damit ein im Hintergrund
+      weiterlaufender Download beim erneuten Öffnen der View sofort mit aktuellem Fortschritt
+      statt bei 0 % erscheint. Live auf dem iPhone getestet, beide Fälle vom Nutzer bestätigt
+      ("klappt"): Download bei gesperrtem Display, und Download bei vollständigem Beenden der App
+      über den App-Switcher.
+      → [BackgroundDownloadCoordinator.swift](FahrradApp/RadFaehrte/Services/BackgroundDownloadCoordinator.swift),
+      [AppDelegate.swift](FahrradApp/RadFaehrte/AppDelegate.swift),
+      [RadFaehrteApp.swift](FahrradApp/RadFaehrte/RadFaehrteApp.swift),
+      [WayGraphDownloadManager.swift](FahrradApp/RadFaehrte/Services/WayGraphDownloadManager.swift),
+      [RestStopDownloadManager.swift](FahrradApp/RadFaehrte/Services/RestStopDownloadManager.swift)
 
 ## Bekannte Probleme
 

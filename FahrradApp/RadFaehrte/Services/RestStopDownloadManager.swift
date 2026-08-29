@@ -205,12 +205,20 @@ final class RestStopDownloadManager<Region: RestStopDownloadableRegion> {
     private(set) var deletingRegions: Set<Region> = []
     var errorMessage: String?
 
-    private var observations: [Region: NSKeyValueObservation] = [:]
-    private var tasks: [Region: URLSessionDownloadTask] = [:]
-
     init(store: RestStopStore<Region>, supportedRegions: [Region]) {
         self.store = store
         downloaded = Set(supportedRegions.filter { store.isDownloaded($0) })
+        // Läuft ein Download bereits im Hintergrund weiter (z. B. View verlassen und wieder
+        // geöffnet, oder App nach einem Hintergrund-Download-Fortschritt neu gestartet) - sofort
+        // mit dem aktuellen Fortschritt weiter anzeigen statt bei 0 % neu zu wirken (s.
+        // `BackgroundDownloadCoordinator`).
+        for region in supportedRegions {
+            guard let fraction = BackgroundDownloadCoordinator.shared.currentProgress(
+                kind: .restStop, regionRawValue: region.rawValue
+            ) else { continue }
+            progress[region] = fraction
+            observeDownload(region)
+        }
     }
 
     func isDownloaded(_ region: Region) -> Bool {
@@ -252,65 +260,38 @@ final class RestStopDownloadManager<Region: RestStopDownloadableRegion> {
     }
 
     func cancel(_ region: Region) {
-        tasks[region]?.cancel()
+        BackgroundDownloadCoordinator.shared.cancelDownload(kind: .restStop, regionRawValue: region.rawValue)
+    }
+
+    /// Registriert die Fortschritts-/Abschluss-Callbacks beim `BackgroundDownloadCoordinator` -
+    /// gemeinsam genutzt von `download(_:)` (neuer Download) und `init` (bereits laufender
+    /// Hintergrund-Download, s. dortiger Kommentar).
+    private func observeDownload(_ region: Region) {
+        BackgroundDownloadCoordinator.shared.observe(
+            kind: .restStop,
+            regionRawValue: region.rawValue,
+            onProgress: { [weak self] fraction in
+                self?.progress[region] = fraction
+            },
+            onCompletion: { [weak self] result in
+                guard let self else { return }
+                self.progress[region] = nil
+                switch result {
+                case .success:
+                    self.downloaded.insert(region)
+                case .failure(let error):
+                    self.errorMessage = "Download fehlgeschlagen: \(error.localizedDescription)"
+                }
+            }
+        )
     }
 
     func download(_ region: Region) {
         guard progress[region] == nil else { return }
         progress[region] = 0
-
-        let task = URLSession.shared.downloadTask(with: region.restStopDownloadURL) { [store] tempURL, _, error in
-            // Synchron im Completion-Handler übernehmen, nicht erst nach einem Hop auf den
-            // MainActor - URLSession löscht die temporäre Datei sofort nach Rückkehr des Handlers
-            // (s. ausführlicher Kommentar in `WayGraphDownloadManager.download`).
-            let wasCancelled = (error as? URLError)?.code == .cancelled
-            var errorMessage: String?
-            if wasCancelled {
-                // Kein Fehler-Alert - der Nutzer hat selbst über `cancel(_:)` abgebrochen.
-            } else if let error {
-                errorMessage = "Download fehlgeschlagen: \(error.localizedDescription)"
-            } else if let tempURL {
-                do {
-                    try store.save(downloadedFile: tempURL, for: region)
-                    if let path = store.path(for: region) {
-                        // Ohne `invalidate` würde ein erneuter Download derselben, bereits im
-                        // laufenden Prozess gecachten Region (z. B. um neue Kategorien
-                        // nachzuladen) stillschweigend die alte, im Speicher gehaltene Repository
-                        // weiterverwenden statt die neu heruntergeladene Datei zu lesen - bis zum
-                        // nächsten App-Neustart. Live-Fund 2026-08-23.
-                        RestStopCache.shared.invalidate(path: path)
-                        Task.detached(priority: .background) {
-                            _ = RestStopCache.shared.repository(for: path)
-                        }
-                    }
-                } catch {
-                    errorMessage = "Speichern fehlgeschlagen: \(error.localizedDescription)"
-                }
-            } else {
-                errorMessage = "Download fehlgeschlagen: keine Datei erhalten."
-            }
-
-            let resolvedErrorMessage = errorMessage
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.observations[region] = nil
-                self.tasks[region] = nil
-                self.progress[region] = nil
-                if let resolvedErrorMessage {
-                    self.errorMessage = resolvedErrorMessage
-                } else if !wasCancelled {
-                    self.downloaded.insert(region)
-                }
-            }
-        }
-        tasks[region] = task
-
-        observations[region] = task.progress.observe(\.fractionCompleted) { [weak self] taskProgress, _ in
-            let fraction = taskProgress.fractionCompleted
-            Task { @MainActor [weak self] in
-                self?.progress[region] = fraction
-            }
-        }
-        task.resume()
+        observeDownload(region)
+        BackgroundDownloadCoordinator.shared.startDownload(
+            kind: .restStop, regionRawValue: region.rawValue, url: region.restStopDownloadURL
+        )
     }
 }
