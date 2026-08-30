@@ -18,6 +18,8 @@ enum AppSettingsKey {
     static let isVoiceGuidanceEnabled = "isVoiceGuidanceEnabled"
     static let showRestStops = "showRestStops"
     static let showRestStopKinds = "showRestStopKinds"
+    static let allowFootwayShortcuts = "allowFootwayShortcuts"
+    static let allowStepsShortcuts = "allowStepsShortcuts"
 }
 
 enum AppSettingsDefaults {
@@ -59,4 +61,16 @@ enum AppSettingsDefaults {
     /// Standardmäßig alle Kategorien aktiv, damit sich für Nutzer, die die Kategorie-Auswahl nicht
     /// anfassen, am bisherigen Verhalten (alle Rastplatz-Kategorien sichtbar) nichts ändert.
     static let showRestStopKinds: String = RestStop.Kind.encode(Set(RestStop.Kind.allCases))
+
+    /// Standardmäßig an: Ein kurzer Fußweg-Abstecher (z. B. eine Unterführung) ist meist eine
+    /// unproblematische Abkürzung, die die Offline-Engine sonst gar nicht erst in Betracht zieht
+    /// (Nutzer-Wunsch 2026-08-29). Nur wirksam, wenn `weight_multiplier`/`is_pushable` in
+    /// `Scripts/build_way_graph.py` die entsprechenden Kanten überhaupt in den Graphen aufnehmen
+    /// (s. `WayGraphRepository.WayCategory.push`, `BikeRoutingEngine.search`).
+    static let allowFootwayShortcuts: Bool = true
+
+    /// Standardmäßig aus: Ein Rad über Treppen zu tragen/heben ist unangenehmer als ein kurzer
+    /// Fußweg-Abstecher (v. a. mit Gepäck oder E-Bike-Gewicht) - Nutzer entscheidet bewusst, ob
+    /// die Offline-Engine das als Abkürzung vorschlagen darf.
+    static let allowStepsShortcuts: Bool = false
 }

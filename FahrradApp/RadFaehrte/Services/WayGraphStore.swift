@@ -57,7 +57,15 @@ nonisolated protocol DownloadableRegion: Hashable, CaseIterable, Identifiable wh
 /// isoliert (`-default-isolation=MainActor`) - `WayGraphStore` selbst ist aber bewusst
 /// `nonisolated` (s. u.) und liest diese Konstante, was ohne diese Annotation einen
 /// Compiler-Fehler gäbe. Sicher, weil unveränderliche `Int`-Konstante (kein echtes Race möglich).
-private nonisolated(unsafe) let wayGraphFormatVersion = 7
+// v8: Fußweg-/Treppen-Abkürzungskanten (`WayGraphRepository.WayCategory.push`/`.steps`) neu im
+// Graphen enthalten (s. `is_pushable()` in `Scripts/build_way_graph.py`, Nutzer-Wunsch
+// 2026-08-29) - reine Inhalts-Änderung ohne Byte-Layout-Bruch, aber ohne Hochzählen würden
+// bereits heruntergeladene Regionen diese neuen Kanten nie bekommen, s. Doku oben.
+// v9: `FOOTWAY_PUSH_MULTIPLIER` von 3.5 auf 0.9 gesenkt (Nutzer-Fund 2026-08-30: vielgenutzte
+// Uferwege wie der Weser-Weg zum Wehrschloss wurden trotz starkem Radverkehr gemieden, weil die
+// ursprüngliche Gewichtung Fußwege nur als seltene Notlösung vorsah statt als normalen Weg) -
+// wieder eine reine Gewichtungs-Änderung, s. Doku oben.
+private nonisolated(unsafe) let wayGraphFormatVersion = 9
 
 /// Bundesländer, für die ein Wege-Graph heruntergeladen werden kann. `rawValue` entspricht dem
 /// Geofabrik-Bezeichner (download.geofabrik.de/europe/germany/<rawValue>-latest.osm.pbf).

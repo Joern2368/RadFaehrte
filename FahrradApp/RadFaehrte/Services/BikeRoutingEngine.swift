@@ -4,6 +4,7 @@
 //
 
 import CoreLocation
+import Foundation
 
 /// A*-Routing über den Wege-Graphen eines heruntergeladenen Bundeslands (`WayGraphRepository`),
 /// das ruhige Wege/Radwege bevorzugt statt nur die kürzeste Verbindung zu suchen (das leistet
@@ -143,6 +144,28 @@ nonisolated final class BikeRoutingEngine {
         self.repository = repository
     }
 
+    /// Liest die Einstellungsschalter "Fußwege/Treppen als Abkürzung einbeziehen" direkt aus
+    /// `UserDefaults` statt per `@AppStorage` (nur in SwiftUI-Views nutzbar - diese Klasse ist
+    /// weder eine View noch MainActor-isoliert). `object(forKey:)` statt `bool(forKey:)`, da
+    /// Letzteres bei fehlendem Key `false` liefert - für `allowFootwayShortcuts` (Standard
+    /// `true`) wäre das falsch, solange der Nutzer die Einstellung nie angefasst hat. Analog zum
+    /// bestehenden Muster in `RadFaehrteApp.swift`.
+    private static func allowsShortcuts(category: WayGraphRepository.WayCategory) -> Bool {
+        let key: String
+        let defaultValue: Bool
+        switch category {
+        case .push:
+            key = AppSettingsKey.allowFootwayShortcuts
+            defaultValue = AppSettingsDefaults.allowFootwayShortcuts
+        case .steps:
+            key = AppSettingsKey.allowStepsShortcuts
+            defaultValue = AppSettingsDefaults.allowStepsShortcuts
+        default:
+            return true
+        }
+        return UserDefaults.standard.object(forKey: key) as? Bool ?? defaultValue
+    }
+
     struct Result {
         struct Step {
             enum Direction {
@@ -214,8 +237,15 @@ nonisolated final class BikeRoutingEngine {
         let rawEndCandidates = repository.nearestNodes(
             to: end, maxDistanceMeters: endMaxDistanceMeters, limit: Self.nearestNodesPoolSize)
         guard !rawStartCandidates.isEmpty, !rawEndCandidates.isEmpty else { return [] }
-        let filteredStartCandidates = wellConnectedCandidates(rawStartCandidates)
-        let filteredEndCandidates = wellConnectedCandidates(rawEndCandidates)
+        // Einmal pro `routes()`-Aufruf gelesen statt pro besuchter Kante in `search`/
+        // `wellConnectedCandidates` - vermeidet wiederholte `UserDefaults`-Zugriffe in den
+        // Kernschleifen.
+        let allowFootwayShortcuts = Self.allowsShortcuts(category: .push)
+        let allowStepsShortcuts = Self.allowsShortcuts(category: .steps)
+        let filteredStartCandidates = wellConnectedCandidates(
+            rawStartCandidates, allowFootwayShortcuts: allowFootwayShortcuts, allowStepsShortcuts: allowStepsShortcuts)
+        let filteredEndCandidates = wellConnectedCandidates(
+            rawEndCandidates, allowFootwayShortcuts: allowFootwayShortcuts, allowStepsShortcuts: allowStepsShortcuts)
         let startCandidates = Array((filteredStartCandidates.isEmpty ? rawStartCandidates : filteredStartCandidates).prefix(Self.endpointCandidateCount))
         let endCandidates = Array((filteredEndCandidates.isEmpty ? rawEndCandidates : filteredEndCandidates).prefix(Self.endpointCandidateCount))
 
@@ -231,7 +261,9 @@ nonisolated final class BikeRoutingEngine {
         var firstOutcome: SearchOutcome = .queueExhausted(visitedCount: 0)
         candidateSearch: for startCandidate in startCandidates {
             for endCandidate in endCandidates {
-                firstOutcome = search(from: startCandidate, to: endCandidate, excluding: [], maxVisitedNodes: maxVisitedNodes)
+                firstOutcome = search(
+                    from: startCandidate, to: endCandidate, excluding: [], maxVisitedNodes: maxVisitedNodes,
+                    allowFootwayShortcuts: allowFootwayShortcuts, allowStepsShortcuts: allowStepsShortcuts)
                 if case .queueExhausted(let visitedCount) = firstOutcome,
                    visitedCount < Self.isolatedIslandVisitedNodeThreshold {
                     continue
@@ -249,7 +281,9 @@ nonisolated final class BikeRoutingEngine {
         }
 
         for _ in 0..<maxAlternatives {
-            guard case .found(let result, let path) = search(from: startNode, to: endNode, excluding: excludedEdges, maxVisitedNodes: maxVisitedNodes)
+            guard case .found(let result, let path) = search(
+                from: startNode, to: endNode, excluding: excludedEdges, maxVisitedNodes: maxVisitedNodes,
+                allowFootwayShortcuts: allowFootwayShortcuts, allowStepsShortcuts: allowStepsShortcuts)
             else { break }
             results.append(result)
             for i in 1..<path.count {
@@ -268,7 +302,18 @@ nonisolated final class BikeRoutingEngine {
     /// `maxVisitedNodes`-Limit aufgibt statt schnell mit wenigen besuchten Knoten zu scheitern (s.
     /// Doku an `isolatedIslandVisitedNodeThreshold`). Leer, wenn kein Kandidat besteht - Aufrufer
     /// fallen dann bewusst auf die ungefilterte Liste zurück, statt ganz aufzugeben.
-    private func wellConnectedCandidates(_ candidates: [Int]) -> [Int] {
+    ///
+    /// `allowFootwayShortcuts`/`allowStepsShortcuts` müssen dieselben Werte wie der nachfolgende
+    /// `search`-Aufruf bekommen: Die Probe-Breitensuche unten muss exakt dieselben Kanten sehen wie
+    /// die spätere A*-Suche, sonst gilt ein Knoten fälschlich als "gut angebunden", obwohl er es
+    /// nur über eine gerade abgeschaltete Schiebe-/Treppen-Kante ist (Live-Fund 2026-08-29: ein
+    /// Bremer Park-Zugang, der nur über eine `.steps`-Kante an den Rest des Netzes anschließt -
+    /// bei ausgeschaltetem Treppen-Schalter blieb der nächstgelegene Knoten trotzdem als
+    /// "Kandidat" bestehen, wodurch `route(from:to:)` dort scheiterte statt einen weiter entfernten,
+    /// tatsächlich ohne Treppen erreichbaren Knoten zu probieren).
+    private func wellConnectedCandidates(
+        _ candidates: [Int], allowFootwayShortcuts: Bool, allowStepsShortcuts: Bool
+    ) -> [Int] {
         candidates.filter { candidate in
             var visited: Set<Int> = [candidate]
             var queue = [candidate]
@@ -277,6 +322,9 @@ nonisolated final class BikeRoutingEngine {
                 let node = queue[head]
                 head += 1
                 for edge in repository.edges(from: node) {
+                    guard edge.wayCategory != .push || allowFootwayShortcuts,
+                          edge.wayCategory != .steps || allowStepsShortcuts
+                    else { continue }
                     if visited.insert(Int(edge.toNode)).inserted {
                         queue.append(Int(edge.toNode))
                     }
@@ -306,7 +354,8 @@ nonisolated final class BikeRoutingEngine {
     /// einen kleinen, lokalen Ausschnitt - Arrays in Graphgröße vorzuallozieren wäre für jede
     /// einzelne Suche unnötig speicherhungrig.
     private func search(
-        from startNode: Int, to endNode: Int, excluding excludedEdges: Set<EdgeKey>, maxVisitedNodes: Int
+        from startNode: Int, to endNode: Int, excluding excludedEdges: Set<EdgeKey>, maxVisitedNodes: Int,
+        allowFootwayShortcuts: Bool, allowStepsShortcuts: Bool
     ) -> SearchOutcome {
         guard endNode < repository.nodeLocations.count else { return .queueExhausted(visitedCount: 0) }
         let endLocation = repository.nodeLocations[endNode]
@@ -349,8 +398,16 @@ nonisolated final class BikeRoutingEngine {
 
             for edge in repository.edges(from: current.node) {
                 let toNode = Int(edge.toNode)
+                // Schiebe-Kanten (Fußweg-/Treppen-Abkürzungen, s. `WayGraphRepository.WayCategory
+                // .push`/`.steps`) sind immer im Graphen enthalten (hoch gewichtet gebaut, s.
+                // `weight_multiplier` in `Scripts/build_way_graph.py`), werden hier aber komplett
+                // aus der Suche ausgeschlossen, wenn der jeweilige Einstellungsschalter aus ist -
+                // statt sie nur schlechter zu gewichten, damit ein ausgeschalteter Schalter
+                // wirklich garantiert, dass die Route nie darüberführt.
                 guard !visited.contains(toNode),
-                      !excludedEdges.contains(EdgeKey(from: current.node, to: toNode))
+                      !excludedEdges.contains(EdgeKey(from: current.node, to: toNode)),
+                      edge.wayCategory != .push || allowFootwayShortcuts,
+                      edge.wayCategory != .steps || allowStepsShortcuts
                 else { continue }
                 var turnPenalty = 0.0
                 if let incomingBearing {

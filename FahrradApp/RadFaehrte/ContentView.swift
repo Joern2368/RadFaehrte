@@ -3575,6 +3575,10 @@ struct ContentView: View {
         // Eigener Farbton statt Grün wie `.cycleway` - optisch trotzdem als "auch ein Radweg"
         // erkennbar (kühles statt warmes Grün), aber unterscheidbar in der Liste.
         case .cyclewayNearMainRoad: return .mint
+        // Warnfarben statt der neutralen Töne oben - beide Kategorien bedeuten "hier musst du
+        // absteigen und schieben", das soll optisch auffallen.
+        case .push: return .red
+        case .steps: return .purple
         }
     }
 

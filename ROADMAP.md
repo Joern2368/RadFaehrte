@@ -5750,8 +5750,57 @@ für die ursprüngliche Produktidee.
       → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`showQuickSettings`-Binding,
       `NavigationUpdatePulse`), [RootTabView.swift](FahrradApp/RadFaehrte/RootTabView.swift)
       (`showQuickSettings`, `.sheet(isPresented:)`)
+- [x] **Fußwege/Treppen als Abkürzung ins Offline-Routing einbeziehen (2026-08-29)**: Nutzer-Fund
+      Bremen (Hemelinger Rampe): Die "ruhige Wege"-Engine kannte bislang nur `is_bikeable()`-Wege -
+      ein kurzer Fußweg-Abstecher durch eine Unterführung (`highway=footway`, kein `bicycle`-Tag)
+      war komplett außerhalb des Graphen, obwohl er als geschobene Abkürzung deutlich kürzer gewesen
+      wäre als der ausgeschilderte Radweg-Umweg. Neue, separat gehaltene Kategorie `is_pushable()`
+      (`footway`/`path`/`pedestrian`/`steps`, `bicycle=no` erlaubt - Schieben ist meist trotzdem
+      möglich, nur `foot=no`/`access=no|private` ohne `foot=yes/designated/permissive` sperrt auch
+      dafür) mit deutlich höherer Gewichtung (3.5× Fußweg, 6.0× Treppe) als jeder reguläre
+      `HIGHWAY_WEIGHTS`-Wert, damit der Router sie nur bei klarer Abkürzung nutzt. Zwei neue
+      Einstellungen ("Fußwege als Abkürzung einbeziehen", Standard an; "Treppen als Abkürzung
+      einbeziehen", Standard aus) filtern die entsprechenden Kanten zur Laufzeit in
+      `BikeRoutingEngine.search`; die Wegearten-Aufschlüsselung zeigt solche Abschnitte als
+      "Schiebestrecke"/"Treppe". Dabei einen zweiten, subtileren Bug gefunden und mitgefixt:
+      `wellConnectedCandidates` (Vorauswahl "ist dieser Start-/Zielkandidat gut angebunden?")
+      prüfte über den ungefilterten Graphen, unabhängig von den beiden neuen Schaltern - ein Knoten
+      nahe dem Bürgerpark, der nur über eine `.steps`-Kante an den Rest des Netzes anschließt, galt
+      bei ausgeschaltetem Treppen-Schalter trotzdem als "gut angebunden", wodurch `route(from:to:)`
+      dort komplett scheiterte statt einen weiter entfernten, ohne Treppen erreichbaren Knoten zu
+      probieren (Regressionstest `bikeRoutingEnginePrefersQuietPathsOverShortestDistance` deckte das
+      auf). Fix: dieselbe Kategorie-Filterung jetzt auch in `wellConnectedCandidates`.
+      ⚠️ **Nachjustiert (2026-08-30)**: Nutzer-Fund Weser-Uferweg (Rot-Weiß-Tennisverein →
+      Paulaner's im Wehrschloss, u. a. `bicycle=dismount`-Abschnitte mit DE:239-Schild) - die
+      ursprüngliche `FOOTWAY_PUSH_MULTIPLIER = 3.5` behandelte Fußwege als reine Notlösung für
+      kurze, singuläre Abstecher (passte für die Hemelinger-Rampe-Unterführung), machte aber
+      längere, in der Praxis stark vom Radverkehr genutzte Uferwege unattraktiv, weil sich die
+      hohen Kanten-Kosten über die Streckenlänge aufsummierten. Nutzer-Entscheidung: bei
+      aktiviertem Schalter sollen Fußwege generell so attraktiv wie ein normaler `path`/
+      `pedestrian`-Weg sein (`FOOTWAY_PUSH_MULTIPLIER = HIGHWAY_WEIGHTS["pedestrian"]` = 0.9,
+      dynamisch statt hartkodiert) - ein direkt danebenliegender echter Radweg (0.6, ggf. mit
+      `CYCLE_INFRA_BONUS`) gewinnt dadurch weiterhin automatisch. `STEPS_PUSH_MULTIPLIER` (6.0)
+      unverändert, bleibt bewusst eine reine Notlösung. `wayGraphFormatVersion` erneut hochgezählt
+      (8 → 9), Bremen erneut neu gebaut/hochgeladen, dieselben 3 Tests erneut grün.
+      Bislang nur Bremen neu gebaut (Release `way-graphs-v5`) und gegen die
+      Hemelinger-Rampe-Unterführung (Way `16316226`) sowie die vollständige Test-Suite verifiziert;
+      die übrigen 151 Regionen (15 weitere Bundesländer + Europa) brauchen noch denselben Rebuild
+      mit der finalen (0.9er) Gewichtung, s. "Bekannte Probleme".
+      → [build_way_graph.py](FahrradApp/Scripts/build_way_graph.py) (`is_pushable`,
+      `WAY_CATEGORY_PUSH`/`_STEPS`), [build_way_graph_v2.py](FahrradApp/Scripts/build_way_graph_v2.py),
+      [WayGraphRepository.swift](FahrradApp/RadFaehrte/Services/WayGraphRepository.swift)
+      (`WayCategory.push`/`.steps`), [BikeRoutingEngine.swift](FahrradApp/RadFaehrte/Services/BikeRoutingEngine.swift)
+      (`search`, `wellConnectedCandidates`), [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift),
+      [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift) ("Routing"-Sektion)
 
 ## Bekannte Probleme
+
+- [ ] **Fußweg-/Treppen-Abkürzungen: Rebuild für die übrigen 151 Regionen aussteht** (s. o.,
+      2026-08-29) - bislang nur Bremen neu gebaut/hochgeladen. Restliche 15 Bundesländer sowie alle
+      europäischen Länder/Regionen brauchen denselben `build_way_graph_v2.py`-Rebuild + Upload
+      (`gh release upload way-graphs-v5`/`way-graphs-eu-v1` `--clobber`), sonst bleibt die neue
+      Kategorie dort leer und die beiden Schalter wirkungslos. Nach etabliertem Workflow angehen:
+      einzeln bauen/testen, Commit/Push nur alle 5 Regionen, nichts unbeaufsichtigt durchketten.
 
 - [ ] **Bremen-Daten stecken offenbar auch im Niedersachsen-Wege-Graphen** (Live-Fund 2026-08-11,
       Nutzer-Beobachtung: Bremen-Offline-Karte gelöscht, App neu gestartet, Route komplett

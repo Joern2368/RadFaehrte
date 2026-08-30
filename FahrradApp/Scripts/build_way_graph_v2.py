@@ -48,6 +48,7 @@ from build_way_graph import (
     MainRoadIndex,
     direction,
     is_bikeable,
+    is_pushable,
     offset_side,
     haversine_meters,
     way_category,
@@ -113,7 +114,13 @@ def build(pbf_path: str, output_path: str):
         if not way.is_way():
             continue
         tags = dict(way.tags)
-        if not is_bikeable(tags):
+        # Zusätzlich zum regulären Radweg-/Straßennetz (`is_bikeable`) auch Schiebe-Kanten
+        # (`is_pushable` - Fußwege/Treppen, s. dort) aufnehmen, Nutzer-Wunsch 2026-08-29. Deren
+        # hohe Gewichtung (`weight_multiplier`) sorgt dafür, dass sie nur bei echter Abkürzung
+        # gewählt werden; ob sie überhaupt benutzt werden dürfen, entscheidet die App zur
+        # Laufzeit per Kategorie-Filter (`WayGraphRepository.WayCategory.push`/`.steps`,
+        # `BikeRoutingEngine.swift`).
+        if not (is_bikeable(tags) or is_pushable(tags)):
             continue
 
         nodes = [n for n in way.nodes if n.location.valid()]

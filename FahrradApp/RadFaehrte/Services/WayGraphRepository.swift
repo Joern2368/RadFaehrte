@@ -78,6 +78,16 @@ nonisolated final class WayGraphRepository {
         /// Feld) zu unterscheiden. Reine Content-Änderung, kein Format-Bruch (weiterhin `UInt8`) -
         /// deshalb kein `wayGraphFormatVersion`-Bump nötig, nur ein Neu-Bau der Regionsdateien.
         case cyclewayNearMainRoad = 5
+        /// Fußweg/Pfad, der nicht regulär mit dem Rad befahren werden darf, aber zu Fuß mit
+        /// geschobenem Rad passierbar ist - Nutzer-Wunsch 2026-08-29 (Unterführung Hemelinger
+        /// Bahnhof Bremen als kürzere Alternative zum ausgeschilderten Radweg-Umweg), s.
+        /// `is_pushable()`/`WAY_CATEGORY_PUSH` in `build_way_graph.py`. Nur nutzbar, wenn der
+        /// Einstellungsschalter "Fußwege als Abkürzung einbeziehen" an ist, s.
+        /// `BikeRoutingEngine.search`.
+        case push = 6
+        /// Wie `push`, aber Treppe statt Fußweg - eigener Schalter "Treppen als Abkürzung
+        /// einbeziehen" (Standard aus, da Rad tragen/heben unangenehmer als nur schieben).
+        case steps = 7
 
         var displayName: String {
             switch self {
@@ -87,6 +97,8 @@ nonisolated final class WayGraphRepository {
             case .unpaved: return "Unbefestigter Weg"
             case .other: return "Sonstiger Weg"
             case .cyclewayNearMainRoad: return "Radweg an Landstraße"
+            case .push: return "Schiebestrecke"
+            case .steps: return "Treppe"
             }
         }
     }

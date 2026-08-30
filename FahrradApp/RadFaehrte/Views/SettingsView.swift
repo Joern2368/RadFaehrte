@@ -13,6 +13,8 @@ struct SettingsView: View {
     @AppStorage(AppSettingsKey.mapStyle) private var mapStyleRaw = AppSettingsDefaults.mapStyle
     @AppStorage(AppSettingsKey.navigationDefaultHeadingUp) private var navigationDefaultHeadingUp = AppSettingsDefaults.navigationDefaultHeadingUp
     @AppStorage(AppSettingsKey.showRestStops) private var showRestStops = AppSettingsDefaults.showRestStops
+    @AppStorage(AppSettingsKey.allowFootwayShortcuts) private var allowFootwayShortcuts = AppSettingsDefaults.allowFootwayShortcuts
+    @AppStorage(AppSettingsKey.allowStepsShortcuts) private var allowStepsShortcuts = AppSettingsDefaults.allowStepsShortcuts
     let wayGraphStore: WayGraphStore<Bundesland>
     let europaWayGraphStore: WayGraphStore<EuropaLand>
     let franceWayGraphStore: WayGraphStore<FranceRegion>
@@ -181,6 +183,15 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Offline-Karten")
+                }
+
+                Section {
+                    Toggle("Fußwege als Abkürzung einbeziehen", isOn: $allowFootwayShortcuts)
+                    Toggle("Treppen als Abkürzung einbeziehen", isOn: $allowStepsShortcuts)
+                } header: {
+                    Text("Routing")
+                } footer: {
+                    Text("Betrifft nur die Offline-Engine (heruntergeladene Regionen): Bei aktivierten Fußwegen bezieht die Route ganz normal genutzte Fußwege ein (z. B. Uferwege, Unterführungen) - läuft direkt daneben ein echter Radweg, wird der trotzdem bevorzugt. Treppen bleiben eine reine Notlösung für kurze, klar lohnende Abstecher. Genutzte Abschnitte werden in der Wegearten-Aufschlüsselung als \"Schiebestrecke\"/\"Treppe\" ausgewiesen.")
                 }
 
                 Section {

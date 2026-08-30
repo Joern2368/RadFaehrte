@@ -49,6 +49,38 @@ EXCLUDED_HIGHWAYS = {
     "motorway", "motorway_link", "construction", "proposed", "steps", "razed", "abandoned",
 }
 
+# Fußwege/Treppen, die nicht schon über `is_bikeable()` erfasst sind (kein regulärer Radweg,
+# keine Rad-Erlaubnis), aber zu Fuß mit geschobenem Rad passierbar - Nutzer-Wunsch 2026-08-29:
+# Unterführung Hemelinger Bahnhof (Bremen) wäre als kurzer Fußweg-Abstecher deutlich kürzer
+# gewesen als der ausgeschilderte Radweg-Umweg, den die Offline-Engine mangels Alternative
+# vorschlug. `footway`/`path`/`pedestrian` mit `bicycle=designated` zählen bereits über
+# `is_bikeable()` als normaler Radweg und werden hier bewusst nicht erneut erfasst (sonst
+# doppelte Kanten mit widersprüchlicher Gewichtung), s. `is_pushable()`.
+PUSH_HIGHWAYS = {"footway", "path", "pedestrian"}
+STEPS_HIGHWAY = "steps"
+
+# Gewichtungsfaktor für Schiebe-Kanten (`is_pushable()`). Beide Werte sind unabhängig von den
+# Nutzer-Einstellungsschaltern "Fußwege/Treppen als Abkürzung einbeziehen" (s.
+# `BikeRoutingEngine.swift`) - die Kanten liegen immer mit dieser Gewichtung im Graphen, die App
+# blendet sie zur Laufzeit per Kategorie ein/aus, statt den Graphen pro Schalterzustand neu bauen
+# zu müssen.
+#
+# `FOOTWAY_PUSH_MULTIPLIER`: ursprünglich 3.5 (deutlich teurer als jeder reguläre
+# `HIGHWAY_WEIGHTS`-Wert), damit Fußwege nur bei einer klaren Abkürzung genutzt werden - das
+# passte für den auslösenden Fall (Unterführung Hemelinger Bahnhof, ein kurzer, singulärer
+# Abstecher), machte aber vielgenutzte, gepflasterte Uferwege (Nutzer-Fund 2026-08-30: Weser-
+# Promenade Rot-Weiß-Tennisverein -> Paulaner's im Wehrschloss, u. a. `bicycle=dismount`-Abschnitte
+# mit DE:239-Schild) trotz starkem Radverkehr in der Praxis unattraktiv, da sich die Kanten-Kosten
+# über einen längeren durchgehenden Fußweg-Abschnitt aufsummierten. Nutzer-Entscheidung: bei
+# aktiviertem Schalter sollen Fußwege generell so attraktiv wie ein normaler `path`/`pedestrian`-
+# Weg sein (0.9, s. `HIGHWAY_WEIGHTS`) - ein direkt danebenliegender echter Radweg (0.6, ggf. mit
+# `CYCLE_INFRA_BONUS`) gewinnt dadurch weiterhin automatisch, ohne dass es dafür einer eigenen
+# Sonderregel bedarf. Treppen bleiben bei der ursprünglichen, hohen Gewichtung (auch weiterhin
+# separat abschaltbar, Standard aus) - dort ging es nie um "genauso attraktiv wie ein Gehweg",
+# sondern weiterhin nur um eine Notlösung bei klarem Vorteil.
+FOOTWAY_PUSH_MULTIPLIER = HIGHWAY_WEIGHTS["pedestrian"]
+STEPS_PUSH_MULTIPLIER = 6.0
+
 # Eigene Rad-Infrastruktur neben einer größeren Straße (cycleway=track/lane bzw.
 # cycleway:left/right/both) senkt die Kosten dieser Straße zusätzlich, auch wenn der
 # highway-Typ selbst nicht radfreundlich ist.
@@ -68,6 +100,12 @@ WAY_CATEGORY_OTHER = 4
 # `MainRoadIndex`/`NEARBY_MAIN_ROAD_METERS` unten), separat von einem freistehenden Radweg
 # (Nebenstraße, freies Feld) ausweisen.
 WAY_CATEGORY_CYCLEWAY_NEAR_MAIN_ROAD = 5
+# Schiebe-Kanten (s. `is_pushable()`/`PUSH_HIGHWAYS` oben) - Nutzer-Wunsch 2026-08-29, getrennt
+# von `WAY_CATEGORY_OTHER` ausgewiesen, damit die Routenanzeige klar macht, wo geschoben statt
+# gefahren wird, statt das unter "Sonstiger Weg" zu verstecken. Treppen separat von normalen
+# Fußwegen, da spürbar unangenehmer/schwerer (Rad tragen statt nur schieben).
+WAY_CATEGORY_PUSH = 6
+WAY_CATEGORY_STEPS = 7
 
 WAY_CATEGORY_LABELS = {
     WAY_CATEGORY_CYCLEWAY: "Radweg",
@@ -76,6 +114,8 @@ WAY_CATEGORY_LABELS = {
     WAY_CATEGORY_UNPAVED: "Unbefestigter Weg",
     WAY_CATEGORY_OTHER: "Sonstiger Weg",
     WAY_CATEGORY_CYCLEWAY_NEAR_MAIN_ROAD: "Radweg an Landstraße",
+    WAY_CATEGORY_PUSH: "Schiebestrecke",
+    WAY_CATEGORY_STEPS: "Treppe",
 }
 
 MAIN_ROAD_HIGHWAYS = {
@@ -230,6 +270,24 @@ def is_bikeable(tags):
     return highway in HIGHWAY_WEIGHTS or bicycle in ("yes", "designated", "permissive")
 
 
+def is_pushable(tags):
+    """Fußweg/Treppe außerhalb von `is_bikeable()` (s. `PUSH_HIGHWAYS`/`STEPS_HIGHWAY` oben), die/
+    der zu Fuß mit geschobenem Rad passierbar ist - eigene, teure Kategorie statt regulärer
+    Radweg-Kante. Anders als `is_bikeable()` schließt `bicycle=no` hier NICHT aus: Ein
+    Rad-Fahrverbot auf einem Fußweg verbietet nicht automatisch auch das Schieben. Nur
+    `foot=no`/`access=no|private` (ohne explizites `foot=yes/designated/permissive`) sperren den
+    Weg auch fürs Schieben."""
+    highway = tags.get("highway")
+    if highway not in PUSH_HIGHWAYS and highway != STEPS_HIGHWAY:
+        return False
+    if tags.get("foot") == "no":
+        return False
+    access = tags.get("access")
+    if access in ("no", "private") and tags.get("foot") not in ("yes", "designated", "permissive"):
+        return False
+    return True
+
+
 def weight_multiplier(tags):
     highway = tags.get("highway")
     bicycle = tags.get("bicycle")
@@ -243,6 +301,8 @@ def weight_multiplier(tags):
     # kurzen Straßen-Abstecher vorzog statt konsequent auf dem Radweg zu bleiben.
     if highway in ("path", "footway", "pedestrian") and bicycle == "designated":
         return HIGHWAY_WEIGHTS["cycleway"]
+    if not is_bikeable(tags) and is_pushable(tags):
+        return STEPS_PUSH_MULTIPLIER if highway == STEPS_HIGHWAY else FOOTWAY_PUSH_MULTIPLIER
     multiplier = HIGHWAY_WEIGHTS.get(highway, 1.2)
     if any(tags.get(key) in CYCLE_INFRA_VALUES for key in CYCLE_INFRA_TAGS):
         multiplier *= CYCLE_INFRA_BONUS
@@ -277,11 +337,18 @@ def way_category(tags, near_main_road=False):
     Cycleway-Erkennungswege oben (eigener `highway=cycleway`-Way **und** `cycleway:right/left`-Tag
     an der Straße selbst) einheitlich - beim zweiten Fall matcht der Index praktisch immer
     (dieselbe Straße liegt ja bereits im Index, falls sie selbst ein `MAIN_ROAD_HIGHWAYS`-Typ ist),
-    beim ersten Fall entscheidet die tatsächliche Nachbarschaft im Gelände."""
-    if tags.get("surface") in UNPAVED_SURFACES:
-        return WAY_CATEGORY_UNPAVED
+    beim ersten Fall entscheidet die tatsächliche Nachbarschaft im Gelände.
+
+    Schiebe-Kanten (`is_pushable()`, s. dort) werden VOR dem `surface`-Check ausgewertet: Für die
+    Anzeige ist "hier musst du schieben" die wichtigere Information als die Oberfläche - ein
+    unbefestigter Schiebe-Fußweg soll als "Schiebestrecke"/"Treppe" erscheinen, nicht als
+    "Unbefestigter Weg"."""
     highway = tags.get("highway")
     bicycle = tags.get("bicycle")
+    if not is_bikeable(tags) and is_pushable(tags):
+        return WAY_CATEGORY_STEPS if highway == STEPS_HIGHWAY else WAY_CATEGORY_PUSH
+    if tags.get("surface") in UNPAVED_SURFACES:
+        return WAY_CATEGORY_UNPAVED
     is_cycleway = (
         highway == "cycleway"
         or (highway in ("path", "footway", "pedestrian", "track") and bicycle == "designated")
