@@ -3821,9 +3821,29 @@ für die ursprüngliche Produktidee.
         (`watchHapticTriggerCounter`) an derselben Stelle bleibt unverändert erhalten. Damit ist
         dieser Roadmap-Punkt abgeschlossen. Build fürs Gerät erfolgreich, per `devicectl` auf
         "iPhone von Jörn" installiert - **live noch nicht verifiziert**.
+      - **Nachtrag (Nutzer-Feedback 2026-08-31)**: Sprachausgabe funktioniert gut, Watch-Haptik kam
+        aber spürbar zu früh - Watch-Haptik lief bislang über einen eigenen, unabhängigen
+        `watchHapticLeadDistanceMeters = 80`. Auf Nutzerwunsch von 80 m auf 40 m gesenkt und mit dem
+        Sprachausgabe-Vorlauf zusammengelegt (beide nutzen jetzt denselben Wert, sollen etwa
+        gleichzeitig auslösen).
+      - **Nachtrag (Nutzer-Feedback 2026-08-31, selbiger Tag)**: Bei höherem Tempo kamen beide
+        Signale (Sprachausgabe + Haptik) wieder zu spät - Nutzer bemerkte das beim schnelleren
+        Fahren. Naheliegend wäre wieder eine tempoabhängige Berechnung, aber genau die war schon am
+        2026-08-06 versucht und laut Nutzer-Feedback verworfen worden (s. o.) - beim Nachlesen der
+        Historie fiel jedoch auf, dass zu dem Zeitpunkt noch ein separater Off-by-one-Bug bestand
+        (falscher, bereits gefahrener Straßenname in der Ansage, erst am 2026-08-07 behoben), der
+        das damalige Urteil über die Tempo-Idee selbst verfälscht haben könnte - die damalige Formel
+        (Tempo × 3,5 s + 5 m, gedeckelt auf 20-50 m) hätte bei normalem Radtempo (20 km/h) ohnehin
+        nur ca. 24 m ergeben, deutlich weniger als der jetzt bewährte 40-m-Wert. Mit dem Nutzer
+        gemeinsam Werte festgelegt: bis 20 km/h bleibt es bei 40 m (bewährt), darüber springt der
+        Vorlauf auf 50 m - bewusst als einfache Zwei-Stufen-Schwelle statt stetiger Formel (identisch
+        für Sprachausgabe und Haptik über neue `turnAnnouncementLeadDistance(for:)`, ersetzt die
+        bisherigen getrennten `voiceNowAnnouncementLeadDistanceMeters`/
+        `watchHapticLeadDistanceMeters`-Konstanten). Build fürs Gerät erfolgreich, per `devicectl`
+        auf "iPhone von Jörn" installiert - **live noch nicht verifiziert**.
       → [VoiceAnnouncer.swift](FahrradApp/RadFaehrte/Services/VoiceAnnouncer.swift) (`speak`,
       `prepare`), [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
-      (`voiceNowAnnouncementLeadDistanceMeters`, `advanceDirectRouteStepIfNeeded`,
+      (`turnAnnouncementLeadDistance`, `advanceDirectRouteStepIfNeeded`,
       `previewedStep`, `checkTurnAnnouncementTrigger`, `startNavigating`)
 - [x] **Liechtenstein als neunzehntes Land ergänzt** (Nutzerwunsch, aus der "noch fehlende
       Länder"-Liste unten ausgewählt): ~3,4 MB PBF, kleiner Alpenstaat - direkt als Einzeldatei

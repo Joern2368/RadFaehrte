@@ -1405,10 +1405,27 @@ struct ContentView: View {
     /// Eigener, früherer Auslösepunkt nur für die "Jetzt"-Sprachansage (s.
     /// `advanceDirectRouteStepIfNeeded`) - bewusst **nicht** an `stepAdvanceLeadDistanceMeters`
     /// gekoppelt: Live-Test-Feedback zeigte, dass die Ansage bei 10 m fast immer zu spät kam.
-    /// Ursprünglich tempoabhängig berechnet (Tempo × geschätzte Sprechdauer), das funktionierte
-    /// laut Nutzer-Feedback (2026-08-06) aber in der Praxis nicht gut - deshalb zurück auf einen
-    /// festen Wert.
-    private static let voiceNowAnnouncementLeadDistanceMeters: Double = 40
+    /// Ursprünglich tempoabhängig über eine stetige Formel (Tempo × geschätzte Sprechdauer)
+    /// berechnet, das funktionierte laut Nutzer-Feedback (2026-08-06) aber in der Praxis nicht gut
+    /// - deshalb zunächst auf einen festen Wert zurückgebaut. Nach weiterem Nutzer-Feedback
+    /// (2026-08-31: "passt bis 20 km/h, ab da auf 50 m erhöhen") jetzt wieder tempoabhängig, aber
+    /// bewusst als einfache Zwei-Stufen-Schwelle statt stetiger Formel (identisch für Haptik, s.
+    /// `turnAnnouncementLeadDistance(for:)`), damit unterhalb 20 km/h exakt der bewährte 40-m-Wert
+    /// erhalten bleibt.
+    private static let turnAnnouncementNormalLeadDistanceMeters: Double = 40
+    private static let turnAnnouncementFastLeadDistanceMeters: Double = 50
+    private static let turnAnnouncementFastSpeedThresholdKmh: Double = 20
+
+    /// Gemeinsamer Vorlauf für "Jetzt"-Sprachansage und Watch-Haptik (s.
+    /// `advanceDirectRouteStepIfNeeded` bzw. `checkTurnAnnouncementTrigger`) - beide sollen laut
+    /// Nutzer-Feedback etwa gleichzeitig auslösen. `location.speed` liefert bei ungültigem GPS-Fix
+    /// einen negativen Wert, `max(..., 0)` behandelt das wie Stillstand (niedrigere Stufe).
+    private func turnAnnouncementLeadDistance(for location: CLLocation) -> Double {
+        let speedKmh = max(location.speed, 0) * 3.6
+        return speedKmh > Self.turnAnnouncementFastSpeedThresholdKmh
+            ? Self.turnAnnouncementFastLeadDistanceMeters
+            : Self.turnAnnouncementNormalLeadDistanceMeters
+    }
 
     private func advanceDirectRouteStepIfNeeded(_ location: CLLocation) {
         guard let (route, currentIndex) = activeStepRoute else { return }
@@ -1427,7 +1444,7 @@ struct ContentView: View {
         let nextStep = steps[currentIndex + 1]
         if isVoiceGuidanceEnabled, isTurnInstruction(nextStep),
            lastVoiceNowAnnouncementStepIndex != currentIndex,
-           distanceToStepEnd < Self.voiceNowAnnouncementLeadDistanceMeters {
+           distanceToStepEnd < turnAnnouncementLeadDistance(for: location) {
             lastVoiceNowAnnouncementStepIndex = currentIndex
             voiceAnnouncer.speak("Jetzt \(Self.lowercasingFirstLetter(nextStep.instructions))")
         }
@@ -1586,20 +1603,14 @@ struct ContentView: View {
         }
     }
 
-    /// Vorlauf-Distanz fürs Haptik-Signal auf der Apple Watch - ursprünglich 50 m, nach
-    /// Nutzer-Feedback ("kommt zu spät") auf 100 m erhöht, dann nach ausbleibender Haptik bei
-    /// einer 300-m-Testfahrt (Watch-Session evtl. zu diesem Zeitpunkt nicht erreichbar) auf 80 m
-    /// gesenkt.
-    private static let watchHapticLeadDistanceMeters: Double = 80
-
     /// Löst ein kurzes Haptik-Signal auf der Apple Watch aus, kurz bevor eine Abbiegung der
-    /// "Direkten Fahrrad-Route" ansteht (< `watchHapticLeadDistanceMeters`, deutlich großzügiger
-    /// als `stepAdvanceLeadDistanceMeters` in `advanceDirectRouteStepIfNeeded`, das dort
-    /// zusätzlich die "Jetzt ..."-Sprachansage auslöst). Nur bei echten Abbiegungen
-    /// (`isTurnInstruction`) - bei reinem Geradeausfahren (bzw. kuratierten Radrouten ohne
-    /// Schritt-Daten) gibt es nichts anzukündigen. `lastWatchHapticStepIndex` verhindert
-    /// wiederholtes Auslösen für denselben Schritt. Früher gab es hier zusätzlich eine frühe
-    /// "In X Metern ..."-Sprachansage - auf Nutzerwunsch entfernt (2026-08-07), die "Jetzt
+    /// "Direkten Fahrrad-Route" ansteht (Vorlauf über `turnAnnouncementLeadDistance(for:)`,
+    /// identisch mit der "Jetzt"-Sprachansage in `advanceDirectRouteStepIfNeeded`, damit beide
+    /// etwa gleichzeitig auslösen - Historie zum Vorlaufwert selbst s. dort). Nur bei echten
+    /// Abbiegungen (`isTurnInstruction`) - bei reinem Geradeausfahren (bzw. kuratierten
+    /// Radrouten ohne Schritt-Daten) gibt es nichts anzukündigen. `lastWatchHapticStepIndex`
+    /// verhindert wiederholtes Auslösen für denselben Schritt. Früher gab es hier zusätzlich eine
+    /// frühe "In X Metern ..."-Sprachansage - auf Nutzerwunsch entfernt (2026-08-07), die "Jetzt
     /// ..."-Ansage kurz vor der Abbiegung reicht.
     private func checkTurnAnnouncementTrigger(_ location: CLLocation) {
         guard let (route, currentIndex) = activeStepRoute else { return }
@@ -1620,8 +1631,9 @@ struct ContentView: View {
         let stepEnd = steps[currentIndex].endCoordinate
         let stepEndLocation = CLLocation(latitude: stepEnd.latitude, longitude: stepEnd.longitude)
         let distance = location.distance(from: stepEndLocation)
-        guard distance < Self.watchHapticLeadDistanceMeters else {
-            WatchSessionManager.appendDebugLog("checkTurnAnnouncementTrigger: noch zu weit (\(Int(distance)) m, Schwelle \(Int(Self.watchHapticLeadDistanceMeters)) m) für '\(previewedStep.instructions)'")
+        let leadDistance = turnAnnouncementLeadDistance(for: location)
+        guard distance < leadDistance else {
+            WatchSessionManager.appendDebugLog("checkTurnAnnouncementTrigger: noch zu weit (\(Int(distance)) m, Schwelle \(Int(leadDistance)) m) für '\(previewedStep.instructions)'")
             return
         }
         WatchSessionManager.appendDebugLog("checkTurnAnnouncementTrigger: AUSLÖSEN bei \(Int(distance)) m für '\(previewedStep.instructions)'")
