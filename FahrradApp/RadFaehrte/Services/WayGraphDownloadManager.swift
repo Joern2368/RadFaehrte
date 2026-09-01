@@ -40,7 +40,7 @@ nonisolated extension Bundesland {
         case .hessen: return 278
         case .mecklenburgVorpommern: return 72
         case .niedersachsen: return 345
-        case .nordrheinWestfalen: return 520
+        case .nordrheinWestfalen: return 593
         case .rheinlandPfalz: return 264
         case .saarland: return 36
         case .sachsen: return 191
