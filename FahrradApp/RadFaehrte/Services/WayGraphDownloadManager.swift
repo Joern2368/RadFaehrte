@@ -31,7 +31,7 @@ nonisolated extension Bundesland {
         // Byte mehr pro Kante), s. Doc-Kommentar an `downloadURL`. Reale Release-Asset-Größen nach
         // dem v5-Rebuild (2026-08-17), nicht mehr grob geschätzt.
         switch self {
-        case .badenWuerttemberg: return 539
+        case .badenWuerttemberg: return 593
         case .bayern: return 840
         case .berlin: return 32
         case .brandenburg: return 158
