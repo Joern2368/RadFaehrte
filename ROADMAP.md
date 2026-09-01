@@ -5907,16 +5907,17 @@ für die ursprüngliche Produktidee.
 
 ## Bekannte Probleme
 
-- [ ] **Fußweg-/Treppen-Abkürzungen: Rebuild für die übrigen 146 Regionen aussteht** (s. o.,
+- [ ] **Fußweg-/Treppen-Abkürzungen: Rebuild für die übrigen 145 Regionen aussteht** (s. o.,
       2026-08-29, zuletzt aktualisiert 2026-09-01) - mit dem finalen Stand (0.9er Fußweg-Gewichtung,
       `pedestrian` nicht mehr pauschal in `HIGHWAY_WEIGHTS`) neu gebaut/hochgeladen nach
       `way-graphs-v5`, Größenangaben in `WayGraphDownloadManager.swift` jeweils aktualisiert: Bremen,
       **Niedersachsen** (345 MB), **Bayern** (840 MB), **Baden-Württemberg** (593 MB),
-      **Nordrhein-Westfalen** (593 MB), **Hessen** (301 MB). Restliche 10 Bundesländer sowie alle
-      europäischen Länder/Regionen brauchen denselben `build_way_graph_v2.py`-Rebuild + Upload
-      (`gh release upload way-graphs-v5`/`way-graphs-eu-v1` `--clobber`), sonst bleibt die neue
-      Kategorie dort leer, die Schalter wirkungslos, und Fußgängerzonen werden in den anderen 146
-      Regionen weiterhin uneingeschränkt befahren. Nach etabliertem Workflow angehen:
+      **Nordrhein-Westfalen** (593 MB), **Hessen** (301 MB), **Rheinland-Pfalz** (282 MB). Restliche
+      9 Bundesländer sowie alle europäischen Länder/Regionen brauchen denselben
+      `build_way_graph_v2.py`-Rebuild + Upload (`gh release upload way-graphs-v5`/`way-graphs-eu-v1`
+      `--clobber`), sonst bleibt die neue Kategorie dort leer, die Schalter wirkungslos, und
+      Fußgängerzonen werden in den anderen 145 Regionen weiterhin uneingeschränkt befahren. Nach
+      etabliertem Workflow angehen:
       einzeln bauen/testen, Commit/Push nur alle 5 Regionen, nichts unbeaufsichtigt durchketten -
       Nutzer-Wunsch 2026-08-31: erst in Bremen weiter stresstesten, bevor der große Rollout beginnt;
       Niedersachsen ist die erste Region davon.
