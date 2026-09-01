@@ -12,6 +12,8 @@ struct NavigationSettingsView: View {
     @AppStorage(AppSettingsKey.averageSpeedKmh) private var averageSpeedKmh = AppSettingsDefaults.averageSpeedKmh
     @AppStorage(AppSettingsKey.navigationLookaheadMeters) private var navigationLookaheadMeters = AppSettingsDefaults.navigationLookaheadMeters
     @AppStorage(AppSettingsKey.isVoiceGuidanceEnabled) private var isVoiceGuidanceEnabled = AppSettingsDefaults.isVoiceGuidanceEnabled
+    @AppStorage(AppSettingsKey.allowFootwayShortcuts) private var allowFootwayShortcuts = AppSettingsDefaults.allowFootwayShortcuts
+    @AppStorage(AppSettingsKey.allowStepsShortcuts) private var allowStepsShortcuts = AppSettingsDefaults.allowStepsShortcuts
 
     var body: some View {
         Form {
@@ -55,6 +57,15 @@ struct NavigationSettingsView: View {
                 Toggle("Sprachausgabe für Abbiegehinweise", isOn: $isVoiceGuidanceEnabled)
             } footer: {
                 Text("Kündigt Abbiegungen zusätzlich zur Watch-Vibration laut an - wie bei der Watch-Vibration nur für einen ausgewählten Einzeltreffer, eine kombinierte Kette oder die \"Direkte Fahrrad-Route\", jeweils mit heruntergeladenem Wege-Graph bzw. echten Abbiege-Hinweisen.")
+            }
+
+            Section {
+                Toggle("Fußwege als Abkürzung einbeziehen", isOn: $allowFootwayShortcuts)
+                Toggle("Treppen als Abkürzung einbeziehen", isOn: $allowStepsShortcuts)
+            } header: {
+                Text("Routing")
+            } footer: {
+                Text("Betrifft nur die Offline-Engine (heruntergeladene Regionen): Bei aktivierten Fußwegen bezieht die Route ganz normal genutzte Fußwege ein (z. B. Uferwege, Unterführungen) - läuft direkt daneben ein echter Radweg, wird der trotzdem bevorzugt. Treppen bleiben eine reine Notlösung für kurze, klar lohnende Abstecher. Genutzte Abschnitte werden in der Wegearten-Aufschlüsselung als \"Schiebestrecke\"/\"Treppe\" ausgewiesen.")
             }
         }
         .navigationTitle("Navigation")

@@ -201,6 +201,21 @@ nonisolated final class RestStopStore<Region: DownloadableRegion> {
         try? FileManager.default.removeItem(at: fileURL(for: region))
     }
 
+    /// Tatsächliche Dateigröße einer heruntergeladenen Region auf der Platte, 0 falls nicht
+    /// heruntergeladen - analog `WayGraphStore.fileSizeBytes(for:)`.
+    func fileSizeBytes(for region: Region) -> Int64 {
+        guard let path = path(for: region),
+              let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+              let size = attributes[.size] as? Int64
+        else { return 0 }
+        return size
+    }
+
+    /// Summe der tatsächlichen Dateigrößen aller heruntergeladenen Regionen dieses Typs.
+    func totalDownloadedBytes() -> Int64 {
+        Region.allCases.reduce(Int64(0)) { $0 + fileSizeBytes(for: $1) }
+    }
+
     /// Übernimmt eine fertig heruntergeladene Datei an ihren endgültigen Platz - analog
     /// `WayGraphStore.save(downloadedFile:for:)`.
     func save(downloadedFile tempURL: URL, for region: Region) throws {

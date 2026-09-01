@@ -7296,3 +7296,23 @@ schnell und eindeutig, dass sie zuverlässig feuerte; das eigentliche Problem wa
 einem Timer, keine fehlende Geste-Erkennung. Bei "geht manchmal, meistens nicht"-Symptomen zuerst
 an Timing-Wettläufe zwischen zwei nebenläufigen Auslösern denken, nicht an grundsätzlich fehlende
 Erkennung.
+- [x] **Einstellungen aufgeräumt** (gemeinsam mit Nutzer am 2026-09-01 überlegt): Drei Änderungen.
+      (1) Die "Routing"-Sektion (Fußwege/Treppen als Abkürzung) stand bisher isoliert zwischen den
+      beiden Download-Sektionen "Offline-Karten" und "POIs", obwohl sie inhaltlich zum
+      Navigationsverhalten gehört - jetzt Teil von `NavigationSettingsView` statt eigener Sektion in
+      `SettingsView`. (2) Neue Speicherplatz-Übersicht ganz oben in "Offline-Karten": zwei Zeilen
+      "Deutschland"/"Europa" mit der Summe der tatsächlichen Dateigrößen (Wege-Graphen + POI-Daten
+      zusammen) aller heruntergeladenen Regionen - dafür `fileSizeBytes(for:)`/
+      `totalDownloadedBytes()` auf `WayGraphStore`/`RestStopStore` ergänzt (echte Dateigröße von der
+      Platte statt der nur für die Vor-Download-Anzeige gedachten `approximateSizeMB`-Schätzung).
+      (3) Neuer globaler "Einstellungen zurücksetzen"-Button (mit Bestätigungsdialog, eigene Sektion
+      vor "Hilfe") - setzt alle 12 `AppSettingsKey`-Werte auf ihre Werkseinstellung zurück
+      (`AppSettingsReset.resetAll()`), bewusst ohne Downloads/Favoriten/Routen/Suchverlauf
+      anzufassen, die in eigenen Stores statt `UserDefaults` liegen. `HowItWorksView`s Verweis
+      "Einstellungen > Routing" auf "Einstellungen > Navigation" korrigiert. Live auf dem iPhone
+      geprüft (2026-09-01) - dabei fiel auf, dass der Reset-Bestätigungsdialog als `.confirmationDialog`
+      (Action-Sheet-Stil mit Pfeil zur auslösenden Zeile statt zentriert) unschön wirkte; auf
+      `.alert` umgestellt, das immer als zentriertes Modal-Fenster erscheint statt als Popover.
+      → [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift), [NavigationSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationSettingsView.swift),
+      [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift) (`AppSettingsReset`), [WayGraphStore.swift](FahrradApp/RadFaehrte/Services/WayGraphStore.swift),
+      [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift)

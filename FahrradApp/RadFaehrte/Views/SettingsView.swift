@@ -13,8 +13,6 @@ struct SettingsView: View {
     @AppStorage(AppSettingsKey.mapStyle) private var mapStyleRaw = AppSettingsDefaults.mapStyle
     @AppStorage(AppSettingsKey.navigationDefaultHeadingUp) private var navigationDefaultHeadingUp = AppSettingsDefaults.navigationDefaultHeadingUp
     @AppStorage(AppSettingsKey.showRestStops) private var showRestStops = AppSettingsDefaults.showRestStops
-    @AppStorage(AppSettingsKey.allowFootwayShortcuts) private var allowFootwayShortcuts = AppSettingsDefaults.allowFootwayShortcuts
-    @AppStorage(AppSettingsKey.allowStepsShortcuts) private var allowStepsShortcuts = AppSettingsDefaults.allowStepsShortcuts
     let wayGraphStore: WayGraphStore<Bundesland>
     let europaWayGraphStore: WayGraphStore<EuropaLand>
     let franceWayGraphStore: WayGraphStore<FranceRegion>
@@ -31,6 +29,9 @@ struct SettingsView: View {
     let greatBritainRestStopStore: RestStopStore<GreatBritainCountry>
     private let recentPlaceStore = RecentPlaceStore()
     @State private var showClearRecentsConfirmation = false
+    @State private var showResetConfirmation = false
+    @State private var germanyStorageBytes: Int64 = 0
+    @State private var europeStorageBytes: Int64 = 0
 
     init(
         wayGraphStore: WayGraphStore<Bundesland> = WayGraphStore(),
@@ -106,6 +107,18 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    HStack {
+                        Text("Deutschland")
+                        Spacer()
+                        Text(formattedSize(germanyStorageBytes))
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("Europa")
+                        Spacer()
+                        Text(formattedSize(europeStorageBytes))
+                            .foregroundStyle(.secondary)
+                    }
                     NavigationLink {
                         OfflineMapsView(
                             store: wayGraphStore,
@@ -183,15 +196,8 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Offline-Karten")
-                }
-
-                Section {
-                    Toggle("Fußwege als Abkürzung einbeziehen", isOn: $allowFootwayShortcuts)
-                    Toggle("Treppen als Abkürzung einbeziehen", isOn: $allowStepsShortcuts)
-                } header: {
-                    Text("Routing")
                 } footer: {
-                    Text("Betrifft nur die Offline-Engine (heruntergeladene Regionen): Bei aktivierten Fußwegen bezieht die Route ganz normal genutzte Fußwege ein (z. B. Uferwege, Unterführungen) - läuft direkt daneben ein echter Radweg, wird der trotzdem bevorzugt. Treppen bleiben eine reine Notlösung für kurze, klar lohnende Abstecher. Genutzte Abschnitte werden in der Wegearten-Aufschlüsselung als \"Schiebestrecke\"/\"Treppe\" ausgewiesen.")
+                    Text("Speicherplatz-Angaben umfassen Wege-Graphen und heruntergeladene POI-Daten zusammen.")
                 }
 
                 Section {
@@ -258,6 +264,28 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Button {
+                        showResetConfirmation = true
+                    } label: {
+                        Label("Einstellungen zurücksetzen", systemImage: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.plain)
+                } footer: {
+                    Text("Setzt Darstellung, Navigation, Routing und POI-Auswahl auf die Werkseinstellungen zurück. Heruntergeladene Offline-Karten, Favoriten, Routen und Suchverlauf bleiben erhalten.")
+                }
+                .alert(
+                    "Einstellungen zurücksetzen?",
+                    isPresented: $showResetConfirmation
+                ) {
+                    Button("Zurücksetzen", role: .destructive) {
+                        AppSettingsReset.resetAll()
+                    }
+                    Button("Abbrechen", role: .cancel) {}
+                } message: {
+                    Text("Darstellung, Navigation, Routing und POI-Auswahl werden auf die Werkseinstellungen zurückgesetzt. Heruntergeladene Karten, Favoriten, Routen und Suchverlauf bleiben erhalten.")
+                }
+
+                Section {
                     NavigationLink {
                         HowItWorksView()
                     } label: {
@@ -273,7 +301,32 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Einstellungen")
+            .onAppear(perform: updateStorageTotals)
         }
+    }
+
+    private func updateStorageTotals() {
+        germanyStorageBytes = wayGraphStore.totalDownloadedBytes() + restStopStore.totalDownloadedBytes()
+        europeStorageBytes = europaWayGraphStore.totalDownloadedBytes()
+            + franceWayGraphStore.totalDownloadedBytes()
+            + italyWayGraphStore.totalDownloadedBytes()
+            + spainWayGraphStore.totalDownloadedBytes()
+            + norwayWayGraphStore.totalDownloadedBytes()
+            + greatBritainWayGraphStore.totalDownloadedBytes()
+            + europaRestStopStore.totalDownloadedBytes()
+            + franceRestStopStore.totalDownloadedBytes()
+            + spainRestStopStore.totalDownloadedBytes()
+            + italyRestStopStore.totalDownloadedBytes()
+            + norwayRestStopStore.totalDownloadedBytes()
+            + greatBritainRestStopStore.totalDownloadedBytes()
+    }
+
+    private func formattedSize(_ bytes: Int64) -> String {
+        let megabytes = Double(bytes) / 1_048_576
+        guard megabytes >= 1024 else {
+            return "\(Int(megabytes.rounded())) MB"
+        }
+        return String(format: "%.1f GB", locale: Locale(identifier: "de_DE"), megabytes / 1024)
     }
 }
 

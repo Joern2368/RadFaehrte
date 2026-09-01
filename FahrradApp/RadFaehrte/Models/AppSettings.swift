@@ -74,3 +74,28 @@ enum AppSettingsDefaults {
     /// die Offline-Engine das als Abkürzung vorschlagen darf.
     static let allowStepsShortcuts: Bool = false
 }
+
+/// Setzt alle unter `AppSettingsKey` geführten Einstellungen auf ihre Werkseinstellung zurück -
+/// betrifft bewusst nur diese 12 Werte, keine Downloads (Offline-Karten/POIs), Favoriten, Routen
+/// oder Suchverlauf, die alle in eigenen Stores statt in `UserDefaults` liegen. Direktes Schreiben
+/// über `UserDefaults.standard` statt `@AppStorage`-Bindings, damit der Reset auch von
+/// `SettingsView` aus greift, obwohl einzelne Werte (z. B. Statistik-Leiste, Sprachausgabe) nur in
+/// anderen Views als `@AppStorage` gebunden sind - `@AppStorage` beobachtet Änderungen an
+/// `UserDefaults` unabhängig davon, wo sie herkommen.
+enum AppSettingsReset {
+    static func resetAll() {
+        let defaults = UserDefaults.standard
+        defaults.set(AppSettingsDefaults.averageSpeedKmh, forKey: AppSettingsKey.averageSpeedKmh)
+        defaults.set(AppSettingsDefaults.navigationLookaheadMeters, forKey: AppSettingsKey.navigationLookaheadMeters)
+        defaults.set(AppSettingsDefaults.navigationStatFieldCount, forKey: AppSettingsKey.navigationStatFieldCount)
+        defaults.set(AppSettingsDefaults.navigationStatSlots, forKey: AppSettingsKey.navigationStatSlots)
+        defaults.set(AppSettingsDefaults.appearanceMode, forKey: AppSettingsKey.appearanceMode)
+        defaults.set(AppSettingsDefaults.mapStyle, forKey: AppSettingsKey.mapStyle)
+        defaults.set(AppSettingsDefaults.navigationDefaultHeadingUp, forKey: AppSettingsKey.navigationDefaultHeadingUp)
+        defaults.set(AppSettingsDefaults.isVoiceGuidanceEnabled, forKey: AppSettingsKey.isVoiceGuidanceEnabled)
+        defaults.set(AppSettingsDefaults.showRestStops, forKey: AppSettingsKey.showRestStops)
+        defaults.set(AppSettingsDefaults.showRestStopKinds, forKey: AppSettingsKey.showRestStopKinds)
+        defaults.set(AppSettingsDefaults.allowFootwayShortcuts, forKey: AppSettingsKey.allowFootwayShortcuts)
+        defaults.set(AppSettingsDefaults.allowStepsShortcuts, forKey: AppSettingsKey.allowStepsShortcuts)
+    }
+}
