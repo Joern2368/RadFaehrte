@@ -232,10 +232,15 @@ nonisolated final class BikeRoutingEngine {
         startMaxDistanceMeters: Double = BikeRoutingEngine.defaultEndpointMaxDistanceMeters,
         endMaxDistanceMeters: Double = BikeRoutingEngine.defaultEndpointMaxDistanceMeters
     ) -> [Result] {
-        let rawStartCandidates = repository.nearestNodes(
-            to: start, maxDistanceMeters: startMaxDistanceMeters, limit: Self.nearestNodesPoolSize)
-        let rawEndCandidates = repository.nearestNodes(
-            to: end, maxDistanceMeters: endMaxDistanceMeters, limit: Self.nearestNodesPoolSize)
+        // `nearestEdgeEndpoints` statt `nearestNodes`: sortiert nach Distanz zur nächsten Kante,
+        // nicht zum nächsten Knoten - verhindert ein Snapping auf eine parallele Nachbarstraße bei
+        // langen, knotenarmen Straßen (s. Doku dort für den Live-Fund, der das aufgedeckt hat).
+        let rawStartCandidates = repository.nearestEdgeEndpoints(
+            to: start, maxDistanceMeters: startMaxDistanceMeters,
+            poolSize: Self.nearestNodesPoolSize, limit: Self.nearestNodesPoolSize)
+        let rawEndCandidates = repository.nearestEdgeEndpoints(
+            to: end, maxDistanceMeters: endMaxDistanceMeters,
+            poolSize: Self.nearestNodesPoolSize, limit: Self.nearestNodesPoolSize)
         guard !rawStartCandidates.isEmpty, !rawEndCandidates.isEmpty else { return [] }
         // Einmal pro `routes()`-Aufruf gelesen statt pro besuchter Kante in `search`/
         // `wellConnectedCandidates` - vermeidet wiederholte `UserDefaults`-Zugriffe in den

@@ -5812,6 +5812,36 @@ für die ursprüngliche Produktidee.
       (`WayCategory.push`/`.steps`), [BikeRoutingEngine.swift](FahrradApp/RadFaehrte/Services/BikeRoutingEngine.swift)
       (`search`, `wellConnectedCandidates`), [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift),
       [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift) ("Routing"-Sektion)
+- [x] **Fix: Ziel-Snapping auf parallele Nachbarstraße bei langen, knotenarmen Straßen** (Nutzer-
+      Meldung 2026-09-01, Bremen "Am Schwarzen Meer" -> "Bückeburger Straße" - Route nahm einen
+      spürbaren Umweg über Nienburger/Achimer Straße statt direkt über Am Hulsberg entgegen der
+      Einbahnstraße einzubiegen, obwohl die Bückeburger Straße korrekt per `oneway:bicycle=no` für
+      Fahrräder in beide Richtungen freigegeben ist - **kein** Einbahnstraßen-Bug). Ursache: Die
+      Bückeburger Straße besteht im Wege-Graph aus nur 4 Knoten, davon zwei ~200 m ohne jeden
+      Zwischenpunkt auseinander (eine OSM-Gerade braucht keinen Stützpunkt in der Mitte). Der
+      geokodierte Zielpunkt in der Straßenmitte lag dadurch nur 57 m von einem Knoten der
+      parallelen Nienburger Straße entfernt, aber 96-105 m vom nächsten tatsächlichen
+      Bückeburger-Straße-Knoten - `nearestNodes` (nach Distanz zum nächsten *Knoten* sortiert)
+      schnappte auf die falsche, aber näher liegende Nachbarstraße, `BikeRoutingEngine.routes`
+      nahm den ersten (well-connected) Kandidaten und probierte die tatsächlich gemeinte Straße nie.
+      Per Overpass gegen echte OSM-Daten und direkt gegen die aktuell veröffentlichten
+      Bremen-Wege-Graph-Daten nachgerechnet (eigene Python-Nachbildung von `search`/
+      `nearestNodes` inkl. Abbiege-Straf-Logik) - bestätigt, dass eine Route zu einem echten
+      Bückeburger-Straße-Knoten zuverlässig direkt über Am Hulsberg führt. Fix: neue
+      `WayGraphRepository.nearestEdgeEndpoints(to:maxDistanceMeters:poolSize:limit:)` - sortiert
+      den bestehenden `nearestNodes`-Kandidatenpool nach Punkt-zu-Strecke-Distanz zur nächsten
+      Kante statt nach Distanz zum nächsten Knoten (Projektion auf jede ausgehende Kante der
+      Pool-Knoten, näherer Endknoten ist der Kandidat). `BikeRoutingEngine.routes(from:to:)` nutzt
+      das jetzt für Start-/Zielkandidaten statt `nearestNodes` direkt; andere Aufrufer
+      (`CrossRegionRouteStitcher`, `CuratedRouteStepMatcher`, `ContentView`s Repository-Auswahl)
+      bleiben unverändert bei `nearestNode`/`nearestNodes`, da sie andere Anforderungen haben.
+      Gegen die echten Bremen-Daten verifiziert: der Bückeburger-Straße-Knoten liegt mit der neuen
+      Methode bei 0,0 m (statt Rang 10 nach reiner Knoten-Distanz) und landet damit sicher unter
+      den ersten Kandidaten. Live auf dem iPhone bestätigt (2026-09-01, Nutzer: "klappt jetzt
+      direkt über Am Hulsberg").
+      → [WayGraphRepository.swift](FahrradApp/RadFaehrte/Services/WayGraphRepository.swift)
+      (`nearestEdgeEndpoints`), [BikeRoutingEngine.swift](FahrradApp/RadFaehrte/Services/BikeRoutingEngine.swift)
+      (`routes(from:to:)`)
 
 ## Bekannte Probleme
 

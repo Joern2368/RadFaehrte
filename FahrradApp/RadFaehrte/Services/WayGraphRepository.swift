@@ -442,4 +442,71 @@ nonisolated final class WayGraphRepository {
         }
         return best.map(\.index)
     }
+
+    /// Wie `nearestNodes`, aber nach Distanz zur nächsten **Kante** statt zum nächsten **Knoten**
+    /// sortiert - für `BikeRoutingEngine.routes(from:to:)`s Start-/Zielkandidaten gedacht.
+    ///
+    /// Grund: Lange, gerade OSM-Straßen ohne Zwischenknoten (eine Gerade braucht in OSM keinen
+    /// Stützpunkt in der Mitte) können dazu führen, dass ein Zielpunkt in der Straßenmitte näher
+    /// an einem Knoten einer parallel verlaufenden Nachbarstraße liegt als an einem der eigenen
+    /// beiden Endknoten - `nearestNodes` würde dann fälschlich zur Nachbarstraße snappen (Live-Fund
+    /// 2026-09-01, Bremen "Am Schwarzen Meer" -> "Bückeburger Straße": Die Bückeburger Straße
+    /// besteht aus nur 4 Knoten, davon zwei ~200 m ohne jeden Zwischenpunkt auseinander; der
+    /// geokodierte Zielpunkt in der Straßenmitte lag dadurch nur 57 m von einem Knoten der
+    /// parallelen Nienburger Straße entfernt, aber 96-105 m vom nächsten tatsächlichen
+    /// Bückeburger-Straße-Knoten. `nearestNodes` snappte auf die Nienburger Straße, wodurch die
+    /// Route unbemerkt dorthin statt zur Bückeburger Straße führte - mit spürbarem Umweg, obwohl
+    /// die Bückeburger Straße selbst korrekt für Fahrräder entgegen der Einbahnstraße freigegeben
+    /// war (kein Einbahnstraßen-Bug, reiner Snapping-Bug). Bewertet man stattdessen die Distanz zum
+    /// nächsten Punkt AUF der ~200 m langen Bückeburger-Gerade, liegt die praktisch bei 0 m (Ziel
+    /// liegt fast exakt auf der Linie) - weit vor der Nienburger Straße.
+    ///
+    /// Arbeitet auf dem `nearestNodes`-Kandidatenpool (`poolSize`) statt einer eigenen
+    /// Kanten-Rasterung: Für jeden Pool-Knoten werden dessen ausgehende Kanten (`edges(from:)`) auf
+    /// die Punkt-zu-Strecke-Distanz zur Zielkoordinate geprüft, der jeweils nähere Endknoten der
+    /// Kante ist der Kandidat. Reicht aus, weil eine relevante Kante in aller Regel über mindestens
+    /// einen ihrer beiden Endknoten schon im Pool vertreten ist (beide liegen ja selbst nahe an
+    /// `coordinate`, sonst wäre die Kante gar nicht relevant) - eine eigene, flächendeckende
+    /// Kanten-Rasterung wäre für diesen Zweck unnötiger Mehraufwand.
+    func nearestEdgeEndpoints(
+        to coordinate: CLLocationCoordinate2D, maxDistanceMeters: Double = 2000,
+        poolSize: Int = 40, limit: Int = 1
+    ) -> [Int] {
+        let pool = nearestNodes(to: coordinate, maxDistanceMeters: maxDistanceMeters, limit: poolSize)
+        guard !pool.isEmpty else { return [] }
+
+        let metersPerDegreeLat = 111_320.0
+        let metersPerDegreeLon = metersPerDegreeLat * max(cos(coordinate.latitude * .pi / 180), 0.1)
+        // Lokale, ebene Koordinaten in Metern relativ zu `coordinate` (die also selbst zu (0,0)
+        // wird) - vereinfacht die Punkt-zu-Strecke-Projektion unten auf reine Vektor-Rechnung.
+        func localMeters(_ location: CLLocationCoordinate2D) -> (x: Double, y: Double) {
+            (
+                (location.longitude - coordinate.longitude) * metersPerDegreeLon,
+                (location.latitude - coordinate.latitude) * metersPerDegreeLat
+            )
+        }
+
+        var bestDistanceForNode: [Int: Double] = [:]
+        for node in pool {
+            let origin = localMeters(nodeLocations[node])
+            for edge in edges(from: node) {
+                let toIndex = Int(edge.toNode)
+                guard toIndex < nodeLocations.count else { continue }
+                let target = localMeters(nodeLocations[toIndex])
+                let dx = target.x - origin.x, dy = target.y - origin.y
+                let lengthSquared = dx * dx + dy * dy
+                // Projektionsparameter des Ursprungs (0,0, da lokale Koordinaten relativ zu
+                // `coordinate`) auf die Strecke, auf [0, 1] geklemmt (0 = `node`, 1 = `toIndex`).
+                let t = lengthSquared > 0 ? max(0, min(1, (-origin.x * dx - origin.y * dy) / lengthSquared)) : 0
+                let px = origin.x + t * dx, py = origin.y + t * dy
+                let distance = (px * px + py * py).squareRoot()
+                let nearEndpoint = t < 0.5 ? node : toIndex
+                if distance < bestDistanceForNode[nearEndpoint, default: .greatestFiniteMagnitude] {
+                    bestDistanceForNode[nearEndpoint] = distance
+                }
+            }
+        }
+        guard !bestDistanceForNode.isEmpty else { return pool }
+        return bestDistanceForNode.sorted { $0.value < $1.value }.prefix(limit).map(\.key)
+    }
 }
