@@ -65,7 +65,12 @@ nonisolated protocol DownloadableRegion: Hashable, CaseIterable, Identifiable wh
 // Uferwege wie der Weser-Weg zum Wehrschloss wurden trotz starkem Radverkehr gemieden, weil die
 // ursprüngliche Gewichtung Fußwege nur als seltene Notlösung vorsah statt als normalen Weg) -
 // wieder eine reine Gewichtungs-Änderung, s. Doku oben.
-private nonisolated(unsafe) let wayGraphFormatVersion = 9
+// v10: `highway=pedestrian` nicht mehr pauschal in `HIGHWAY_WEIGHTS` (Nutzer-Fund 2026-08-30,
+// Bremer Innenstadt: Sögestraße/Am Markt/Obernstraße u. a. sind reine Fußgängerzonen ohne
+// `bicycle`-Tag, wurden aber unabhängig vom Fußwege-Schalter immer als normal befahrbar
+// behandelt) - läuft jetzt über `is_pushable()`/`PEDESTRIAN_TIER_WEIGHT`, also Schalter-gesteuert,
+// außer bei explizitem `bicycle=yes/permissive`. Wieder eine reine Inhalts-Änderung.
+private nonisolated(unsafe) let wayGraphFormatVersion = 10
 
 /// Bundesländer, für die ein Wege-Graph heruntergeladen werden kann. `rawValue` entspricht dem
 /// Geofabrik-Bezeichner (download.geofabrik.de/europe/germany/<rawValue>-latest.osm.pbf).

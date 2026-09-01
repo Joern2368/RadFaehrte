@@ -29,7 +29,17 @@ HIGHWAY_WEIGHTS = {
     "cycleway": 0.6,
     "living_street": 0.75,
     "residential": 0.85,
-    "pedestrian": 0.9,
+    # ⚠️ Bewusst KEIN "pedestrian" hier (Live-Fund 2026-08-30, Bremer Innenstadt: Sögestraße,
+    # Obernstraße, Papenstraße u. v. a. sind als `highway=pedestrian` kartiert, viele davon ganz
+    # ohne `bicycle`-Tag - also eigentlich reine Fußgängerzonen, kein regulär beradelbarer Weg,
+    # auch wenn in der Praxis oft trotzdem gefahren wird). Stand hier bis 2026-08-30 pauschal in
+    # dieser Tabelle, wodurch `is_bikeable()` (das `highway in HIGHWAY_WEIGHTS` als hinreichend
+    # akzeptiert) JEDE Fußgängerzone unabhängig vom `bicycle`-Tag und unabhängig vom
+    # Einstellungsschalter "Fußwege als Abkürzung einbeziehen" als normalen Radweg behandelte -
+    # selbst bei ausgeschaltetem Schalter tauchte die Fußgängerzone weiter in Routen auf. Läuft
+    # jetzt stattdessen über `is_pushable()`/`PEDESTRIAN_TIER_WEIGHT` unten (== Schalter-gesteuert,
+    # gleiche 0.9-Gewichtung wie vorher), außer bei explizitem `bicycle=yes/permissive`
+    # (s. `weight_multiplier()`) - dann bleibt es unabhängig vom Schalter reguläres Radfahren.
     "track": 0.9,
     "path": 0.9,
     "service": 1.0,
@@ -43,6 +53,12 @@ HIGHWAY_WEIGHTS = {
     "trunk": 4.0,
     "trunk_link": 4.0,
 }
+
+# Gewichtung für `highway=pedestrian`-Wege - siehe Doku-Kommentar an `HIGHWAY_WEIGHTS` oben, warum
+# das nicht mehr Teil dieser Tabelle ist. Gleicher Zahlenwert wie der frühere Tabelleneintrag
+# (0.9), nur jetzt über `is_pushable()`/`weight_multiplier()` geführt statt pauschal über
+# `is_bikeable()`.
+PEDESTRIAN_TIER_WEIGHT = 0.9
 
 # Für Fahrräder grundsätzlich nicht nutzbar/erlaubt.
 EXCLUDED_HIGHWAYS = {
@@ -78,7 +94,7 @@ STEPS_HIGHWAY = "steps"
 # Sonderregel bedarf. Treppen bleiben bei der ursprünglichen, hohen Gewichtung (auch weiterhin
 # separat abschaltbar, Standard aus) - dort ging es nie um "genauso attraktiv wie ein Gehweg",
 # sondern weiterhin nur um eine Notlösung bei klarem Vorteil.
-FOOTWAY_PUSH_MULTIPLIER = HIGHWAY_WEIGHTS["pedestrian"]
+FOOTWAY_PUSH_MULTIPLIER = PEDESTRIAN_TIER_WEIGHT
 STEPS_PUSH_MULTIPLIER = 6.0
 
 # Eigene Rad-Infrastruktur neben einer größeren Straße (cycleway=track/lane bzw.
@@ -301,6 +317,13 @@ def weight_multiplier(tags):
     # kurzen Straßen-Abstecher vorzog statt konsequent auf dem Radweg zu bleiben.
     if highway in ("path", "footway", "pedestrian") and bicycle == "designated":
         return HIGHWAY_WEIGHTS["cycleway"]
+    # `highway=pedestrian` steht bewusst nicht in `HIGHWAY_WEIGHTS` (s. Doku-Kommentar dort) - ein
+    # `bicycle=yes/permissive` erlaubt Radfahren dort aber ausdrücklich, unabhängig vom
+    # Einstellungsschalter, genau wie jede andere regulär freigegebene Straße auch. Ohne diese
+    # Regel würde `HIGHWAY_WEIGHTS.get(highway, 1.2)` unten für so einen Weg auf den schlechtesten
+    # Default-Wert (1.2) zurückfallen, obwohl er ausdrücklich freigegeben ist.
+    if highway == "pedestrian" and bicycle in ("yes", "permissive"):
+        return PEDESTRIAN_TIER_WEIGHT
     if not is_bikeable(tags) and is_pushable(tags):
         return STEPS_PUSH_MULTIPLIER if highway == STEPS_HIGHWAY else FOOTWAY_PUSH_MULTIPLIER
     multiplier = HIGHWAY_WEIGHTS.get(highway, 1.2)

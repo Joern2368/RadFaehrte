@@ -5812,6 +5812,26 @@ für die ursprüngliche Produktidee.
       (`WayCategory.push`/`.steps`), [BikeRoutingEngine.swift](FahrradApp/RadFaehrte/Services/BikeRoutingEngine.swift)
       (`search`, `wellConnectedCandidates`), [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift),
       [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift) ("Routing"-Sektion)
+      ⚠️ **Nachtrag (2026-08-30)**: Nutzer-Fund Bremer Innenstadt (Martinistraße 21 -> Große
+      Weidestraße 7, Fußwege-Schalter AUS) - die Route führte trotzdem durch die Fußgängerzone
+      (Sögestraße, Am Markt, Obernstraße). Ursache lag NICHT in der neuen `is_pushable()`-Logik,
+      sondern in einem länger bestehenden, davon unabhängigen Gap: `highway=pedestrian` stand
+      pauschal in `HIGHWAY_WEIGHTS`, wodurch `is_bikeable()` (das `highway in HIGHWAY_WEIGHTS` als
+      hinreichend akzeptiert) JEDE Fußgängerzone unabhängig vom `bicycle`-Tag und unabhängig vom
+      Schalter als normal befahrbar behandelte - viele Bremer Fußgängerzonen-Wege (Sögestraße, Am
+      Markt, Obernstraße, Papenstraße, Ansgarikirchhof u. v. a.) haben in OSM gar kein
+      `bicycle`-Tag. Fix: `pedestrian` aus `HIGHWAY_WEIGHTS` entfernt, läuft jetzt stattdessen über
+      `is_pushable()`/neue Konstante `PEDESTRIAN_TIER_WEIGHT` (gleicher Zahlenwert, 0.9) - damit
+      Schalter-gesteuert wie jeder andere Fußweg. Wege mit explizitem `bicycle=yes/permissive`
+      (z. B. Balgebrückstraße, Am Dom, Domshof, Bredenstraße) bleiben über einen eigenen Zweig in
+      `weight_multiplier()` unabhängig vom Schalter reguläres Radfahren, sonst wäre sonst der
+      schlechteste Default-Wert (1.2) gegriffen. Per Dijkstra-Vergleich verifiziert: mit
+      ausgeschaltetem Schalter 0 m Schiebestrecke (Route weicht komplett auf Balgebrückstraße/Am
+      Dom/Domshof/Schüsselkorb aus), mit eingeschaltetem Schalter nutzt sie Sögestraße & Co. als
+      Schiebestrecke. `wayGraphFormatVersion` erneut hochgezählt (9 → 10), Bremen erneut neu
+      gebaut/hochgeladen, dieselben 3 Tests weiterhin grün.
+      → [build_way_graph.py](FahrradApp/Scripts/build_way_graph.py) (`PEDESTRIAN_TIER_WEIGHT`,
+      `weight_multiplier`)
 - [x] **Fix: Ziel-Snapping auf parallele Nachbarstraße bei langen, knotenarmen Straßen** (Nutzer-
       Meldung 2026-09-01, Bremen "Am Schwarzen Meer" -> "Bückeburger Straße" - Route nahm einen
       spürbaren Umweg über Nienburger/Achimer Straße statt direkt über Am Hulsberg entgegen der
@@ -5864,15 +5884,42 @@ für die ursprüngliche Produktidee.
         iPhone bestätigt.
       → [LocationSearchField.swift](FahrradApp/RadFaehrte/Views/LocationSearchField.swift)
       (`usesSheet`, `inlineSuggestions`, `inlineResultsHeight`), [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
+- [x] **Einstellungen aufgeräumt** (gemeinsam mit Nutzer am 2026-09-01 überlegt): Drei Änderungen.
+      (1) Die "Routing"-Sektion (Fußwege/Treppen als Abkürzung) stand bisher isoliert zwischen den
+      beiden Download-Sektionen "Offline-Karten" und "POIs", obwohl sie inhaltlich zum
+      Navigationsverhalten gehört - jetzt Teil von `NavigationSettingsView` statt eigener Sektion in
+      `SettingsView`. (2) Neue Speicherplatz-Übersicht ganz oben in "Offline-Karten": zwei Zeilen
+      "Deutschland"/"Europa" mit der Summe der tatsächlichen Dateigrößen (Wege-Graphen + POI-Daten
+      zusammen) aller heruntergeladenen Regionen - dafür `fileSizeBytes(for:)`/
+      `totalDownloadedBytes()` auf `WayGraphStore`/`RestStopStore` ergänzt (echte Dateigröße von der
+      Platte statt der nur für die Vor-Download-Anzeige gedachten `approximateSizeMB`-Schätzung).
+      (3) Neuer globaler "Einstellungen zurücksetzen"-Button (mit Bestätigungsdialog, eigene Sektion
+      vor "Hilfe") - setzt alle 12 `AppSettingsKey`-Werte auf ihre Werkseinstellung zurück
+      (`AppSettingsReset.resetAll()`), bewusst ohne Downloads/Favoriten/Routen/Suchverlauf
+      anzufassen, die in eigenen Stores statt `UserDefaults` liegen. `HowItWorksView`s Verweis
+      "Einstellungen > Routing" auf "Einstellungen > Navigation" korrigiert. Live auf dem iPhone
+      geprüft (2026-09-01) - dabei fiel auf, dass der Reset-Bestätigungsdialog als `.confirmationDialog`
+      (Action-Sheet-Stil mit Pfeil zur auslösenden Zeile statt zentriert) unschön wirkte; auf
+      `.alert` umgestellt, das immer als zentriertes Modal-Fenster erscheint statt als Popover.
+      → [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift), [NavigationSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationSettingsView.swift),
+      [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift) (`AppSettingsReset`), [WayGraphStore.swift](FahrradApp/RadFaehrte/Services/WayGraphStore.swift),
+      [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift)
 
 ## Bekannte Probleme
 
-- [ ] **Fußweg-/Treppen-Abkürzungen: Rebuild für die übrigen 151 Regionen aussteht** (s. o.,
-      2026-08-29) - bislang nur Bremen neu gebaut/hochgeladen. Restliche 15 Bundesländer sowie alle
-      europäischen Länder/Regionen brauchen denselben `build_way_graph_v2.py`-Rebuild + Upload
-      (`gh release upload way-graphs-v5`/`way-graphs-eu-v1` `--clobber`), sonst bleibt die neue
-      Kategorie dort leer und die beiden Schalter wirkungslos. Nach etabliertem Workflow angehen:
-      einzeln bauen/testen, Commit/Push nur alle 5 Regionen, nichts unbeaufsichtigt durchketten.
+- [ ] **Fußweg-/Treppen-Abkürzungen: Rebuild für die übrigen 150 Regionen aussteht** (s. o.,
+      2026-08-29, zuletzt aktualisiert 2026-09-01) - Bremen und jetzt auch **Niedersachsen**
+      (2026-09-01: 504 MB `.osm.pbf` → 344,7 MB Wege-Graph, 7,1 Mio. Knoten, 15,3 Mio. Kanten,
+      hochgeladen nach `way-graphs-v5`, Größenangabe in `WayGraphDownloadManager.swift` auf 345 MB
+      aktualisiert) sind neu gebaut/hochgeladen. Restliche 14 Bundesländer sowie alle europäischen
+      Länder/Regionen brauchen denselben `build_way_graph_v2.py`-Rebuild + Upload
+      (`gh release upload way-graphs-v5`/`way-graphs-eu-v1` `--clobber`) mit dem finalen Stand
+      (0.9er Fußweg-Gewichtung, `pedestrian` nicht mehr pauschal in `HIGHWAY_WEIGHTS`), sonst bleibt
+      die neue Kategorie dort leer, die Schalter wirkungslos, und Fußgängerzonen werden in den
+      anderen 150 Regionen weiterhin uneingeschränkt befahren. Nach etabliertem Workflow angehen:
+      einzeln bauen/testen, Commit/Push nur alle 5 Regionen, nichts unbeaufsichtigt durchketten -
+      Nutzer-Wunsch 2026-08-31: erst in Bremen weiter stresstesten, bevor der große Rollout beginnt;
+      Niedersachsen ist die erste Region davon.
 
 - [ ] **Bremen-Daten stecken offenbar auch im Niedersachsen-Wege-Graphen** (Live-Fund 2026-08-11,
       Nutzer-Beobachtung: Bremen-Offline-Karte gelöscht, App neu gestartet, Route komplett
@@ -7296,23 +7343,3 @@ schnell und eindeutig, dass sie zuverlässig feuerte; das eigentliche Problem wa
 einem Timer, keine fehlende Geste-Erkennung. Bei "geht manchmal, meistens nicht"-Symptomen zuerst
 an Timing-Wettläufe zwischen zwei nebenläufigen Auslösern denken, nicht an grundsätzlich fehlende
 Erkennung.
-- [x] **Einstellungen aufgeräumt** (gemeinsam mit Nutzer am 2026-09-01 überlegt): Drei Änderungen.
-      (1) Die "Routing"-Sektion (Fußwege/Treppen als Abkürzung) stand bisher isoliert zwischen den
-      beiden Download-Sektionen "Offline-Karten" und "POIs", obwohl sie inhaltlich zum
-      Navigationsverhalten gehört - jetzt Teil von `NavigationSettingsView` statt eigener Sektion in
-      `SettingsView`. (2) Neue Speicherplatz-Übersicht ganz oben in "Offline-Karten": zwei Zeilen
-      "Deutschland"/"Europa" mit der Summe der tatsächlichen Dateigrößen (Wege-Graphen + POI-Daten
-      zusammen) aller heruntergeladenen Regionen - dafür `fileSizeBytes(for:)`/
-      `totalDownloadedBytes()` auf `WayGraphStore`/`RestStopStore` ergänzt (echte Dateigröße von der
-      Platte statt der nur für die Vor-Download-Anzeige gedachten `approximateSizeMB`-Schätzung).
-      (3) Neuer globaler "Einstellungen zurücksetzen"-Button (mit Bestätigungsdialog, eigene Sektion
-      vor "Hilfe") - setzt alle 12 `AppSettingsKey`-Werte auf ihre Werkseinstellung zurück
-      (`AppSettingsReset.resetAll()`), bewusst ohne Downloads/Favoriten/Routen/Suchverlauf
-      anzufassen, die in eigenen Stores statt `UserDefaults` liegen. `HowItWorksView`s Verweis
-      "Einstellungen > Routing" auf "Einstellungen > Navigation" korrigiert. Live auf dem iPhone
-      geprüft (2026-09-01) - dabei fiel auf, dass der Reset-Bestätigungsdialog als `.confirmationDialog`
-      (Action-Sheet-Stil mit Pfeil zur auslösenden Zeile statt zentriert) unschön wirkte; auf
-      `.alert` umgestellt, das immer als zentriertes Modal-Fenster erscheint statt als Popover.
-      → [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift), [NavigationSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationSettingsView.swift),
-      [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift) (`AppSettingsReset`), [WayGraphStore.swift](FahrradApp/RadFaehrte/Services/WayGraphStore.swift),
-      [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift)

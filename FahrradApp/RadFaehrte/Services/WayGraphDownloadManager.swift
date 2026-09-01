@@ -39,7 +39,7 @@ nonisolated extension Bundesland {
         case .hamburg: return 22
         case .hessen: return 278
         case .mecklenburgVorpommern: return 72
-        case .niedersachsen: return 312
+        case .niedersachsen: return 345
         case .nordrheinWestfalen: return 520
         case .rheinlandPfalz: return 264
         case .saarland: return 36
