@@ -43,7 +43,7 @@ nonisolated extension Bundesland {
         case .nordrheinWestfalen: return 593
         case .rheinlandPfalz: return 282
         case .saarland: return 36
-        case .sachsen: return 191
+        case .sachsen: return 215
         case .sachsenAnhalt: return 126
         case .schleswigHolstein: return 97
         case .thueringen: return 148
