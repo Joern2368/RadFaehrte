@@ -5907,16 +5907,18 @@ für die ursprüngliche Produktidee.
 
 ## Bekannte Probleme
 
-- [ ] **Fußweg-/Treppen-Abkürzungen: Rebuild für die übrigen 150 Regionen aussteht** (s. o.,
-      2026-08-29, zuletzt aktualisiert 2026-09-01) - Bremen und jetzt auch **Niedersachsen**
-      (2026-09-01: 504 MB `.osm.pbf` → 344,7 MB Wege-Graph, 7,1 Mio. Knoten, 15,3 Mio. Kanten,
-      hochgeladen nach `way-graphs-v5`, Größenangabe in `WayGraphDownloadManager.swift` auf 345 MB
-      aktualisiert) sind neu gebaut/hochgeladen. Restliche 14 Bundesländer sowie alle europäischen
-      Länder/Regionen brauchen denselben `build_way_graph_v2.py`-Rebuild + Upload
-      (`gh release upload way-graphs-v5`/`way-graphs-eu-v1` `--clobber`) mit dem finalen Stand
-      (0.9er Fußweg-Gewichtung, `pedestrian` nicht mehr pauschal in `HIGHWAY_WEIGHTS`), sonst bleibt
-      die neue Kategorie dort leer, die Schalter wirkungslos, und Fußgängerzonen werden in den
-      anderen 150 Regionen weiterhin uneingeschränkt befahren. Nach etabliertem Workflow angehen:
+- [ ] **Fußweg-/Treppen-Abkürzungen: Rebuild für die übrigen 149 Regionen aussteht** (s. o.,
+      2026-08-29, zuletzt aktualisiert 2026-09-01) - Bremen, **Niedersachsen** (2026-09-01: 504 MB
+      `.osm.pbf` → 344,7 MB Wege-Graph, 7,1 Mio. Knoten, 15,3 Mio. Kanten) und **Bayern**
+      (2026-09-01: 850 MB `.osm.pbf` → 840,4 MB Wege-Graph, 17,6 Mio. Knoten, 37,1 Mio. Kanten)
+      sind neu gebaut/hochgeladen nach `way-graphs-v5`, Größenangaben in
+      `WayGraphDownloadManager.swift` jeweils aktualisiert (345 MB, 840 MB). Restliche 13
+      Bundesländer sowie alle europäischen Länder/Regionen brauchen denselben
+      `build_way_graph_v2.py`-Rebuild + Upload (`gh release upload way-graphs-v5`/`way-graphs-eu-v1`
+      `--clobber`) mit dem finalen Stand (0.9er Fußweg-Gewichtung, `pedestrian` nicht mehr pauschal
+      in `HIGHWAY_WEIGHTS`), sonst bleibt die neue Kategorie dort leer, die Schalter wirkungslos, und
+      Fußgängerzonen werden in den anderen 149 Regionen weiterhin uneingeschränkt befahren. Nach
+      etabliertem Workflow angehen:
       einzeln bauen/testen, Commit/Push nur alle 5 Regionen, nichts unbeaufsichtigt durchketten -
       Nutzer-Wunsch 2026-08-31: erst in Bremen weiter stresstesten, bevor der große Rollout beginnt;
       Niedersachsen ist die erste Region davon.

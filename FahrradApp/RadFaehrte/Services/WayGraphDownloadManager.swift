@@ -32,7 +32,7 @@ nonisolated extension Bundesland {
         // dem v5-Rebuild (2026-08-17), nicht mehr grob geschätzt.
         switch self {
         case .badenWuerttemberg: return 539
-        case .bayern: return 781
+        case .bayern: return 840
         case .berlin: return 32
         case .brandenburg: return 158
         case .bremen: return 11
