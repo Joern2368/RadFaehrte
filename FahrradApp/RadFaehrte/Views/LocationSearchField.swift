@@ -34,6 +34,13 @@ struct LocationSearchField: View {
     /// `ContentView` z. B. die Ergebnisliste ausblenden kann, solange dieses Feld aktiv bearbeitet
     /// wird (mehr Platz für die Vorschlagsliste).
     var onFocusChange: ((Bool) -> Void)? = nil
+    /// Wenn `false`, öffnet sich beim Antippen kein Vollbild-Sheet mehr - stattdessen erscheinen
+    /// "Aktuelle Position" und Tipp-Ergebnisse als Inline-Liste direkt unter dem Textfeld
+    /// (`inlineSuggestions`). Bisher nur fürs Start-Feld gedacht (Nutzer-Beobachtung: dort wählt man
+    /// ohnehin meist "Aktuelle Position" statt eine Adresse zu tippen, ein Vollbild-Sheet dafür ist
+    /// unnötig) - Favoriten/Zuletzt-gesucht werden im Inline-Modus deshalb bewusst nicht gerendert,
+    /// da das Start-Feld beides nicht übergibt.
+    var usesSheet: Bool = true
 
     @State private var viewModel = LocationSearchViewModel()
     @FocusState private var isFocused: Bool
@@ -52,46 +59,65 @@ struct LocationSearchField: View {
         viewModel.queryFragment.isEmpty && (!favorites.isEmpty || !recents.isEmpty)
     }
 
-    var body: some View {
-        HStack {
-            if isPresented {
-                Text(viewModel.queryFragment.isEmpty ? label : viewModel.queryFragment)
-                    .foregroundStyle(viewModel.queryFragment.isEmpty ? .secondary : .primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 7)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
-            } else {
-                TextField(label, text: $viewModel.queryFragment)
-                    .focused($isFocused)
-                    .textFieldStyle(.roundedBorder)
-                    .autocorrectionDisabled()
-            }
+    /// Geschätzte Höhe einer Ergebniszeile in `inlineSuggestions` (Titel + Untertitel + Padding) -
+    /// zusammen mit der Zeilenzahl unten die Grundlage für die feste `.frame(height:)`, die
+    /// mindestens ~4 Zeilen sichtbar hält, ohne bei wenigen Treffern unnötig viel leeren Raum zu
+    /// reservieren.
+    private let inlineResultRowHeight: CGFloat = 60
+    private var inlineResultsHeight: CGFloat {
+        min(CGFloat(viewModel.results.count), 4.5) * inlineResultRowHeight
+    }
 
-            if selectedPlace != nil {
-                if let onSaveFavorite {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if isPresented {
+                    Text(viewModel.queryFragment.isEmpty ? label : viewModel.queryFragment)
+                        .foregroundStyle(viewModel.queryFragment.isEmpty ? .secondary : .primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 7)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.separator))
+                } else {
+                    TextField(label, text: $viewModel.queryFragment)
+                        .focused($isFocused)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+                }
+
+                if selectedPlace != nil {
+                    if let onSaveFavorite {
+                        Button {
+                            onSaveFavorite()
+                        } label: {
+                            Image(systemName: "star")
+                                .foregroundStyle(.secondary)
+                        }
+                        .accessibilityIdentifier("saveFavorite-\(label)")
+                    }
                     Button {
-                        onSaveFavorite()
+                        clearSelection()
                     } label: {
-                        Image(systemName: "star")
+                        Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
                     }
-                    .accessibilityIdentifier("saveFavorite-\(label)")
+                    .accessibilityIdentifier("clearSelection-\(label)")
                 }
-                Button {
-                    clearSelection()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityIdentifier("clearSelection-\(label)")
+            }
+
+            if !usesSheet && isFocused {
+                inlineSuggestions
             }
         }
         .sheet(isPresented: $isPresented, onDismiss: { isFocused = false }) {
             sheetContent
         }
         .onChange(of: isFocused) { _, newValue in
-            if newValue { isPresented = true }
+            if usesSheet {
+                if newValue { isPresented = true }
+            } else {
+                onFocusChange?(newValue)
+            }
         }
         .onChange(of: isPresented) { _, newValue in
             onFocusChange?(newValue)
@@ -121,6 +147,87 @@ struct LocationSearchField: View {
                 viewModel.queryFragment = selectedPlace.title
             }
         }
+    }
+
+    /// Ersatz für `sheetContent` im Inline-Modus (`usesSheet == false`) - erscheint direkt unter dem
+    /// Textfeld statt in einem Vollbild-Sheet. Rendert bewusst nur "Aktuelle Position" + Tipp-
+    /// Ergebnisse, keine Favoriten/Zuletzt-gesucht/"Auf Karte wählen": Inline-Modus wird aktuell nur
+    /// fürs Start-Feld verwendet, das keinen dieser drei Parameter übergibt.
+    @ViewBuilder
+    private var inlineSuggestions: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let onUseCurrentLocation {
+                Button {
+                    onUseCurrentLocation()
+                    dismissSuggestions()
+                } label: {
+                    Label {
+                        Text("Aktuelle Position")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.primary)
+                    } icon: {
+                        if isResolvingCurrentLocation {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "location.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .disabled(isResolvingCurrentLocation)
+                .accessibilityIdentifier("useCurrentLocation-\(label)")
+                .padding(.vertical, 8)
+                .padding(.horizontal, 8)
+
+                if !viewModel.results.isEmpty {
+                    Divider()
+                }
+            }
+
+            // Nutzer-Beobachtung (2026-09-01): Ohne Höhenbegrenzung wuchs diese Liste mit allen
+            // Tipp-Treffern beliebig weit nach unten und schob dabei das Textfeld selbst über den
+            // sichtbaren Bereich hinaus - man sah beim Tippen nicht mehr, was man eingibt. Ein reines
+            // `maxHeight` reicht als Gegenmaßnahme aber nicht: Diese View steht in `ContentView` im
+            // selben `VStack` wie die Kartenvorschau, und ohne feste Mindesthöhe wird sie beim
+            // Platzverteilen genauso stark zusammengequetscht wie die (ebenfalls flexible) Karte -
+            // sichtbar waren dadurch je nach Bildschirm nur 1-2 Ergebniszeilen statt der gewünschten
+            // mindestens 4. Eine feste `.frame(height:)` (statt nur `maxHeight`) erzwingt dagegen die
+            // Reservierung dieses Platzes, exakt wie schon bei `resultsSectionMaxHeight` in
+            // `ContentView` für dasselbe Problem gelöst.
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(viewModel.results, id: \.self) { completion in
+                        Button {
+                            select(completion)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(completion.title)
+                                    .foregroundStyle(.primary)
+                                if !completion.subtitle.isEmpty {
+                                    Text(completion.subtitle)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 8)
+
+                        if completion != viewModel.results.last {
+                            Divider()
+                        }
+                    }
+                }
+            }
+            .frame(height: inlineResultsHeight)
+        }
+        .padding(.vertical, 4)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder
@@ -276,7 +383,7 @@ struct LocationSearchField: View {
                     coordinate: coordinate
                 )
                 viewModel.queryFragment = completion.title
-                isPresented = false
+                dismissSuggestions()
                 onPlaceChosen?(completion.title, completion.subtitle, coordinate)
             } catch {
                 // Auflösung fehlgeschlagen (z. B. kein Treffer) – Auswahl bleibt leer
@@ -293,7 +400,7 @@ struct LocationSearchField: View {
             coordinate: favorite.clCoordinate
         )
         viewModel.queryFragment = favorite.title
-        isPresented = false
+        dismissSuggestions()
     }
 
     /// Wie `select(_ favorite:)` ohne erneute Adressauflösung - meldet die Auswahl zusätzlich über
@@ -305,8 +412,16 @@ struct LocationSearchField: View {
             coordinate: recent.clCoordinate
         )
         viewModel.queryFragment = recent.title
-        isPresented = false
+        dismissSuggestions()
         onPlaceChosen?(recent.title, recent.subtitle, recent.clCoordinate)
+    }
+
+    /// Schließt die Vorschlagsliste nach einer Auswahl - im Sheet-Modus das Sheet, im Inline-Modus
+    /// (`usesSheet == false`) stattdessen einfach den Fokus, da dort keine `isPresented`-Sheet-
+    /// Präsentation existiert.
+    private func dismissSuggestions() {
+        isPresented = false
+        isFocused = false
     }
 
     private func clearSelection() {

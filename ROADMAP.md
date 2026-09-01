@@ -5842,6 +5842,28 @@ für die ursprüngliche Produktidee.
       → [WayGraphRepository.swift](FahrradApp/RadFaehrte/Services/WayGraphRepository.swift)
       (`nearestEdgeEndpoints`), [BikeRoutingEngine.swift](FahrradApp/RadFaehrte/Services/BikeRoutingEngine.swift)
       (`routes(from:to:)`)
+- [x] **Start-Feld: kein Vollbild-Sheet mehr, keine "Zuletzt gesucht"** (Nutzer-Beobachtung
+      2026-09-01: beim Start wählt man ohnehin meist "Aktuelle Position" statt eine Adresse zu
+      tippen - dafür brauchte es weder die Recents-Sektion noch das Vollbild-Sheet, das beim
+      Ziel-Feld sinnvoll bleibt). `LocationSearchField` bekam einen neuen Parameter `usesSheet`
+      (Default `true`, unverändert fürs Ziel-Feld): bei `false` öffnet Antippen kein `.sheet` mehr,
+      stattdessen erscheinen "Aktuelle Position" + Tipp-Ergebnisse als Inline-Liste direkt unter dem
+      Textfeld (`inlineSuggestions`) - Favoriten/Zuletzt-gesucht/"Auf Karte wählen" werden dort
+      bewusst nicht gerendert, da das Start-Feld keinen dieser drei Parameter übergibt. `ContentView`
+      übergibt ans Start-Feld jetzt `usesSheet: false` und keine `recents`/`onDeleteRecent` mehr.
+      - **Bugfix währenddessen**: Erste Fassung ließ die Ergebnisliste unbegrenzt wachsen - dabei
+        schob sie das Textfeld selbst aus dem sichtbaren Bereich (man sah beim Tippen nicht mehr,
+        was man eingab). Zweite Fassung begrenzte die Liste zwar per `ScrollView` +
+        `.frame(maxHeight:)`, reservierte aber keinen garantierten Platz: Da diese View in
+        `ContentView` im selben `VStack` wie die Kartenvorschau steht, wurde sie beim
+        Platzverteilen genauso stark zusammengequetscht wie die (ebenfalls flexible) Karte -
+        sichtbar waren dadurch nur 1-2 Ergebniszeilen statt der gewünschten mindestens 4. Fix: feste
+        `.frame(height:)` (statt nur `maxHeight`) erzwingt die Platzreservierung, exakt wie schon bei
+        `resultsSectionMaxHeight` in `ContentView` für dasselbe Grundproblem gelöst - bemessen auf
+        ca. 4-5 sichtbare Zeilen (`inlineResultsHeight`/`inlineResultRowHeight`). Live auf dem
+        iPhone bestätigt.
+      → [LocationSearchField.swift](FahrradApp/RadFaehrte/Views/LocationSearchField.swift)
+      (`usesSheet`, `inlineSuggestions`, `inlineResultsHeight`), [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift)
 
 ## Bekannte Probleme
 

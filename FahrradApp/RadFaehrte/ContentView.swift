@@ -472,11 +472,10 @@ struct ContentView: View {
                             isResolvingCurrentLocation: isResolvingCurrentLocationForStart,
                             onUseCurrentLocation: useCurrentLocationAsStart,
                             onSaveFavorite: { favoriteKindChoiceField = .start },
-                            recents: recentPlaces,
-                            onDeleteRecent: deleteRecent,
                             onPlaceChosen: recordRecent,
                             biasCoordinate: locationManager.currentLocation?.coordinate,
-                            onFocusChange: { isEditingStart = $0 }
+                            onFocusChange: { isEditingStart = $0 },
+                            usesSheet: false
                         )
                         LocationSearchField(
                             label: "Ziel",
