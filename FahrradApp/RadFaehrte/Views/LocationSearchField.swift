@@ -283,27 +283,33 @@ struct LocationSearchField: View {
                 if showsFavoritesAndRecents {
                     if !favorites.isEmpty {
                         Section("Favoriten") {
-                            ForEach(favorites) { favorite in
-                                Button {
-                                    select(favorite)
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: favorite.icon)
-                                            .foregroundStyle(.secondary)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(favorite.displayName)
-                                                .foregroundStyle(.primary)
-                                            if !favorite.title.isEmpty {
-                                                Text(favorite.title)
-                                                    .font(.caption)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(alignment: .top, spacing: 20) {
+                                    ForEach(favorites) { favorite in
+                                        Button {
+                                            select(favorite)
+                                        } label: {
+                                            VStack(spacing: 4) {
+                                                Image(systemName: favorite.icon)
+                                                    .font(.body)
                                                     .foregroundStyle(.secondary)
+                                                    .frame(width: 44, height: 44)
+                                                    .background(Color(.systemGray5))
+                                                    .clipShape(Circle())
+                                                Text(favorite.displayName)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.primary)
+                                                    .lineLimit(1)
                                             }
+                                            .frame(width: 72)
                                         }
+                                        .buttonStyle(.plain)
+                                        .accessibilityIdentifier("favorite-\(label)-\(favorite.id)")
                                     }
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityIdentifier("favorite-\(label)-\(favorite.id)")
+                                .padding(.vertical, 4)
                             }
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         }
                     }
                     if !recents.isEmpty {
@@ -366,7 +372,7 @@ struct LocationSearchField: View {
             }
             .listStyle(.plain)
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .onAppear {
             isSheetFieldFocused = true
