@@ -82,7 +82,7 @@ nonisolated extension EuropaLand {
         case .latvia: return 133
         case .liechtenstein: return 5
         case .lithuania: return 168
-        case .luxembourg: return 35
+        case .luxembourg: return 42
         case .macedonia: return 63
         case .malta: return 9
         case .monaco: return 1
