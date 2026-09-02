@@ -5907,7 +5907,7 @@ für die ursprüngliche Produktidee.
 
 ## Bekannte Probleme
 
-- [ ] **Fußweg-/Treppen-Abkürzungen: Rebuild für die übrigen 138 Regionen aussteht** (s. o.,
+- [ ] **Fußweg-/Treppen-Abkürzungen: Rebuild für die übrigen 137 Regionen aussteht** (s. o.,
       2026-08-29, zuletzt aktualisiert 2026-09-02) - mit dem finalen Stand (0.9er Fußweg-Gewichtung,
       `pedestrian` nicht mehr pauschal in `HIGHWAY_WEIGHTS`) neu gebaut/hochgeladen nach
       `way-graphs-v5`, Größenangaben in `WayGraphDownloadManager.swift` jeweils aktualisiert: Bremen,
@@ -5915,11 +5915,11 @@ für die ursprüngliche Produktidee.
       **Nordrhein-Westfalen** (593 MB), **Hessen** (301 MB), **Rheinland-Pfalz** (282 MB),
       **Sachsen** (215 MB), **Mecklenburg-Vorpommern** (81 MB), **Sachsen-Anhalt** (137 MB),
       **Schleswig-Holstein** (108 MB), **Thüringen** (158 MB), **Brandenburg** (203 MB), **Berlin**
-      (62 MB - fast verdoppelt ggü. vorher, viel `push`-Anteil in der dichten Stadt). Restliche
-      2 Bundesländer sowie alle europäischen Länder/Regionen brauchen denselben
-      `build_way_graph_v2.py`-Rebuild + Upload (`gh release upload way-graphs-v5`/`way-graphs-eu-v1`
-      `--clobber`), sonst bleibt die neue Kategorie dort leer, die Schalter wirkungslos, und
-      Fußgängerzonen werden in den anderen 138
+      (62 MB - fast verdoppelt ggü. vorher, viel `push`-Anteil in der dichten Stadt), **Hamburg**
+      (33 MB). Nur noch **1 Bundesland (Saarland)** sowie alle europäischen Länder/Regionen offen,
+      brauchen denselben `build_way_graph_v2.py`-Rebuild + Upload (`gh release upload
+      way-graphs-v5`/`way-graphs-eu-v1` `--clobber`), sonst bleibt die neue Kategorie dort leer, die
+      Schalter wirkungslos, und Fußgängerzonen werden in den anderen 137
       Regionen weiterhin uneingeschränkt befahren. Nach etabliertem Workflow angehen:
       einzeln bauen/testen, Commit/Push nur alle 5 Regionen, nichts unbeaufsichtigt durchketten -
       Nutzer-Wunsch 2026-08-31: erst in Bremen weiter stresstesten, bevor der große Rollout beginnt;
