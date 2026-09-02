@@ -46,7 +46,7 @@ nonisolated extension Bundesland {
         case .sachsen: return 215
         case .sachsenAnhalt: return 137
         case .schleswigHolstein: return 108
-        case .thueringen: return 148
+        case .thueringen: return 159
         }
     }
 }
