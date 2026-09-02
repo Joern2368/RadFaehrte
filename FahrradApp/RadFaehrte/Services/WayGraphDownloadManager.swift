@@ -34,7 +34,7 @@ nonisolated extension Bundesland {
         case .badenWuerttemberg: return 593
         case .bayern: return 840
         case .berlin: return 32
-        case .brandenburg: return 158
+        case .brandenburg: return 203
         case .bremen: return 11
         case .hamburg: return 22
         case .hessen: return 301
