@@ -123,11 +123,11 @@ nonisolated extension FranceRegion {
         case .champagneArdenne: return 108
         case .corse: return 54
         case .francheComte: return 139
-        case .hauteNormandie: return 65
-        case .ileDeFrance: return 136
-        case .languedocRoussillon: return 320
-        case .limousin: return 101
-        case .lorraine: return 145
+        case .hauteNormandie: return 77
+        case .ileDeFrance: return 208
+        case .languedocRoussillon: return 362
+        case .limousin: return 114
+        case .lorraine: return 161
         case .midiPyrenees: return 357
         case .nordPasDeCalais: return 140
         case .paysDeLaLoire: return 220
