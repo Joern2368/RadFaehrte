@@ -118,11 +118,11 @@ nonisolated extension FranceRegion {
         case .auvergne: return 196
         case .basseNormandie: return 126
         case .bourgogne: return 183
-        case .bretagne: return 254
-        case .centre: return 176
-        case .champagneArdenne: return 93
-        case .corse: return 48
-        case .francheComte: return 117
+        case .bretagne: return 300
+        case .centre: return 207
+        case .champagneArdenne: return 108
+        case .corse: return 54
+        case .francheComte: return 139
         case .hauteNormandie: return 65
         case .ileDeFrance: return 136
         case .languedocRoussillon: return 320
