@@ -69,7 +69,7 @@ nonisolated extension EuropaLand {
         case .bosniaHerzegovina: return 223
         case .bulgaria: return 268
         case .croatia: return 244
-        case .cyprus: return 75
+        case .cyprus: return 83
         case .czechia: return 495
         case .denmark: return 286
         case .estonia: return 100
