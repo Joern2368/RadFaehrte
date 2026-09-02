@@ -76,7 +76,7 @@ nonisolated extension EuropaLand {
         case .finland: return 908
         case .greece: return 971
         case .hungary: return 309
-        case .iceland: return 54
+        case .iceland: return 61
         case .ireland: return 413
         case .kosovo: return 58
         case .latvia: return 133
