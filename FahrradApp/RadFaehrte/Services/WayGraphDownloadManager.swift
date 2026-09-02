@@ -113,11 +113,11 @@ nonisolated extension FranceRegion {
 
     var approximateSizeMB: Int {
         switch self {
-        case .alsace: return 95
-        case .aquitaine: return 257
-        case .auvergne: return 173
-        case .basseNormandie: return 104
-        case .bourgogne: return 160
+        case .alsace: return 110
+        case .aquitaine: return 296
+        case .auvergne: return 196
+        case .basseNormandie: return 126
+        case .bourgogne: return 183
         case .bretagne: return 254
         case .centre: return 176
         case .champagneArdenne: return 93
