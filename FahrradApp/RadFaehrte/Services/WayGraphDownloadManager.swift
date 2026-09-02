@@ -86,7 +86,7 @@ nonisolated extension EuropaLand {
         case .macedonia: return 68
         case .malta: return 9
         case .monaco: return 1
-        case .montenegro: return 70
+        case .montenegro: return 76
         case .netherlands: return 428
         case .poland: return 1409
         case .portugal: return 724
