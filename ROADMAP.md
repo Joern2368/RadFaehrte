@@ -5904,6 +5904,13 @@ für die ursprüngliche Produktidee.
       → [SettingsView.swift](FahrradApp/RadFaehrte/Views/SettingsView.swift), [NavigationSettingsView.swift](FahrradApp/RadFaehrte/Views/NavigationSettingsView.swift),
       [AppSettings.swift](FahrradApp/RadFaehrte/Models/AppSettings.swift) (`AppSettingsReset`), [WayGraphStore.swift](FahrradApp/RadFaehrte/Services/WayGraphStore.swift),
       [RestStopStore.swift](FahrradApp/RadFaehrte/Services/RestStopStore.swift)
+- [x] **Anfahrt-Linie zum Streckenanfang: wieder durchgehend orange statt grau gepunktet**
+      (2026-09-08, Nutzer-Feedback nach Live-Test: die am 2026-08-08 eingeführte graue gepunktete
+      Linie fiel doch zu unauffällig aus). Anders als das damals verworfene orange *gestrichelt*
+      diesmal eine durchgezogene orange Linie - wirkt dadurch weniger wie eine zweite,
+      konkurrierende Route. Live auf dem iPhone bestätigt ("sieht gut aus").
+      → [ContentView.swift](FahrradApp/RadFaehrte/ContentView.swift) (`routeOverlayContent`,
+      `connectorRouteToStart`/`connectorRouteToEnd`-Darstellung), [HowItWorksView.swift](FahrradApp/RadFaehrte/Views/HowItWorksView.swift)
 
 ## Bekannte Probleme
 

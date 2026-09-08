@@ -2782,23 +2782,23 @@ struct ContentView: View {
                 MapPolyline(coordinates: slot.coordinates)
                     .stroke(.blue, lineWidth: 4)
             }
-            // Grau gepunktet statt (vorher) orange gestrichelt - angelehnt an Apple Maps' eigene
-            // Konvention für Fußweg-/Zubringer-Abschnitte in Transit-Wegbeschreibungen, damit die
-            // reine Anfahrt zum Streckenanfang nicht wie eine zweite, konkurrierende Route wirkt
-            // oder alarmierend auffällt (Nutzer-Feedback 2026-08-08).
+            // Durchgehend orange statt gepunktet - Nutzerwunsch 2026-09-08, nachdem sich die vorher
+            // (2026-08-08) gewählte graue gepunktete Linie am Gerät doch als zu unauffällig erwiesen
+            // hat. Anders als das damals verworfene orange *gestrichelt* ist dies eine durchgezogene
+            // Linie, wirkt dadurch weniger wie eine zweite, konkurrierende Route.
             if let connectorRouteToStart {
                 MapPolyline(connectorRouteToStart.polyline)
-                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
+                    .stroke(Color.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round))
             } else if let connectorRouteToStartFallback {
                 MapPolyline(coordinates: connectorRouteToStartFallback)
-                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
+                    .stroke(Color.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round))
             }
             if let connectorRouteToEnd {
                 MapPolyline(connectorRouteToEnd.polyline)
-                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
+                    .stroke(Color.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round))
             } else if let connectorRouteToEndFallback {
                 MapPolyline(coordinates: connectorRouteToEndFallback)
-                    .stroke(Color.gray, style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [1, 9]))
+                    .stroke(Color.orange, style: StrokeStyle(lineWidth: 4, lineCap: .round))
             }
         }
     }
